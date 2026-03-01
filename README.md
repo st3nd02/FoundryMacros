@@ -20,7 +20,8 @@
 - Weapon range display in attack dialog (`Melee` or numeric weapon range)
 - Craftsmanship handling (melee bonus and ranged jam interaction)
 - Multi-target allocation (including full-auto round-robin)
-- Per-target UUID tracking + token-name display
+- Per-target UUID tracking internally + token-name-only display on chat card
+- Grenade handling restored (scatter on miss, damage roll on hit or miss if damage formula exists, grenade deleted after use)
 - Per-target distance auto-range with manual override in setup
 - Melee weapons show **Melee** in target range column and internally ignore range bands
 - Internal range-distance adjustment for targets with size traits: effective distance is reduced by 1m per size step above 4

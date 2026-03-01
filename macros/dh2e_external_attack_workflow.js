@@ -216,12 +216,37 @@ const computeJam = ({ result, targetNumber, weapon, traits }) => {
   return result >= jamLow;
 };
 
+const rollScatterData = async speaker => {
+  const dist = (await animatedRoll("1d5", speaker)).total;
+  const dir = (await animatedRoll("1d10", speaker)).total;
+  const map = {
+    1: { arrow: "↖", label: "NW" },
+    2: { arrow: "↑", label: "N" },
+    3: { arrow: "↗", label: "NE" },
+    4: { arrow: "←", label: "W" },
+    5: { arrow: "→", label: "E" },
+    6: { arrow: "↙", label: "SW" },
+    7: { arrow: "↙", label: "SW" },
+    8: { arrow: "↓", label: "S" },
+    9: { arrow: "↘", label: "SE" },
+    10: { arrow: "↘", label: "SE" }
+  };
+  return { dist, ...(map[dir] ?? { arrow: "?", label: "?" }) };
+};
+
+const rollGrenadeDamageTotal = async (weapon, speaker) => {
+  const formula = String(weapon.system.damage ?? "").trim();
+  if (!formula) return null;
+  const roll = await animatedRoll(formula, speaker);
+  return roll.total;
+};
+
 const buildWorkflowHtml = state => {
   const cards = state.targets.map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
     const dmgTxt = (t.damageRolls ?? []).map(d => `${d.total} ${d.loc}`).join(", ") || "—";
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
-      <div><b>${t.name}</b> (${t.tokenUuid})</div>
+      <div><b>${t.name}</b></div>
       <div><b>Dist:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel} | <b>Size:</b> ${sizeTxt}</div>
       <div><b>TN:</b> ${t.targetNumber} | <b>Hits:</b> ${t.allocatedHits}</div>
       <div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>
@@ -408,6 +433,7 @@ const runAttackWorkflow = async setup => {
     totalHits: 0,
     statusText: "Pending",
     extraText: "",
+    grenade: { isGrenade, scatter: null, damage: null },
     targets,
     flags: { immediate: true }
   };
@@ -468,6 +494,22 @@ const runAttackWorkflow = async setup => {
     state.extraText = [state.extraText, `Ammo Spent: ${ammoSpent}`].filter(Boolean).join(" | ");
   }
 
+
+  if (isGrenade) {
+    if (!success) {
+      const scatter = await rollScatterData(chatMessage.speaker);
+      state.grenade.scatter = scatter;
+      state.extraText = [state.extraText, `SCATTER: ${scatter.dist}m ${scatter.arrow} ${scatter.label}`].filter(Boolean).join(" | ");
+    }
+
+    // Grenade damage always rolls if formula exists (hit or miss)
+    const grenadeDamage = await rollGrenadeDamageTotal(weapon, chatMessage.speaker);
+    if (grenadeDamage != null) {
+      state.grenade.damage = grenadeDamage;
+      state.extraText = [state.extraText, `Grenade Damage: ${grenadeDamage}`].filter(Boolean).join(" | ");
+    }
+  }
+
   // defense dialogs for each target with hits
   for (const t of state.targets) {
     if (t.allocatedHits <= 0) continue;
@@ -497,6 +539,11 @@ const runAttackWorkflow = async setup => {
     content: buildWorkflowHtml(state),
     flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
   });
+
+  // Consume grenade item after use (single-use), mirroring original macro behavior.
+  if (isGrenade) {
+    await weapon.delete();
+  }
 };
 
 const showAttackDialog = async () => {
