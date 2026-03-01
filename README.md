@@ -2,34 +2,25 @@
 
 ## Dark Heresy V13 External Attack Workflow
 
-`macros/dh2e_external_attack_workflow.js` keeps the persistent external workflow while carrying forward attack-side behavior from the original macro.
+`macros/dh2e_external_attack_workflow.js` now uses a **dialog-driven** flow (V13-safe), avoiding dependency on chat-button click hooks.
 
-### Included behavior
+### Current Flow
 
-- ChatMessage-persistent state (`foundrymacros.dh2eExternalWorkflow`)
-- Attack / Defense / Damage workflow buttons on chat card
-- Vertical per-target chat blocks (no horizontal overflow table)
-- Multi-target hit allocation with full-auto round-robin
-- Per-target UUID tracking with token-name display
-- Per-target distance auto-range (editable in setup)
-- Per-target size modifiers from `Size (X)` traits
-- `Black Carapace` ignores size modifier
-- Ranged + melee attack modes
-- Melee talent gating for Swift/Lightning attack
-- RoF gating for Semi/Full and suppressive variants
-- Weapon trait handling (`storm`, `twin`, `flame`, `reliable`, `unreliable`, grenade, inf ammo)
-- Jam handling with craftsmanship interactions
-- Ammo consumption by firing mode and power multiplier
-- Expanded talents/items from original attack macro:
-  - talents: deadeye, marksman, double tap, target selection, devastating assault, blademaster, whirlwind of death, berserk charge, twm melee/ranged, ambidextrous, two weapon master
-  - items: custom grip, fluid action, modified stock, motion predictor, red-dot laser sight, targeter, telescopic sight, omni-scope
+1. **Attacker dialog** opens (width ~600px) and uses **Attack** button.
+2. Attack is rolled immediately when dialog is submitted.
+3. Workflow chat message is created/updated with full results and persistent state (`foundrymacros.dh2eExternalWorkflow`).
+4. **Defense dialogs** are prompted per target with incoming hits.
+5. **Damage dialog** is prompted back to attacker to roll per-target damage.
 
-### Usage
+### Included Behavior
 
-1. Select attacker token.
-2. Target one or more tokens.
-3. Run macro and configure setup dialog.
-4. Resolve from chat card:
-   - **Roll Attack**
-   - **Defense** per target
-   - **Damage** per target
+- Multi-target allocation (including full-auto round-robin)
+- Per-target UUID tracking + token-name display
+- Per-target distance auto-range with manual override in setup
+- Per-target size mod with `Black Carapace` ignoring size bonus/penalty
+- Swift/Lightning melee talent gating
+- Semi/Full (+ suppressive variants) RoF gating
+
+### Notes
+
+- Defense and damage dialogs are implemented as the orchestration path requested; detailed follow-up behavior can be extended in the next pass.
