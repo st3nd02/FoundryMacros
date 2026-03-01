@@ -186,6 +186,36 @@ const allocateHits = ({ totalHits, modeKey, targets, rof }) => {
   return byTarget;
 };
 
+const getCraftData = weapon => {
+  const craft = (weapon.system.craftsmanship ?? "Common").toLowerCase();
+  return {
+    name: craft,
+    meleeBonus: craft === "poor" ? -10 : craft === "good" ? 5 : craft === "best" ? 10 : 0,
+    rangedPoor: craft === "poor",
+    rangedGood: craft === "good",
+    rangedBest: craft === "best"
+  };
+};
+
+const computeJam = ({ result, targetNumber, weapon, traits }) => {
+  const isMelee = (weapon.system.class ?? "").toLowerCase() === "melee";
+  if (isMelee) return false;
+
+  const craft = getCraftData(weapon);
+  const reliable = hasTrait(traits, "reliable");
+  const unreliable = hasTrait(traits, "unreliable");
+
+  let jamLow = 95;
+  if (reliable) jamLow = 100;
+  if (unreliable) jamLow = 91;
+
+  if (craft.rangedBest) jamLow = 101;
+  else if (craft.rangedGood && !unreliable) jamLow = 100;
+  else if (craft.rangedPoor) jamLow = unreliable ? targetNumber + 1 : 91;
+
+  return result >= jamLow;
+};
+
 const buildWorkflowHtml = state => {
   const cards = state.targets.map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
@@ -201,7 +231,7 @@ const buildWorkflowHtml = state => {
 
   return `<div data-workflow-id="${state.id}">
     <h3 style="margin:0 0 6px 0;">${state.attackerName} attacks with ${state.weaponName}</h3>
-    <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel}</div>
+    <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes.join(", ") || "None"}</div>
     <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
     <div><b>Attack Roll:</b> ${state.attackRoll ?? "—"} | <b>DoS:</b> ${state.dos ?? "—"} | <b>Status:</b> ${state.statusText ?? "Pending"} | <b>Total Hits:</b> ${state.totalHits ?? 0}</div>
@@ -293,7 +323,39 @@ const runAttackWorkflow = async setup => {
   if (setup.manualMod) modifierNotes.push(`Manual ${setup.manualMod >= 0 ? "+" : ""}${setup.manualMod}`);
   if (setup.aimMod) modifierNotes.push(setup.aimLabel);
 
+  if (setup.isHorde && setup.hordeBonus) {
+    sharedMod += setup.hordeBonus;
+    modifierNotes.push(`Horde ${setup.hordeBonus >= 0 ? "+" : ""}${setup.hordeBonus}`);
+  }
+
   const t = { ...(setup.toggles ?? {}), ...(setup.detectedItems ?? {}) };
+
+  if (setup.shootingMelee) {
+    if (!t.targetsel) {
+      sharedMod -= 20;
+      modifierNotes.push("Shooting into Melee -20");
+    } else {
+      modifierNotes.push("Shooting into Melee (negated)");
+    }
+  }
+
+  if (setup.twoWeaponAttack) {
+    let penalty = -20;
+    if (t.master) penalty = 0;
+    else {
+      const hasWielder = (isMelee && t.twmMelee) || (!isMelee && t.twmRanged);
+      if (hasWielder && t.ambi) penalty = -10;
+    }
+    sharedMod += penalty;
+    modifierNotes.push(`Two-Weapon ${penalty}`);
+  }
+
+  const craftData = getCraftData(weapon);
+  if (isMelee && craftData.meleeBonus !== 0) {
+    sharedMod += craftData.meleeBonus;
+    selectedTalents.push(`Craftsmanship ${craftData.meleeBonus >= 0 ? "+" : ""}${craftData.meleeBonus}`);
+  }
+
   if (t.deadeye && !isMelee && setup.modeKey === "called") { sharedMod += 10; selectedTalents.push("Deadeye +10"); }
   if (t.doubletap && !isMelee) { sharedMod += 20; selectedTalents.push("Double Tap +20"); }
   if (t.grip) { sharedMod += 5; selectedTalents.push("Custom Grip +5"); }
@@ -338,6 +400,7 @@ const runAttackWorkflow = async setup => {
     powerModeLabel: powerMode.label,
     powerMultiplier: powerMode.multiplier,
     aimLabel: setup.aimLabel,
+    craftName: (weapon.system.craftsmanship ?? "Common"),
     modifierNotes,
     selectedTalents,
     attackRoll: null,
@@ -359,9 +422,11 @@ const runAttackWorkflow = async setup => {
   const result = (await animatedRoll("1d100", chatMessage.speaker)).total;
   const bestTN = Math.max(...state.targets.map(t => t.targetNumber));
   const success = result <= bestTN;
-  const dos = success ? 1 + Math.floor((bestTN - result) / 10) : 0;
+  let dos = success ? 1 + Math.floor((bestTN - result) / 10) : 0;
+  const jam = computeJam({ result, targetNumber: bestTN, weapon, traits });
+  if (jam) dos = 0;
 
-  let hits = success ? 1 : 0;
+  let hits = success && !jam ? 1 : 0;
   if (success && !isMelee) {
     if (["semi", "suppressSemi"].includes(state.modeKey)) hits = Math.min(1 + Math.floor((dos - 1) / 2), rof.burst ?? 1);
     else if (["full", "suppressFull"].includes(state.modeKey)) hits = Math.min(dos, rof.full ?? 1);
@@ -398,7 +463,7 @@ const runAttackWorkflow = async setup => {
   state.attackRoll = result;
   state.dos = dos;
   state.totalHits = Array.from(alloc.values()).reduce((a, b) => a + b, 0);
-  state.statusText = success ? (outOfAmmoAfter ? "OUT OF AMMO" : "OK") : "MISS";
+  state.statusText = jam ? "JAM" : (success ? (outOfAmmoAfter ? "OUT OF AMMO" : "OK") : "MISS");
   if (ammoSpent > 0) {
     state.extraText = [state.extraText, `Ammo Spent: ${ammoSpent}`].filter(Boolean).join(" | ");
   }
@@ -477,7 +542,12 @@ const showAttackDialog = async () => {
         <div class="form-group"><label><b>Attack Type</b></label><select id="modeKey"></select></div>
         <div class="form-group"><label><b>Modifier</b></label><input id="manualMod" type="number" value="0"/></div>
         <div class="form-group"><label><b>Aim</b></label><select id="aimMod"><option value="0">No Aim</option><option value="10">Half Aim (+10)</option><option value="20">Full Aim (+20)</option></select></div>
+        <div class="form-group"><label><input type="checkbox" id="horde"/> Horde?</label></div>
+        <div class="form-group"><label><b>Horde Bonus</b></label><input id="hordeBonus" type="number" value="0"/></div>
+        <div class="form-group"><label><input type="checkbox" id="shootMelee"/> Shooting into Melee?</label></div>
+        <div class="form-group"><label><input type="checkbox" id="twoWeaponAttack"/> Two-Weapon Attack?</label></div>
         <div class="form-group" id="powerModeGroup"><label><b>Power Mode</b></label><select id="powerMode"><option value="1">Normal</option><option value="2">Overcharge (×2)</option><option value="4">Overload (×4)</option><option value="3">Maximal (×3)</option></select></div>
+        <div class="form-group"><label><b>Weapon Range:</b> <span id="weaponRangeDisplay">—</span></label></div>
         <hr><h3>Talents</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;">
           <label><input type="checkbox" id="talent_deadeye"/> Deadeye Shot</label>
@@ -509,6 +579,10 @@ const showAttackDialog = async () => {
 
           const detected = detectWeaponItems(attacker, weaponDoc);
           html.find("#detectedItems").html(presentWeaponItems(detected).join(", "));
+
+          const normalRange = getNormalRangeForWeapon(weaponDoc);
+          const isMeleeW = (weaponDoc?.system?.class ?? "").toLowerCase() === "melee";
+          html.find("#weaponRangeDisplay").text(isMeleeW ? "Melee" : `${normalRange}m`);
 
           const wType = (weaponDoc?.system?.type ?? "").toLowerCase();
           const showPower = ["las", "plasma"].includes(wType);
@@ -559,6 +633,10 @@ const showAttackDialog = async () => {
               aimMod: Number(html.find("#aimMod").val() || 0),
               aimLabel: html.find("#aimMod option:selected").text(),
               powerModeKey: Number(html.find("#powerMode").val() || 1),
+              isHorde: html.find("#horde")[0].checked,
+              hordeBonus: Number(html.find("#hordeBonus").val() || 0),
+              shootingMelee: html.find("#shootMelee")[0].checked,
+              twoWeaponAttack: html.find("#twoWeaponAttack")[0].checked,
               targetConfigs,
               toggles: {
                 deadeye: html.find("#talent_deadeye")[0].checked,

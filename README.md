@@ -14,6 +14,11 @@
 
 ### Included Behavior
 
+- Horde handling (`Horde?` + horde bonus)
+- Shooting into melee handling (`-20`, negated by Target Selection)
+- Two-weapon attack handling (Master / Wielder / Ambidextrous penalties)
+- Weapon range display in attack dialog (`Melee` or numeric weapon range)
+- Craftsmanship handling (melee bonus and ranged jam interaction)
 - Multi-target allocation (including full-auto round-robin)
 - Per-target UUID tracking + token-name display
 - Per-target distance auto-range with manual override in setup
