@@ -547,18 +547,11 @@ const state = {
   targets
 };
 
-const message = await ChatMessage.create({
-  speaker: ChatMessage.getSpeaker({ actor: attacker, token: attackerToken.document }),
-  content: buildWorkflowHtml(state),
-  flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
-});
 
-if (!globalThis.__dh2eExternalWorkflowHookRegistered) {
-  Hooks.on("renderChatMessageHTML", (chatMessage, html) => {
-    const wf = chatMessage.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
-    if (!wf) return;
-
-    html.find("button[data-action]").on("click", async ev => {
+const bindWorkflowButtons = (chatMessage, html) => {
+  if (!html) return;
+  const root = html instanceof jQuery ? html : $(html);
+  root.find("button[data-action]").off("click.dh2eWorkflow").on("click.dh2eWorkflow", async ev => {
       ev.preventDefault();
       const current = chatMessage.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
       if (!current) return;
@@ -613,7 +606,6 @@ if (!globalThis.__dh2eExternalWorkflowHookRegistered) {
         let success = result <= bestTN;
         let dos = success ? 1 + Math.floor((bestTN - result) / 10) : 0;
 
-        // Blademaster auto-reroll on failed melee attack
         if (current.setup.toggles.blademaster && isMeleeNow && !success) {
           const reroll = await animatedRoll("1d100", chatMessage.speaker);
           result = reroll.total;
@@ -725,6 +717,25 @@ if (!globalThis.__dh2eExternalWorkflowHookRegistered) {
         await updateWorkflowMessage(chatMessage, current);
       }
     });
+};
+
+const message = await ChatMessage.create({
+  speaker: ChatMessage.getSpeaker({ actor: attacker, token: attackerToken.document }),
+  content: buildWorkflowHtml(state),
+  flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
+});
+
+if (!globalThis.__dh2eExternalWorkflowHookRegistered) {
+  Hooks.on("renderChatMessageHTML", (chatMessage, html) => {
+    const wf = chatMessage.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
+    if (!wf) return;
+    bindWorkflowButtons(chatMessage, html);
+  });
+
+  Hooks.on("renderChatMessage", (chatMessage, html) => {
+    const wf = chatMessage.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
+    if (!wf) return;
+    bindWorkflowButtons(chatMessage, html);
   });
 
   globalThis.__dh2eExternalWorkflowHookRegistered = true;
