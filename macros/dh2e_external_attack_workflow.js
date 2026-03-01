@@ -6,6 +6,8 @@
  * 3) Damage dialog for attacker to roll per-target damage.
  */
 
+(async () => {
+
 const WORKFLOW_NS = "foundrymacros";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 
@@ -816,3 +818,8 @@ ensureDefenseSocket();
 const setup = await showAttackDialog();
 if (!setup) return;
 await runAttackWorkflow(setup);
+
+})().catch(err => {
+  console.error("DH2E external attack workflow failed", err);
+  ui.notifications.error("DH2E workflow failed. Check console for details.");
+});
