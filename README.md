@@ -34,4 +34,5 @@
 
 ### Notes
 
-- Defense and damage dialogs are implemented as the orchestration path requested; detailed follow-up behavior can be extended in the next pass.
+- Defense dialogs are owner-routed: if current user does not own the target actor, workflow marks `Awaiting target owner` and sends a whispered defense request to active target owners.
+- Damage dialogs are implemented as attacker-side orchestration in this pass and can be extended further.

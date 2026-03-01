@@ -312,6 +312,22 @@ const promptDamageDialog = async (state, chatMessage) => {
   });
 };
 
+const requestOwnerDefense = async ({ targetState, chatMessage }) => {
+  const targetDoc = await fromUuid(targetState.tokenUuid);
+  const targetActor = targetDoc?.actor;
+  if (!targetActor) return;
+
+  const ownerUsers = game.users.filter(u => u.active && targetActor.testUserPermission(u, "OWNER"));
+  if (!ownerUsers.length) return;
+
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker(),
+    whisper: ownerUsers.map(u => u.id),
+    content: `<b>Defense Requested</b><br>${targetState.name} has ${targetState.allocatedHits} incoming hit(s).<br>
+              Please resolve defense for this workflow message: <code>${chatMessage.id}</code>.`
+  });
+};
+
 const runAttackWorkflow = async setup => {
   const weapon = attacker.items.get(setup.weaponId);
   if (!weapon) return ui.notifications.error("Invalid weapon selection.");
@@ -510,13 +526,23 @@ const runAttackWorkflow = async setup => {
     }
   }
 
-  // defense dialogs for each target with hits
+  // defense dialogs: route to target owner if current user is not owner.
   for (const t of state.targets) {
     if (t.allocatedHits <= 0) continue;
+
+    const targetDoc = await fromUuid(t.tokenUuid);
+    const targetActor = targetDoc?.actor;
+    const canCurrentUserDefend = !!targetActor?.isOwner || game.user.isGM;
+
+    if (!canCurrentUserDefend) {
+      t.defenseOutcome = "Awaiting target owner";
+      await requestOwnerDefense({ targetState: t, chatMessage });
+      continue;
+    }
+
     const decision = await promptDefenseForTarget(t);
     if (decision === "roll") {
-      const targetDoc = await fromUuid(t.tokenUuid);
-      const agility = targetDoc?.actor?.system?.characteristics?.agility?.total ?? 0;
+      const agility = targetActor?.system?.characteristics?.agility?.total ?? 0;
       const r = await animatedRoll("1d100", chatMessage.speaker);
       const ok = r.total <= agility;
       t.defenseRoll = r.total;
