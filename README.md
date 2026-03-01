@@ -24,6 +24,7 @@
 - Semi/Full (+ suppressive variants) RoF gating
 - Power Mode control only shown for **Las** or **Plasma** weapons
 - Talents/items section restored in attack dialog and applied to attack modifiers
+- Ammo consumption restored (mode-based), including Storm and Power Mode multiplier costs for Las/Plasma
 
 ### Notes
 

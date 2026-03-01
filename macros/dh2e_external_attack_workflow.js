@@ -220,9 +220,16 @@ const runAttackWorkflow = async setup => {
   if (isMelee && setup.modeKey === "lightning" && !hasTalent(attacker, "lightning attack")) return ui.notifications.warn("Requires talent: Lightning Attack");
 
   const rof = weapon.system.rateOfFire ?? {};
+  const infiniteAmmo = hasTrait(traits, "living ammunition") || hasTrait(traits, "infammo");
+  const isGrenade = hasTrait(traits, "grenade");
   if (!isMelee) {
     if (["semi", "suppressSemi"].includes(setup.modeKey) && (rof.burst ?? 0) <= 0) return ui.notifications.warn("Weapon lacks Semi-Auto/Burst RoF.");
     if (["full", "suppressFull"].includes(setup.modeKey) && (rof.full ?? 0) <= 0) return ui.notifications.warn("Weapon lacks Full-Auto RoF.");
+
+    const clipValue = weapon.system.clip?.value;
+    if (!infiniteAmmo && !isGrenade && clipValue != null && clipValue <= 0) {
+      return ui.notifications.warn("OUT OF AMMO");
+    }
   }
 
   const bs = attacker.system.characteristics.ballisticSkill?.total ?? 0;
@@ -309,6 +316,30 @@ const runAttackWorkflow = async setup => {
     else if (["full", "suppressFull"].includes(state.modeKey)) hits = Math.min(dos, rof.full ?? 1);
   }
 
+  // Ammo consumption (legacy behavior): spent by firing mode, not by number of hits.
+  // Includes Storm quality and power mode multiplier (Las/Plasma modes can increase this).
+  let ammoSpent = 0;
+  let outOfAmmoAfter = false;
+  if (!isMelee && !infiniteAmmo && !isGrenade && weapon.system.clip?.value != null) {
+    let shotsRequired = 1;
+    if (["semi", "suppressSemi"].includes(state.modeKey)) shotsRequired = rof.burst ?? 1;
+    else if (["full", "suppressFull"].includes(state.modeKey)) shotsRequired = rof.full ?? 1;
+
+    if (hasTrait(traits, "storm")) shotsRequired *= 2;
+    shotsRequired *= state.powerMultiplier;
+
+    const currentClip = weapon.system.clip.value;
+    const used = Math.min(shotsRequired, currentClip);
+    ammoSpent = used;
+
+    const newClip = Math.max(0, currentClip - used);
+    outOfAmmoAfter = newClip <= 0;
+    await weapon.update({ "system.clip.value": newClip });
+
+    // Cap generated hits by available spent shots.
+    hits = Math.min(hits, used);
+  }
+
   const eligible = state.targets.filter(t => result <= t.targetNumber);
   const alloc = allocateHits({ totalHits: hits, modeKey: state.modeKey, targets: eligible, rof });
 
@@ -316,7 +347,10 @@ const runAttackWorkflow = async setup => {
   state.attackRoll = result;
   state.dos = dos;
   state.totalHits = Array.from(alloc.values()).reduce((a, b) => a + b, 0);
-  state.statusText = success ? "OK" : "MISS";
+  state.statusText = success ? (outOfAmmoAfter ? "OUT OF AMMO" : "OK") : "MISS";
+  if (ammoSpent > 0) {
+    state.extraText = [state.extraText, `Ammo Spent: ${ammoSpent}`].filter(Boolean).join(" | ");
+  }
 
   // defense dialogs for each target with hits
   for (const t of state.targets) {
