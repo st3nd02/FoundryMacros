@@ -8,12 +8,15 @@
 
 - ChatMessage-persistent state (`foundrymacros.dh2eExternalWorkflow`)
 - Attack / Defense / Damage workflow buttons on chat card
+- Vertical per-target chat blocks (no horizontal overflow table)
 - Multi-target hit allocation with full-auto round-robin
 - Per-target UUID tracking with token-name display
 - Per-target distance auto-range (editable in setup)
 - Per-target size modifiers from `Size (X)` traits
 - `Black Carapace` ignores size modifier
 - Ranged + melee attack modes
+- Melee talent gating for Swift/Lightning attack
+- RoF gating for Semi/Full and suppressive variants
 - Weapon trait handling (`storm`, `twin`, `flame`, `reliable`, `unreliable`, grenade, inf ammo)
 - Jam handling with craftsmanship interactions
 - Ammo consumption by firing mode and power multiplier

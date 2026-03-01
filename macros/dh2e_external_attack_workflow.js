@@ -207,25 +207,20 @@ const rangeSelectHtml = selectedMod =>
   `<select class="target-range-mod">${RANGE_BANDS.map(b => `<option value="${b.mod}" ${b.mod === selectedMod ? "selected" : ""}>${b.label}</option>`).join("")}</select>`;
 
 const buildWorkflowHtml = state => {
-  const rows = state.targets
+  const blocks = state.targets
     .map(t => {
       const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
       const dmgTxt = (t.damageRolls ?? []).map(r => `${r.total} ${r.loc}`).join(", ") || "—";
-      return `<tr data-target-uuid="${t.tokenUuid}">
-        <td style="white-space:nowrap;">${t.name}</td>
-        <td style="white-space:nowrap; text-align:center;">${t.distanceMeters}m</td>
-        <td style="white-space:nowrap; text-align:center;">${t.rangeLabel}</td>
-        <td style="white-space:nowrap; text-align:center;">${sizeTxt}</td>
-        <td style="white-space:nowrap; text-align:center;">${t.targetNumber}</td>
-        <td style="white-space:nowrap; text-align:center;">${t.allocatedHits}</td>
-        <td style="white-space:nowrap; text-align:center;">${t.defenseRoll ?? "—"}</td>
-        <td style="white-space:nowrap; text-align:center;">${t.defenseOutcome ?? "—"}</td>
-        <td style="white-space:normal;">${dmgTxt}</td>
-        <td style="white-space:nowrap; text-align:center;">
+      return `<div data-target-uuid="${t.tokenUuid}" style="border:1px solid #555; border-radius:6px; padding:6px; margin-bottom:6px;">
+        <div style="font-weight:bold; margin-bottom:4px;">${t.name}</div>
+        <div><b>Dist:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel} | <b>Size:</b> ${sizeTxt}</div>
+        <div><b>TN:</b> ${t.targetNumber} | <b>Hits:</b> ${t.allocatedHits} | <b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>
+        <div><b>Damage:</b> ${dmgTxt}</div>
+        <div style="margin-top:4px;">
           <button data-action="defense" data-target="${t.tokenUuid}" ${canActOnDefense(state, t) ? "" : "disabled"}>Defense</button>
           <button data-action="damage" data-target="${t.tokenUuid}" ${canActOnDamage(state, t) ? "" : "disabled"}>Damage</button>
-        </td>
-      </tr>`;
+        </div>
+      </div>`;
     })
     .join("");
 
@@ -237,12 +232,7 @@ const buildWorkflowHtml = state => {
     <div><b>Attack Roll:</b> ${state.attackRoll ?? "—"} | <b>DoS:</b> ${state.dos ?? "—"} | <b>Status:</b> ${state.statusText ?? "Pending"} | <b>Total Hits:</b> ${state.totalHits ?? 0}</div>
     ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
     <hr>
-    <div style="overflow-x:auto;">
-      <table style="width:100%; font-size:0.9em; table-layout:auto; border-collapse:collapse;">
-        <thead><tr><th>Target</th><th>Dist</th><th>Range</th><th>Size</th><th>TN</th><th>Hits</th><th>Defense</th><th>Outcome</th><th>Damage</th><th>Actions</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
+    <div>${blocks}</div>
     <hr>
     <button data-action="attack" ${canActOnAttack(state) ? "" : "disabled"}>Roll Attack</button>
   </div>`;
@@ -260,8 +250,23 @@ const showStartDialog = async () => {
 
   const modeOptionsForWeapon = weaponDoc => {
     const isMelee = (weaponDoc?.system.class ?? "").toLowerCase() === "melee";
-    const table = isMelee ? meleeModes : rangedModes;
-    return Object.entries(table).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
+    const rof = weaponDoc?.system?.rateOfFire ?? {};
+
+    if (isMelee) {
+      return Object.entries(meleeModes).map(([k, v]) => {
+        let disabled = false;
+        if (k === "swift" && !hasTalent(attacker, "swift attack")) disabled = true;
+        if (k === "lightning" && !hasTalent(attacker, "lightning attack")) disabled = true;
+        return `<option value="${k}" ${disabled ? "disabled" : ""}>${v.label}</option>`;
+      }).join("");
+    }
+
+    return Object.entries(rangedModes).map(([k, v]) => {
+      let disabled = false;
+      if (["semi", "suppressSemi"].includes(k) && (rof.burst ?? 0) <= 0) disabled = true;
+      if (["full", "suppressFull"].includes(k) && (rof.full ?? 0) <= 0) disabled = true;
+      return `<option value="${k}" ${disabled ? "disabled" : ""}>${v.label}</option>`;
+    }).join("");
   };
 
   const buildTargetRows = weaponDoc => {
@@ -327,7 +332,10 @@ const showStartDialog = async () => {
       render: html => {
         const refresh = () => {
           const weaponDoc = attacker.items.get(html.find("#weaponId").val());
-          html.find("#modeKey").html(modeOptionsForWeapon(weaponDoc));
+          const modeSel = html.find("#modeKey");
+          modeSel.html(modeOptionsForWeapon(weaponDoc));
+          const firstEnabled = modeSel.find("option:not([disabled])").first().val();
+          if (firstEnabled) modeSel.val(firstEnabled);
           html.find("#targetsBody").html(buildTargetRows(weaponDoc));
         };
 
@@ -567,6 +575,15 @@ if (!globalThis.__dh2eExternalWorkflowHookRegistered) {
 
         const isMeleeNow = (weaponDoc.system.class ?? "").toLowerCase() === "melee";
         const rof = weaponDoc.system.rateOfFire ?? {};
+
+        if (isMeleeNow && current.modeKey === "swift" && !hasTalent(actorDoc, "swift attack")) {
+          ui.notifications.warn("Requires talent: Swift Attack");
+          return;
+        }
+        if (isMeleeNow && current.modeKey === "lightning" && !hasTalent(actorDoc, "lightning attack")) {
+          ui.notifications.warn("Requires talent: Lightning Attack");
+          return;
+        }
 
         if (!isMeleeNow) {
           if ((current.modeKey === "semi" || current.modeKey === "suppressSemi") && (rof.burst ?? 0) <= 0) {
