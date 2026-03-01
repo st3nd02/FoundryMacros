@@ -312,20 +312,54 @@ const promptDamageDialog = async (state, chatMessage) => {
   });
 };
 
-const requestOwnerDefense = async ({ targetState, chatMessage }) => {
+const requestOwnerDefenseDialog = async ({ targetState, ownerUsers }) => {
+  if (!ownerUsers.length) return { status: "no-owner" };
+
   const targetDoc = await fromUuid(targetState.tokenUuid);
   const targetActor = targetDoc?.actor;
-  if (!targetActor) return;
+  if (!targetActor) return { status: "missing-target" };
 
-  const ownerUsers = getDefenseOwners(targetActor);
-  if (!ownerUsers.length) return;
+  const promptLocal = async () => {
+    const decision = await promptDefenseForTarget(targetState);
+    if (decision !== "roll") return { status: "skipped" };
 
-  await ChatMessage.create({
-    speaker: ChatMessage.getSpeaker(),
-    whisper: ownerUsers.map(u => u.id),
-    content: `<b>Defense Requested</b><br>${targetState.name} has ${targetState.allocatedHits} incoming hit(s).<br>
-              Please resolve defense for this workflow message: <code>${chatMessage.id}</code>.`
-  });
+    const agility = targetActor?.system?.characteristics?.agility?.total ?? 0;
+    const r = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: targetActor }));
+    const ok = r.total <= agility;
+    return { status: "rolled", roll: r.total, success: ok };
+  };
+
+  // If current user is one of owners, do it locally.
+  if (ownerUsers.some(u => u.id === game.user.id)) {
+    return await promptLocal();
+  }
+
+  // Force defender-owner dialog using socketlib if available.
+  const ownerUser = ownerUsers[0];
+  if (globalThis.socketlib) {
+    try {
+      const socket = globalThis.socketlib.registerModule("foundrymacros-dh2e");
+      socket.register("promptDefense", async payload => {
+        const td = await fromUuid(payload.tokenUuid);
+        const ta = td?.actor;
+        const dec = await promptDefenseForTarget(payload.targetState);
+        if (dec !== "roll") return { status: "skipped" };
+        const agi = ta?.system?.characteristics?.agility?.total ?? 0;
+        const rr = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: ta }));
+        return { status: "rolled", roll: rr.total, success: rr.total <= agi };
+      });
+
+      return await socket.executeAsUser("promptDefense", ownerUser.id, {
+        tokenUuid: targetState.tokenUuid,
+        targetState
+      });
+    } catch (err) {
+      console.warn("Defense owner socket routing failed", err);
+      return { status: "unavailable" };
+    }
+  }
+
+  return { status: "unavailable" };
 };
 
 const getDefenseOwners = targetActor => {
@@ -540,26 +574,22 @@ const runAttackWorkflow = async setup => {
     const targetDoc = await fromUuid(t.tokenUuid);
     const targetActor = targetDoc?.actor;
     const ownerUsers = getDefenseOwners(targetActor);
-    const currentUserIsDesignatedDefender = ownerUsers.some(u => u.id === game.user.id);
 
-    if (!currentUserIsDesignatedDefender) {
+    const defenseResult = await requestOwnerDefenseDialog({
+      targetState: t,
+      ownerUsers
+    });
+
+    if (defenseResult?.status === "rolled") {
+      t.defenseRoll = defenseResult.roll;
+      t.defenseOutcome = defenseResult.success ? "Success (-1 hit)" : "Failed";
+      if (defenseResult.success && t.allocatedHits > 0) t.allocatedHits -= 1;
+    } else if (defenseResult?.status === "skipped") {
+      t.defenseOutcome = "Skipped";
+    } else {
       t.defenseOutcome = ownerUsers.length
         ? `Awaiting target owner (${ownerUsers.map(u => u.name).join(", ")})`
         : "Awaiting target owner";
-      await requestOwnerDefense({ targetState: t, chatMessage });
-      continue;
-    }
-
-    const decision = await promptDefenseForTarget(t);
-    if (decision === "roll") {
-      const agility = targetActor?.system?.characteristics?.agility?.total ?? 0;
-      const r = await animatedRoll("1d100", chatMessage.speaker);
-      const ok = r.total <= agility;
-      t.defenseRoll = r.total;
-      t.defenseOutcome = ok ? "Success (-1 hit)" : "Failed";
-      if (ok && t.allocatedHits > 0) t.allocatedHits -= 1;
-    } else {
-      t.defenseOutcome = "Skipped";
     }
   }
 
