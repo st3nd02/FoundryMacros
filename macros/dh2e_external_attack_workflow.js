@@ -9,6 +9,37 @@
 const WORKFLOW_NS = "foundrymacros";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 
+const DEFENSE_SOCKET_MODULE = "foundrymacros-dh2e";
+
+const ensureDefenseSocket = () => {
+  if (!globalThis.socketlib) return null;
+
+  if (!globalThis.__dh2eDefenseSocket) {
+    const socket = globalThis.socketlib.registerModule(DEFENSE_SOCKET_MODULE);
+    if (!globalThis.__dh2eDefenseSocketRegistered) {
+      socket.register("promptDefense", async payload => {
+        const targetState = payload?.targetState;
+        if (!targetState) return { status: "invalid" };
+
+        const td = await fromUuid(targetState.tokenUuid);
+        const ta = td?.actor;
+
+        const dec = await promptDefenseForTarget(targetState);
+        if (dec !== "roll") return { status: "skipped" };
+
+        const agi = ta?.system?.characteristics?.agility?.total ?? 0;
+        const rr = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: ta }));
+        return { status: "rolled", roll: rr.total, success: rr.total <= agi };
+      });
+      globalThis.__dh2eDefenseSocketRegistered = true;
+    }
+
+    globalThis.__dh2eDefenseSocket = socket;
+  }
+
+  return globalThis.__dh2eDefenseSocket;
+};
+
 const controlled = canvas.tokens.controlled;
 if (!controlled.length) return ui.notifications.warn("Select your attacker token first.");
 
@@ -318,7 +349,7 @@ const sendDefenseWhisper = async ({ targetState, ownerUsers }) => {
     speaker: ChatMessage.getSpeaker(),
     whisper: ownerUsers.map(u => u.id),
     content: `<b>Defense Required</b><br>${targetState.name} has ${targetState.allocatedHits} incoming hit(s).<br>
-              Open your Defense dialog by re-running this macro on your client or using the workflow prompt.`
+              Automatic owner dialog routing is unavailable on this client. Please run the workflow macro as the defender to continue.`
   });
 };
 
@@ -346,19 +377,9 @@ const requestOwnerDefenseDialog = async ({ targetState, ownerUsers }) => {
 
   // Force defender-owner dialog using socketlib if available.
   const ownerUser = ownerUsers[0];
-  if (globalThis.socketlib) {
+  const socket = ensureDefenseSocket();
+  if (socket) {
     try {
-      const socket = globalThis.socketlib.registerModule("foundrymacros-dh2e");
-      socket.register("promptDefense", async payload => {
-        const td = await fromUuid(payload.tokenUuid);
-        const ta = td?.actor;
-        const dec = await promptDefenseForTarget(payload.targetState);
-        if (dec !== "roll") return { status: "skipped" };
-        const agi = ta?.system?.characteristics?.agility?.total ?? 0;
-        const rr = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: ta }));
-        return { status: "rolled", roll: rr.total, success: rr.total <= agi };
-      });
-
       return await socket.executeAsUser("promptDefense", ownerUser.id, {
         tokenUuid: targetState.tokenUuid,
         targetState
@@ -789,6 +810,8 @@ const showAttackDialog = async () => {
     d.render(true, { width: 600 });
   });
 };
+
+ensureDefenseSocket();
 
 const setup = await showAttackDialog();
 if (!setup) return;
