@@ -312,6 +312,16 @@ const promptDamageDialog = async (state, chatMessage) => {
   });
 };
 
+const sendDefenseWhisper = async ({ targetState, ownerUsers }) => {
+  if (!ownerUsers.length) return;
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker(),
+    whisper: ownerUsers.map(u => u.id),
+    content: `<b>Defense Required</b><br>${targetState.name} has ${targetState.allocatedHits} incoming hit(s).<br>
+              Open your Defense dialog by re-running this macro on your client or using the workflow prompt.`
+  });
+};
+
 const requestOwnerDefenseDialog = async ({ targetState, ownerUsers }) => {
   if (!ownerUsers.length) return { status: "no-owner" };
 
@@ -355,10 +365,12 @@ const requestOwnerDefenseDialog = async ({ targetState, ownerUsers }) => {
       });
     } catch (err) {
       console.warn("Defense owner socket routing failed", err);
+      await sendDefenseWhisper({ targetState, ownerUsers });
       return { status: "unavailable" };
     }
   }
 
+  await sendDefenseWhisper({ targetState, ownerUsers });
   return { status: "unavailable" };
 };
 
