@@ -17,9 +17,13 @@
 - Multi-target allocation (including full-auto round-robin)
 - Per-target UUID tracking + token-name display
 - Per-target distance auto-range with manual override in setup
+- Melee weapons show **Melee** in target range column and internally ignore range bands
+- Internal range-distance adjustment for targets with size traits: effective distance is reduced by 1m per size step above 4
 - Per-target size mod with `Black Carapace` ignoring size bonus/penalty
 - Swift/Lightning melee talent gating
 - Semi/Full (+ suppressive variants) RoF gating
+- Power Mode control only shown for **Las** or **Plasma** weapons
+- Talents/items section restored in attack dialog and applied to attack modifiers
 
 ### Notes
 

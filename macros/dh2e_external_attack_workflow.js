@@ -84,9 +84,9 @@ const getSizeModifier = targetActor => {
   const traits = targetActor?.items?.filter(i => i.type === "trait")?.map(i => i.name.toLowerCase()) ?? [];
   const hasBlackCarapace = traits.some(t => t.includes("black carapace"));
   const sizeTrait = traits.find(t => t.startsWith("size"));
-  if (!sizeTrait) return { mod: 0, label: "Normal", ignored: false };
+  if (!sizeTrait) return { mod: 0, label: "Normal", ignored: false, sizeValue: 4 };
   const match = sizeTrait.match(/size\s*\((\d+)\)/);
-  if (!match) return { mod: 0, label: "Normal", ignored: false };
+  if (!match) return { mod: 0, label: "Normal", ignored: false, sizeValue: 4 };
 
   const table = {
     1: { mod: -30, label: "Miniscule" }, 2: { mod: -20, label: "Puny" }, 3: { mod: -10, label: "Scrawny" },
@@ -95,8 +95,8 @@ const getSizeModifier = targetActor => {
     10: { mod: 60, label: "Titanic" }
   };
   const data = table[Number(match[1])] ?? { mod: 0, label: "Normal" };
-  if (hasBlackCarapace) return { mod: 0, label: data.label, ignored: true };
-  return { mod: data.mod, label: data.label, ignored: false };
+  if (hasBlackCarapace) return { mod: 0, label: data.label, ignored: true, sizeValue: Number(match[1]) };
+  return { mod: data.mod, label: data.label, ignored: false, sizeValue: Number(match[1]) };
 };
 
 const getNormalRangeForWeapon = weapon => {
@@ -152,6 +152,7 @@ const buildWorkflowHtml = state => {
     <h3 style="margin:0 0 6px 0;">${state.attackerName} attacks with ${state.weaponName}</h3>
     <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes.join(", ") || "None"}</div>
+    <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
     <div><b>Attack Roll:</b> ${state.attackRoll ?? "—"} | <b>DoS:</b> ${state.dos ?? "—"} | <b>Status:</b> ${state.statusText ?? "Pending"} | <b>Total Hits:</b> ${state.totalHits ?? 0}</div>
     ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
     <hr>${cards}
@@ -229,9 +230,23 @@ const runAttackWorkflow = async setup => {
   const baseSkill = isMelee ? ws : bs;
 
   const modifierNotes = [mode.label];
+  const selectedTalents = [];
   let sharedMod = mode.mod + setup.manualMod + setup.aimMod;
   if (setup.manualMod) modifierNotes.push(`Manual ${setup.manualMod >= 0 ? "+" : ""}${setup.manualMod}`);
   if (setup.aimMod) modifierNotes.push(setup.aimLabel);
+
+  const t = setup.toggles ?? {};
+  if (t.deadeye && !isMelee && setup.modeKey === "called") { sharedMod += 10; selectedTalents.push("Deadeye +10"); }
+  if (t.doubletap && !isMelee) { sharedMod += 20; selectedTalents.push("Double Tap +20"); }
+  if (t.grip) { sharedMod += 5; selectedTalents.push("Custom Grip +5"); }
+  if (t.stock && !isMelee && setup.aimMod > 0) {
+    const b = setup.aimMod === 20 ? 4 : 2;
+    sharedMod += b;
+    selectedTalents.push(`Modified Stock +${b}`);
+  }
+  if (t.motion && !isMelee && ["semi", "full", "suppressSemi", "suppressFull"].includes(setup.modeKey)) { sharedMod += 10; selectedTalents.push("Motion Predictor +10"); }
+  if ((t.reddot || t.omni) && !isMelee && ["single", "called"].includes(setup.modeKey)) { sharedMod += 10; selectedTalents.push("Red-Dot +10"); }
+  if (t.berserk && isMelee && setup.modeKey === "charge") { sharedMod += 10; selectedTalents.push("Berserk Charge +10"); }
 
   const targets = setup.targetConfigs.map(conf => ({
     tokenUuid: conf.tokenUuid,
@@ -266,6 +281,7 @@ const runAttackWorkflow = async setup => {
     powerMultiplier: powerMode.multiplier,
     aimLabel: setup.aimLabel,
     modifierNotes,
+    selectedTalents,
     attackRoll: null,
     dos: 0,
     totalHits: 0,
@@ -356,10 +372,14 @@ const showAttackDialog = async () => {
     const normalRange = getNormalRangeForWeapon(weaponDoc);
     return targetTokens.map(t => {
       const d = Math.round(canvas.grid.measureDistance(attackerToken.center, t.center));
-      const rangeMod = getAutoRangeBand(d, normalRange, isMelee);
       const size = getSizeModifier(t.actor);
-      return `<tr class="target-row" data-uuid="${t.document.uuid}" data-name="${t.name}" data-distance="${d}" data-size-mod="${size.mod}" data-size-label="${size.label}" data-size-ignored="${size.ignored ? 1 : 0}">
-        <td>${t.name}</td><td>${d}m</td><td><select class="target-range-mod">${RANGE_BANDS.map(b => `<option value="${b.mod}" ${b.mod===rangeMod?"selected":""}>${b.label}</option>`).join("")}</select></td>
+      const effectiveDistance = Math.max(0, d - Math.max(0, (size.sizeValue ?? 4) - 4));
+      const rangeMod = getAutoRangeBand(effectiveDistance, normalRange, isMelee);
+      const rangeCell = isMelee
+        ? `<span>Melee</span><input type="hidden" class="target-range-mod" value="0"/>`
+        : `<select class="target-range-mod">${RANGE_BANDS.map(b => `<option value="${b.mod}" ${b.mod===rangeMod?"selected":""}>${b.label}</option>`).join("")}</select>`;
+      return `<tr class="target-row" data-uuid="${t.document.uuid}" data-name="${t.name}" data-distance="${d}" data-effective-distance="${effectiveDistance}" data-size-mod="${size.mod}" data-size-label="${size.label}" data-size-ignored="${size.ignored ? 1 : 0}">
+        <td>${t.name}</td><td>${d}m</td><td>${rangeCell}</td>
       </tr>`;
     }).join("");
   };
@@ -372,7 +392,33 @@ const showAttackDialog = async () => {
         <div class="form-group"><label><b>Attack Type</b></label><select id="modeKey"></select></div>
         <div class="form-group"><label><b>Modifier</b></label><input id="manualMod" type="number" value="0"/></div>
         <div class="form-group"><label><b>Aim</b></label><select id="aimMod"><option value="0">No Aim</option><option value="10">Half Aim (+10)</option><option value="20">Full Aim (+20)</option></select></div>
-        <div class="form-group"><label><b>Power Mode</b></label><select id="powerMode"><option value="1">Normal</option><option value="2">Overcharge (×2)</option><option value="4">Overload (×4)</option><option value="3">Maximal (×3)</option></select></div>
+        <div class="form-group" id="powerModeGroup"><label><b>Power Mode</b></label><select id="powerMode"><option value="1">Normal</option><option value="2">Overcharge (×2)</option><option value="4">Overload (×4)</option><option value="3">Maximal (×3)</option></select></div>
+        <hr><h3>Talents</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;">
+          <label><input type="checkbox" id="talent_deadeye"/> Deadeye Shot</label>
+          <label><input type="checkbox" id="talent_marksman"/> Marksman</label>
+          <label><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
+          <label><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
+          <label><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
+          <label><input type="checkbox" id="talent_blademaster"/> Blademaster</label>
+          <label><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
+          <label><input type="checkbox" id="talent_berserk"/> Berserk Charge</label>
+          <label><input type="checkbox" id="talent_twm_melee"/> Two-Weapon Wielder (Melee)</label>
+          <label><input type="checkbox" id="talent_twm_ranged"/> Two-Weapon Wielder (Ranged)</label>
+          <label><input type="checkbox" id="talent_ambi"/> Ambidextrous</label>
+          <label><input type="checkbox" id="talent_master"/> Two Weapon Master</label>
+        </div>
+        <hr><h3>Items</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;">
+          <label><input type="checkbox" id="item_grip"/> Custom Grip</label>
+          <label><input type="checkbox" id="item_fluid"/> Fluid Action</label>
+          <label><input type="checkbox" id="item_stock"/> Modified Stock</label>
+          <label><input type="checkbox" id="item_motion"/> Motion Predictor</label>
+          <label><input type="checkbox" id="item_reddot"/> Red-Dot Laser Sight</label>
+          <label><input type="checkbox" id="item_targeter"/> Targeter</label>
+          <label><input type="checkbox" id="item_scope"/> Telescopic Sight</label>
+          <label><input type="checkbox" id="item_omni"/> Omni-Scope</label>
+        </div>
         <hr><h3>Targets</h3>
         <table style="width:100%;"><thead><tr><th>Target</th><th>Distance</th><th>Range</th></tr></thead><tbody id="targetsBody"></tbody></table>
       </form>`,
@@ -384,7 +430,26 @@ const showAttackDialog = async () => {
           const firstEnabled = mode.find("option:not([disabled])").first().val();
           if (firstEnabled) mode.val(firstEnabled);
           html.find("#targetsBody").html(targetRows(weaponDoc));
+
+          const wType = (weaponDoc?.system?.type ?? "").toLowerCase();
+          const showPower = ["las", "plasma"].includes(wType);
+          html.find("#powerModeGroup").toggle(showPower);
+          if (!showPower) html.find("#powerMode").val("1");
         };
+
+        html.find("#talent_deadeye").prop("checked", hasTalent(attacker, "deadeye"));
+        html.find("#talent_marksman").prop("checked", hasTalent(attacker, "marksman"));
+        html.find("#talent_doubletap").prop("checked", hasTalent(attacker, "double tap"));
+        html.find("#talent_targetsel").prop("checked", hasTalent(attacker, "target selection"));
+        html.find("#talent_devastating").prop("checked", hasTalent(attacker, "devastating assault"));
+        html.find("#talent_blademaster").prop("checked", hasTalent(attacker, "blademaster"));
+        html.find("#talent_whirlwind").prop("checked", hasTalent(attacker, "whirlwind"));
+        html.find("#talent_berserk").prop("checked", hasTalent(attacker, "berserk charge"));
+        html.find("#talent_twm_melee").prop("checked", hasTalent(attacker, "two-weapon wielder (melee)"));
+        html.find("#talent_twm_ranged").prop("checked", hasTalent(attacker, "two-weapon wielder (ranged)"));
+        html.find("#talent_ambi").prop("checked", hasTalent(attacker, "ambidextrous"));
+        html.find("#talent_master").prop("checked", hasTalent(attacker, "two weapon master"));
+
         html.find("#weaponId").on("change", refresh);
         refresh();
       },
@@ -401,7 +466,7 @@ const showAttackDialog = async () => {
                 targetName: String($r.data("name")),
                 distanceMeters: Number($r.data("distance")),
                 rangeMod,
-                rangeLabel: RANGE_BANDS.find(b => b.mod === rangeMod)?.label ?? "Normal (+0)",
+                rangeLabel: (attacker.items.get(html.find("#weaponId").val())?.system?.class === "melee") ? "Melee" : (RANGE_BANDS.find(b => b.mod === rangeMod)?.label ?? "Normal (+0)"),
                 sizeMod: Number($r.data("size-mod")),
                 sizeLabel: String($r.data("size-label")),
                 sizeIgnored: Number($r.data("size-ignored")) === 1
@@ -415,7 +480,29 @@ const showAttackDialog = async () => {
               aimMod: Number(html.find("#aimMod").val() || 0),
               aimLabel: html.find("#aimMod option:selected").text(),
               powerModeKey: Number(html.find("#powerMode").val() || 1),
-              targetConfigs
+              targetConfigs,
+              toggles: {
+                deadeye: html.find("#talent_deadeye")[0].checked,
+                marksman: html.find("#talent_marksman")[0].checked,
+                doubletap: html.find("#talent_doubletap")[0].checked,
+                targetsel: html.find("#talent_targetsel")[0].checked,
+                devastating: html.find("#talent_devastating")[0].checked,
+                blademaster: html.find("#talent_blademaster")[0].checked,
+                whirlwind: html.find("#talent_whirlwind")[0].checked,
+                berserk: html.find("#talent_berserk")[0].checked,
+                twmMelee: html.find("#talent_twm_melee")[0].checked,
+                twmRanged: html.find("#talent_twm_ranged")[0].checked,
+                ambi: html.find("#talent_ambi")[0].checked,
+                master: html.find("#talent_master")[0].checked,
+                grip: html.find("#item_grip")[0].checked,
+                fluid: html.find("#item_fluid")[0].checked,
+                stock: html.find("#item_stock")[0].checked,
+                motion: html.find("#item_motion")[0].checked,
+                reddot: html.find("#item_reddot")[0].checked,
+                targeter: html.find("#item_targeter")[0].checked,
+                scope: html.find("#item_scope")[0].checked,
+                omni: html.find("#item_omni")[0].checked
+              }
             });
           }
         },
