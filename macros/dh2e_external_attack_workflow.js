@@ -317,7 +317,7 @@ const requestOwnerDefense = async ({ targetState, chatMessage }) => {
   const targetActor = targetDoc?.actor;
   if (!targetActor) return;
 
-  const ownerUsers = game.users.filter(u => u.active && targetActor.testUserPermission(u, "OWNER"));
+  const ownerUsers = getDefenseOwners(targetActor);
   if (!ownerUsers.length) return;
 
   await ChatMessage.create({
@@ -326,6 +326,13 @@ const requestOwnerDefense = async ({ targetState, chatMessage }) => {
     content: `<b>Defense Requested</b><br>${targetState.name} has ${targetState.allocatedHits} incoming hit(s).<br>
               Please resolve defense for this workflow message: <code>${chatMessage.id}</code>.`
   });
+};
+
+const getDefenseOwners = targetActor => {
+  if (!targetActor) return [];
+  const owners = game.users.filter(u => u.active && targetActor.testUserPermission(u, "OWNER"));
+  const nonGMOwners = owners.filter(u => !u.isGM);
+  return nonGMOwners.length ? nonGMOwners : owners;
 };
 
 const runAttackWorkflow = async setup => {
@@ -532,10 +539,13 @@ const runAttackWorkflow = async setup => {
 
     const targetDoc = await fromUuid(t.tokenUuid);
     const targetActor = targetDoc?.actor;
-    const canCurrentUserDefend = !!targetActor?.isOwner || game.user.isGM;
+    const ownerUsers = getDefenseOwners(targetActor);
+    const currentUserIsDesignatedDefender = ownerUsers.some(u => u.id === game.user.id);
 
-    if (!canCurrentUserDefend) {
-      t.defenseOutcome = "Awaiting target owner";
+    if (!currentUserIsDesignatedDefender) {
+      t.defenseOutcome = ownerUsers.length
+        ? `Awaiting target owner (${ownerUsers.map(u => u.name).join(", ")})`
+        : "Awaiting target owner";
       await requestOwnerDefense({ targetState: t, chatMessage });
       continue;
     }

@@ -34,5 +34,5 @@
 
 ### Notes
 
-- Defense dialogs are owner-routed: if current user does not own the target actor, workflow marks `Awaiting target owner` and sends a whispered defense request to active target owners.
+- Defense dialogs are owner-routed: the macro now prefers active non-GM owners of the target actor as designated defenders. If current user is not one of those owners, workflow marks `Awaiting target owner (...)` and whispers the defense request to designated owner users.
 - Damage dialogs are implemented as attacker-side orchestration in this pass and can be extended further.
