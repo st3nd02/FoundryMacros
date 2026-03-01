@@ -60,6 +60,57 @@ const POWER_MODES = {
 const hasTalent = (actorDoc, needle) =>
   actorDoc.items.some(i => i.type === "talent" && i.name.toLowerCase().includes(needle.toLowerCase()));
 
+const MOD_ITEM_TYPES = ["weaponModification", "gear", "tool"];
+
+const findItemByName = (actorDoc, name) =>
+  actorDoc.items.find(i =>
+    MOD_ITEM_TYPES.includes(i.type) &&
+    (
+      i.name.toLowerCase() === name.toLowerCase() ||
+      i.name.toLowerCase().includes(`(${name.toLowerCase()})`)
+    )
+  );
+
+const itemAppliesToWeapon = (item, weapon) => {
+  if (!item?.system?.upgrades) return false;
+  return String(item.system.upgrades).toLowerCase().includes(weapon.name.toLowerCase());
+};
+
+const detectWeaponItems = (actorDoc, weapon) => {
+  const map = {
+    grip: "Custom Grip",
+    fluid: "Fluid Action",
+    stock: "Modified Stock",
+    motion: "Motion Predictor",
+    reddot: "Red-Dot Laser Sight",
+    targeter: "Targeter",
+    scope: "Telescopic Sight",
+    omni: "Omni-Scope"
+  };
+
+  const out = {};
+  for (const [k, n] of Object.entries(map)) {
+    const item = findItemByName(actorDoc, n);
+    out[k] = !!(item && itemAppliesToWeapon(item, weapon));
+  }
+  return out;
+};
+
+const presentWeaponItems = detected => {
+  const labels = {
+    grip: "Custom Grip",
+    fluid: "Fluid Action",
+    stock: "Modified Stock",
+    motion: "Motion Predictor",
+    reddot: "Red-Dot Laser Sight",
+    targeter: "Targeter",
+    scope: "Telescopic Sight",
+    omni: "Omni-Scope"
+  };
+  const present = Object.entries(detected).filter(([, v]) => v).map(([k]) => labels[k]);
+  return present.length ? present : ["None"];
+};
+
 const parseWeaponTraits = weapon =>
   (weapon.system.special ?? "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
 const hasTrait = (traits, key) => traits.some(t => t.includes(key));
@@ -242,7 +293,7 @@ const runAttackWorkflow = async setup => {
   if (setup.manualMod) modifierNotes.push(`Manual ${setup.manualMod >= 0 ? "+" : ""}${setup.manualMod}`);
   if (setup.aimMod) modifierNotes.push(setup.aimLabel);
 
-  const t = setup.toggles ?? {};
+  const t = { ...(setup.toggles ?? {}), ...(setup.detectedItems ?? {}) };
   if (t.deadeye && !isMelee && setup.modeKey === "called") { sharedMod += 10; selectedTalents.push("Deadeye +10"); }
   if (t.doubletap && !isMelee) { sharedMod += 20; selectedTalents.push("Double Tap +20"); }
   if (t.grip) { sharedMod += 5; selectedTalents.push("Custom Grip +5"); }
@@ -442,17 +493,8 @@ const showAttackDialog = async () => {
           <label><input type="checkbox" id="talent_ambi"/> Ambidextrous</label>
           <label><input type="checkbox" id="talent_master"/> Two Weapon Master</label>
         </div>
-        <hr><h3>Items</h3>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;">
-          <label><input type="checkbox" id="item_grip"/> Custom Grip</label>
-          <label><input type="checkbox" id="item_fluid"/> Fluid Action</label>
-          <label><input type="checkbox" id="item_stock"/> Modified Stock</label>
-          <label><input type="checkbox" id="item_motion"/> Motion Predictor</label>
-          <label><input type="checkbox" id="item_reddot"/> Red-Dot Laser Sight</label>
-          <label><input type="checkbox" id="item_targeter"/> Targeter</label>
-          <label><input type="checkbox" id="item_scope"/> Telescopic Sight</label>
-          <label><input type="checkbox" id="item_omni"/> Omni-Scope</label>
-        </div>
+        <hr><h3>Weapon Modifications (auto-detected on selected weapon)</h3>
+        <div id="detectedItems" style="padding:6px;border:1px solid #555;border-radius:6px;">—</div>
         <hr><h3>Targets</h3>
         <table style="width:100%;"><thead><tr><th>Target</th><th>Distance</th><th>Range</th></tr></thead><tbody id="targetsBody"></tbody></table>
       </form>`,
@@ -464,6 +506,9 @@ const showAttackDialog = async () => {
           const firstEnabled = mode.find("option:not([disabled])").first().val();
           if (firstEnabled) mode.val(firstEnabled);
           html.find("#targetsBody").html(targetRows(weaponDoc));
+
+          const detected = detectWeaponItems(attacker, weaponDoc);
+          html.find("#detectedItems").html(presentWeaponItems(detected).join(", "));
 
           const wType = (weaponDoc?.system?.type ?? "").toLowerCase();
           const showPower = ["las", "plasma"].includes(wType);
@@ -527,16 +572,9 @@ const showAttackDialog = async () => {
                 twmMelee: html.find("#talent_twm_melee")[0].checked,
                 twmRanged: html.find("#talent_twm_ranged")[0].checked,
                 ambi: html.find("#talent_ambi")[0].checked,
-                master: html.find("#talent_master")[0].checked,
-                grip: html.find("#item_grip")[0].checked,
-                fluid: html.find("#item_fluid")[0].checked,
-                stock: html.find("#item_stock")[0].checked,
-                motion: html.find("#item_motion")[0].checked,
-                reddot: html.find("#item_reddot")[0].checked,
-                targeter: html.find("#item_targeter")[0].checked,
-                scope: html.find("#item_scope")[0].checked,
-                omni: html.find("#item_omni")[0].checked
-              }
+                master: html.find("#talent_master")[0].checked
+              },
+              detectedItems: detectWeaponItems(attacker, attacker.items.get(html.find("#weaponId").val()))
             });
           }
         },
