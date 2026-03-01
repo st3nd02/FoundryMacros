@@ -16,27 +16,32 @@ const DEFENSE_SOCKET_MODULE = "foundrymacros-dh2e";
 const ensureDefenseSocket = () => {
   if (!globalThis.socketlib) return null;
 
-  if (!globalThis.__dh2eDefenseSocket) {
-    const socket = globalThis.socketlib.registerModule(DEFENSE_SOCKET_MODULE);
-    if (!globalThis.__dh2eDefenseSocketRegistered) {
-      socket.register("promptDefense", async payload => {
-        const targetState = payload?.targetState;
-        if (!targetState) return { status: "invalid" };
+  try {
+    if (!globalThis.__dh2eDefenseSocket) {
+      const socket = globalThis.socketlib.registerModule(DEFENSE_SOCKET_MODULE);
+      if (!globalThis.__dh2eDefenseSocketRegistered) {
+        socket.register("promptDefense", async payload => {
+          const targetState = payload?.targetState;
+          if (!targetState) return { status: "invalid" };
 
-        const td = await fromUuid(targetState.tokenUuid);
-        const ta = td?.actor;
+          const td = await fromUuid(targetState.tokenUuid);
+          const ta = td?.actor;
 
-        const dec = await promptDefenseForTarget(targetState);
-        if (dec !== "roll") return { status: "skipped" };
+          const dec = await promptDefenseForTarget(targetState);
+          if (dec !== "roll") return { status: "skipped" };
 
-        const agi = ta?.system?.characteristics?.agility?.total ?? 0;
-        const rr = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: ta }));
-        return { status: "rolled", roll: rr.total, success: rr.total <= agi };
-      });
-      globalThis.__dh2eDefenseSocketRegistered = true;
+          const agi = ta?.system?.characteristics?.agility?.total ?? 0;
+          const rr = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: ta }));
+          return { status: "rolled", roll: rr.total, success: rr.total <= agi };
+        });
+        globalThis.__dh2eDefenseSocketRegistered = true;
+      }
+
+      globalThis.__dh2eDefenseSocket = socket;
     }
-
-    globalThis.__dh2eDefenseSocket = socket;
+  } catch (err) {
+    console.warn("DH2E socket bootstrap unavailable; owner-routed prompt will fallback", err);
+    return null;
   }
 
   return globalThis.__dh2eDefenseSocket;
