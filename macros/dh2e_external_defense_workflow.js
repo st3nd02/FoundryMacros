@@ -1,5 +1,6 @@
 /**
  * DH2e External Defense Workflow (Foundry V13)
+ * Version: 1.0
  * Run this as the defender owner to resolve pending defenses on existing attack workflows.
  */
 

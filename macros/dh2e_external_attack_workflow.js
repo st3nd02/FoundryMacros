@@ -1,5 +1,6 @@
 /**
  * DH2e External Attack Workflow (Foundry V13)
+ * Version: 1.0
  * V13-safe flow:
  * 1) Attacker dialog (Attack) -> immediately rolls attack and creates workflow chat card.
  * 2) Defense dialogs per target with allocated hits.
