@@ -4,6 +4,7 @@ const SETTINGS = {
   attackMacroName: "attackMacroName",
   defenseMacroName: "defenseMacroName",
   damageMacroName: "damageMacroName",
+  masterMacroName: "masterMacroName",
   autoCreateMacros: "autoCreateMacros"
 };
 
@@ -19,6 +20,10 @@ const DEFAULT_MACROS = {
   damage: {
     name: "DH2e External Damage Workflow",
     file: "macros/dh2e_external_damage_workflow.js"
+  },
+  master: {
+    name: "DH2e External Master Workflow",
+    file: "macros/dh2e_external_master_workflow.js"
   }
 };
 
@@ -51,6 +56,15 @@ Hooks.once("init", () => {
     type: String,
     default: DEFAULT_MACROS.damage.name
   });
+  game.settings.register(COGITATOR_ID, SETTINGS.masterMacroName, {
+    name: "Master Macro Name",
+    hint: "World macro name used for one-click launcher execution.",
+    scope: "world",
+    config: true,
+    type: String,
+    default: DEFAULT_MACROS.master.name
+  });
+
 
   game.settings.register(COGITATOR_ID, SETTINGS.autoCreateMacros, {
     name: "Auto-create workflow macros",
@@ -120,14 +134,16 @@ async function runStep(step) {
 function getConfiguredMacroName(step) {
   if (step === "attack") return game.settings.get(COGITATOR_ID, SETTINGS.attackMacroName);
   if (step === "defense") return game.settings.get(COGITATOR_ID, SETTINGS.defenseMacroName);
-  return game.settings.get(COGITATOR_ID, SETTINGS.damageMacroName);
+  if (step === "damage") return game.settings.get(COGITATOR_ID, SETTINGS.damageMacroName);
+  return game.settings.get(COGITATOR_ID, SETTINGS.masterMacroName);
 }
 
 async function ensureWorkflowMacros() {
   const mapping = [
     ["attack", DEFAULT_MACROS.attack],
     ["defense", DEFAULT_MACROS.defense],
-    ["damage", DEFAULT_MACROS.damage]
+    ["damage", DEFAULT_MACROS.damage],
+    ["master", DEFAULT_MACROS.master]
   ];
 
   for (const [step, data] of mapping) {
