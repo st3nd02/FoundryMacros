@@ -1,42 +1,43 @@
-# FoundryMacros
+# Warhammer 40k Cogitator
 
-## Dark Heresy V13 External Workflow Macros
+## Project Scope
 
-### Version
-All workflow macros are currently marked **Version 1.0** in their headers.
+This repository now contains the **Warhammer 40k Cogitator** workflow project for Foundry VTT V13, focused on Dark Heresy 2e external combat orchestration.
 
-### Macros
+## Included Deliverables
 
-- `macros/dh2e_external_attack_workflow.js`
-  - Attacker-side workflow macro (restored baseline).
-  - Handles attack setup, attack roll, hit allocation, local defense prompts, owner defense request messaging, and workflow flag state updates.
-  - Grenades: scatter on miss, grenade damage on hit/miss (if formula exists), grenade item deletion after use, and no standard damage dialog for grenade attacks.
+### Standalone Workflow Macros
 
-- `macros/dh2e_external_defense_workflow.js`
-  - Defender-side workflow macro.
-  - Finds pending defenses for selected defender token from workflow flags.
-  - Supports Dodge/Parry flow, difficulty ladder, modifiers, balanced parry bonus, and Fate reroll.
-  - Writes defense results back to workflow state.
+- `macros/dh2e_external_attack_workflow.js` (Version 1.0)
+- `macros/dh2e_external_defense_workflow.js` (Version 1.0)
+- `macros/dh2e_external_damage_workflow.js` (Version 1.0)
+- `macros/dh2e_external_master_workflow.js` (Version 1.0)
 
-- `macros/dh2e_external_damage_workflow.js`
-  - Damage-side workflow macro.
-  - Finds pending damage for selected attacker token from workflow flags.
-  - Uses the provided damage-card style flow (traits/talents/options), rolls per-hit damage, posts result card, and updates workflow target damage state.
+These can be used directly as script macros.
 
-- `macros/dh2e_external_master_workflow.js`
-  - One launcher macro with options: **Attack / Defense / Damage**.
-  - Executes the corresponding macro by macro-name lookup.
+### Foundry Module Scaffold
 
-### Suggested Usage
+- `warhammer-40k-cogitator/module.json`
+- `warhammer-40k-cogitator/scripts/main.js`
+- `warhammer-40k-cogitator/macros/*.js` (bundled copies of the workflow scripts)
 
-1. Run `dh2e_external_master_workflow`.
-2. Choose **Attack** to create/advance attack workflow.
-3. Defender owner chooses **Defense** to resolve pending defense.
-4. Attacker chooses **Damage** to resolve pending damage.
+The module provides:
 
-### Important Note
+1. **Project identity** as `warhammer-40k-cogitator` / "Warhammer 40k Cogitator".
+2. A launcher API (`game.warhammer40kCogitator.openLauncher()`) with **Attack / Defense / Damage** choices.
+3. Optional auto-creation of missing world macros from bundled module scripts.
+4. Configurable world settings for macro names and auto-create behavior.
 
-The master launcher executes existing Foundry macro entities by name. Ensure you have macros created/imported with matching names:
-- `DH2e External Attack Workflow`
-- `DH2e External Defense Workflow`
-- `DH2e External Damage Workflow`
+## Foundry V13 Usage (Module)
+
+1. Install this folder as a module in Foundry under `Data/modules/warhammer-40k-cogitator`.
+2. Enable the module in your world.
+3. On world ready, the module can auto-create Attack/Defense/Damage macros (if enabled in settings).
+4. Open launcher via:
+   - Keybinding `Ctrl+Shift+C`, or
+   - `game.warhammer40kCogitator.openLauncher()` in console.
+
+## Notes
+
+- The current build focuses on workflow orchestration and migration from macro-only flow.
+- This is a first module foundation intended for iterative expansion under the **Warhammer 40k Cogitator** project.
