@@ -11,42 +11,6 @@
 const WORKFLOW_NS = "foundrymacros";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 
-const DEFENSE_SOCKET_MODULE = "foundrymacros-dh2e";
-
-const ensureDefenseSocket = () => {
-  if (!globalThis.socketlib) return null;
-
-  try {
-    if (!globalThis.__dh2eDefenseSocket) {
-      const socket = globalThis.socketlib.registerModule(DEFENSE_SOCKET_MODULE);
-      if (!globalThis.__dh2eDefenseSocketRegistered) {
-        socket.register("promptDefense", async payload => {
-          const targetState = payload?.targetState;
-          if (!targetState) return { status: "invalid" };
-
-          const td = await fromUuid(targetState.tokenUuid);
-          const ta = td?.actor;
-
-          const dec = await promptDefenseForTarget(targetState);
-          if (dec !== "roll") return { status: "skipped" };
-
-          const agi = ta?.system?.characteristics?.agility?.total ?? 0;
-          const rr = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: ta }));
-          return { status: "rolled", roll: rr.total, success: rr.total <= agi };
-        });
-        globalThis.__dh2eDefenseSocketRegistered = true;
-      }
-
-      globalThis.__dh2eDefenseSocket = socket;
-    }
-  } catch (err) {
-    console.warn("DH2E socket bootstrap unavailable; owner-routed prompt will fallback", err);
-    return null;
-  }
-
-  return globalThis.__dh2eDefenseSocket;
-};
-
 const controlled = canvas.tokens.controlled;
 if (!controlled.length) return ui.notifications.warn("Select your attacker token first.");
 
@@ -94,22 +58,6 @@ const POWER_MODES = {
   3: { label: "Maximal", multiplier: 3 },
   4: { label: "Overload", multiplier: 4 }
 };
-
-const DEFENSE_DIFFICULTIES = [
-  { value: 60, label: "Trivial (+60)" },
-  { value: 50, label: "Elementary (+50)" },
-  { value: 40, label: "Simple (+40)" },
-  { value: 30, label: "Easy (+30)" },
-  { value: 20, label: "Routine (+20)" },
-  { value: 10, label: "Ordinary (+10)" },
-  { value: 0, label: "Challenging (+0)" },
-  { value: -10, label: "Difficult (-10)" },
-  { value: -20, label: "Hard (-20)" },
-  { value: -30, label: "Very Hard (-30)" },
-  { value: -40, label: "Arduous (-40)" },
-  { value: -50, label: "Punishing (-50)" },
-  { value: -60, label: "Hellish (-60)" }
-];
 
 const hasTalent = (actorDoc, needle) =>
   actorDoc.items.some(i => i.type === "talent" && i.name.toLowerCase().includes(needle.toLowerCase()));
@@ -366,276 +314,20 @@ const promptDamageDialog = async (state, chatMessage) => {
   });
 };
 
-const sendDefenseWhisper = async ({ targetState, ownerUsers }) => {
+const requestOwnerDefense = async ({ targetState, chatMessage }) => {
+  const targetDoc = await fromUuid(targetState.tokenUuid);
+  const targetActor = targetDoc?.actor;
+  if (!targetActor) return;
+
+  const ownerUsers = game.users.filter(u => u.active && targetActor.testUserPermission(u, "OWNER"));
   if (!ownerUsers.length) return;
+
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker(),
     whisper: ownerUsers.map(u => u.id),
-    content: `<b>Defense Required</b><br>${targetState.name} has ${targetState.allocatedHits} incoming hit(s).<br>
-              Automatic owner dialog routing is unavailable on this client. Please run the workflow macro as the defender to continue.`
+    content: `<b>Defense Requested</b><br>${targetState.name} has ${targetState.allocatedHits} incoming hit(s).<br>
+              Please resolve defense for this workflow message: <code>${chatMessage.id}</code>.`
   });
-};
-
-const showWorkflowEntryDialog = async () => {
-  return new Promise(resolve => {
-    new Dialog({
-      title: "DH2e External Workflow",
-      content: `<style>
-        .wf-tabs{display:flex;gap:8px;margin-bottom:10px;}
-        .wf-tab{flex:1;padding:8px;border:1px solid #555;border-radius:6px;text-align:center;cursor:pointer;}
-        .wf-tab.active{background:#2f3b52;color:#fff;font-weight:bold;}
-        .wf-pane{display:none;border:1px solid #555;border-radius:6px;padding:10px;}
-        .wf-pane.active{display:block;}
-      </style>
-      <input id="workflowMode" type="hidden" value="attack"/>
-      <div class="wf-tabs">
-        <div class="wf-tab active" data-mode="attack">Attack</div>
-        <div class="wf-tab" data-mode="defend">Defend</div>
-      </div>
-      <div class="wf-pane active" data-pane="attack">Start a new attack workflow from selected attacker + targets.</div>
-      <div class="wf-pane" data-pane="defend">Resolve a pending defense for your selected defender token.</div>`,
-      render: html => {
-        const setMode = mode => {
-          html.find('.wf-tab').removeClass('active');
-          html.find(`.wf-tab[data-mode="${mode}"]`).addClass('active');
-          html.find('.wf-pane').removeClass('active');
-          html.find(`.wf-pane[data-pane="${mode}"]`).addClass('active');
-          html.find('#workflowMode').val(mode);
-        };
-        html.find('.wf-tab').on('click', ev => setMode($(ev.currentTarget).data('mode')));
-      },
-      buttons: {
-        go: { label: 'Continue', callback: html => resolve(html.find('#workflowMode').val() || 'attack') },
-        cancel: { label: 'Cancel', callback: () => resolve(null) }
-      },
-      default: 'go'
-    }).render(true, { width: 600 });
-  });
-};
-
-const getDefenseOwners = targetActor => {
-  if (!targetActor) return [];
-  const owners = game.users.filter(u => u.active && targetActor.testUserPermission(u, "OWNER"));
-  const nonGMOwners = owners.filter(u => !u.isGM);
-  return nonGMOwners.length ? nonGMOwners : owners;
-};
-
-
-const getPendingDefenseEntriesForToken = tokenUuid => {
-  const entries = [];
-  for (const msg of game.messages.contents) {
-    const state = msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
-    if (!state?.targets?.length) continue;
-
-    for (const target of state.targets) {
-      if (target.tokenUuid !== tokenUuid) continue;
-      if ((target.allocatedHits ?? 0) <= 0) continue;
-      if (target.damageResolved) continue;
-      const outcome = String(target.defenseOutcome ?? "").toLowerCase();
-      if (outcome.includes("success") || outcome.includes("failed") || outcome.includes("skipped")) continue;
-
-      entries.push({ msg, state, target });
-    }
-  }
-  return entries;
-};
-
-const postDefenseResult = async ({ actorDoc, roll, targetNumber, actionText, notes, difficultyLabel, fateUsed, attackState, defenseTarget }) => {
-  const val = roll.total;
-  const success = val === 1 ? true : (val === 100 ? false : val <= targetNumber);
-  const degrees = Math.floor(Math.abs(targetNumber - val) / 10) + 1;
-  const resultText = success ? `${degrees} Degrees of Success` : `${degrees} Degrees of Failure`;
-  const color = success ? "#1aff1a" : "#ff2a2a";
-  const atkHits = defenseTarget.allocatedHits ?? 0;
-  const hitWord = atkHits === 1 ? "hit" : "hits";
-
-  await roll.toMessage({
-    speaker: ChatMessage.getSpeaker({ actor: actorDoc }),
-    flavor: `<div style="text-align:center;color:#000;">
-      ${fateUsed ? `<b style="color:gold;font-style:italic;font-size:1.1em;">✦ ${actorDoc.name} spends Fate and rerolls! ✦</b><hr>` : ""}
-      <div style="font-style:italic;font-size:1.1em;"><b>${actorDoc.name}</b> attempts <b>${actionText}</b><br>against <b>${attackState.attackerName}</b>'s <b>${attackState.weaponName}</b> (<b>${atkHits}</b> ${hitWord})</div>
-      <hr>
-      <div><u>Difficulty</u> ${difficultyLabel}</div>
-      <div><b>Target:</b> <span style="color:#ffad55;">${targetNumber}</span></div>
-      <div><b>Roll:</b> <span style="color:#bd7548;">${val}</span></div>
-      ${notes.length ? `<div style="font-style:italic;">${notes.join(" | ")}</div>` : ""}
-      <hr>
-      <div style="font-size:1.2em;font-weight:900;color:${color};">${resultText}</div>
-    </div>`
-  });
-
-  return success ? degrees : 0;
-};
-
-const runDefenseFromTab = async () => {
-  const token = canvas.tokens.controlled[0];
-  if (!token) return ui.notifications.warn("Select your defender token first.");
-  const actorDoc = token.actor;
-  if (!actorDoc) return ui.notifications.warn("Selected token has no actor.");
-
-  const entries = getPendingDefenseEntriesForToken(token.document.uuid);
-  if (!entries.length) return ui.notifications.warn("No pending defense found for this token.");
-
-  const dodgeBase = actorDoc.system.skills?.dodge?.total ?? 0;
-  const parryBase = actorDoc.system.skills?.parry?.total ?? 0;
-  const fateCurrent = actorDoc.system.fate?.value ?? 0;
-  const meleeWeapons = actorDoc.items.filter(i => i.type === "weapon" && ["me", "melee"].includes((i.system.class ?? "").toLowerCase()));
-  const difficultyOptions = DEFENSE_DIFFICULTIES.map(d => `<option value="${d.value}" ${d.value===0?"selected":""}>${d.label}</option>`).join("");
-  const weaponOptions = meleeWeapons.length
-    ? meleeWeapons.map(w => `<option value="${w.id}">${w.name}</option>`).join("")
-    : `<option value="">No melee weapons</option>`;
-
-  const workflowOptions = entries.map((e, i) => `<option value="${i}">${e.state.attackerName} vs ${e.target.name} (${e.target.allocatedHits} hit${e.target.allocatedHits===1?"":"s"})</option>`).join("");
-
-  const pick = await new Promise(resolve => {
-    new Dialog({
-      title: "External Workflow: Defend",
-      content: `<form>
-      <div class="form-group"><label><b>Pending Attack</b></label><select id="workflowPick">${workflowOptions}</select></div>
-      <hr>
-      <h3>Defence Type</h3>
-      <label><input type="radio" name="defence" value="dodge" checked> Dodge (${dodgeBase})</label>
-      <label><input type="radio" name="defence" value="parry"> Parry (${parryBase})</label>
-      <div id="weaponBlock" style="opacity:.35;margin-top:6px;">
-        <label><b>Parry Weapon</b></label>
-        <select id="weapon" disabled><option value="">Choose Melee Weapon</option>${weaponOptions}</select>
-      </div>
-      <hr>
-      <label><b>Difficulty</b></label><select id="difficulty">${difficultyOptions}</select>
-      <label><b>Modifier</b></label><input id="mod" type="number" value="0"/>
-      <div style="opacity:.7;margin-top:6px;">Fate Remaining: <b>${fateCurrent}</b></div>
-      </form>`,
-      render: html => {
-        html.find('input[name="defence"]').on("change", function () {
-          const parry = this.value === "parry" && this.checked;
-          html.find("#weaponBlock").css("opacity", parry ? 1 : 0.35);
-          html.find("#weapon").prop("disabled", !parry);
-        });
-      },
-      buttons: {
-        roll: {
-          label: "Roll Defend",
-          callback: html => {
-            resolve({
-              pickIndex: Number(html.find("#workflowPick").val() || 0),
-              defenceType: html.find('input[name="defence"]:checked').val(),
-              weaponId: html.find("#weapon").val(),
-              difficultyMod: Number(html.find("#difficulty").val() || 0),
-              difficultyLabel: html.find("#difficulty option:selected").text(),
-              manualMod: Number(html.find("#mod").val() || 0)
-            });
-          }
-        },
-        cancel: { label: "Cancel", callback: () => resolve(null) }
-      },
-      default: "roll"
-    }).render(true, { width: 600 });
-  });
-
-  if (!pick) return;
-  const chosen = entries[pick.pickIndex];
-  if (!chosen) return ui.notifications.warn("Selected workflow is no longer available.");
-
-  let base = pick.defenceType === "parry" ? parryBase : dodgeBase;
-  let actionText = pick.defenceType === "parry" ? "Parry" : "Dodge";
-  const notes = [];
-
-  if (pick.defenceType === "parry") {
-    if (!pick.weaponId) return ui.notifications.warn("Select a melee weapon for parry.");
-    const w = actorDoc.items.get(pick.weaponId);
-    if (!w) return ui.notifications.warn("Invalid parry weapon.");
-    actionText = `Parry with <b>${w.name}</b>`;
-    const special = String(w.system.special ?? "").toLowerCase();
-    if (special.includes("balanced")) {
-      base += 10;
-      notes.push("Balanced +10");
-    }
-  }
-
-  let targetNumber = Math.max(1, base + pick.difficultyMod + pick.manualMod);
-  let roll = await new Roll("1d100").roll({ async: true });
-  let defenceDoS = await postDefenseResult({
-    actorDoc,
-    roll,
-    targetNumber,
-    actionText,
-    notes,
-    difficultyLabel: pick.difficultyLabel,
-    fateUsed: false,
-    attackState: chosen.state,
-    defenseTarget: chosen.target
-  });
-
-  if (defenceDoS <= 0 && (actorDoc.system.fate?.value ?? 0) > 0) {
-    const useFate = await new Promise(resolve => {
-      new Dialog({
-        title: "Spend Fate?",
-        content: `<p><b>Test Failed!</b><br>Spend 1 Fate Point to reroll?<br>Remaining: <b>${actorDoc.system.fate?.value ?? 0}</b></p>`,
-        buttons: {
-          yes: { label: "Reroll (-1 Fate)", callback: () => resolve(true) },
-          no: { label: "Keep Result", callback: () => resolve(false) }
-        },
-        default: "no"
-      }).render(true);
-    });
-
-    if (useFate) {
-      await actorDoc.update({ "system.fate.value": Math.max(0, (actorDoc.system.fate?.value ?? 0) - 1) });
-      roll = await new Roll("1d100").roll({ async: true });
-      defenceDoS = await postDefenseResult({
-        actorDoc,
-        roll,
-        targetNumber,
-        actionText,
-        notes,
-        difficultyLabel: pick.difficultyLabel,
-        fateUsed: true,
-        attackState: chosen.state,
-        defenseTarget: chosen.target
-      });
-    }
-  }
-
-  const state = chosen.msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
-  if (!state) return ui.notifications.warn("Workflow no longer exists.");
-
-  const tgt = state.targets.find(t => t.tokenUuid === token.document.uuid);
-  if (!tgt) return ui.notifications.warn("This token is no longer part of that workflow.");
-
-  tgt.defenseRoll = roll.total;
-  if (defenceDoS > 0) {
-    tgt.allocatedHits = Math.max(0, (tgt.allocatedHits ?? 0) - defenceDoS);
-    tgt.defenseOutcome = `Success (-${defenceDoS} hit${defenceDoS===1?"":"s"})`;
-  } else {
-    tgt.defenseOutcome = "Failed";
-  }
-
-  const pending = state.targets.some(t => (t.allocatedHits ?? 0) > 0 && String(t.defenseOutcome ?? "").toLowerCase().includes("awaiting"));
-  state.statusText = pending ? "Awaiting Defense" : "Defense Resolved";
-
-  await chosen.msg.update({
-    content: buildWorkflowHtml(state),
-    flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
-  });
-
-  if (!pending) {
-    const atkActor = game.actors.get(state.attackerActorId);
-    if (atkActor && atkActor.isOwner) {
-      await promptDamageDialog(state, chosen.msg);
-      await chosen.msg.update({
-        content: buildWorkflowHtml(state),
-        flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
-      });
-    } else {
-      const ownerUsers = getDefenseOwners(atkActor);
-      if (ownerUsers.length) {
-        await ChatMessage.create({
-          whisper: ownerUsers.map(u => u.id),
-          content: `<b>Damage Ready</b><br>Defense is resolved for ${state.attackerName}'s workflow. Attacker should run damage resolution.`
-        });
-      }
-    }
-  }
 };
 
 const runAttackWorkflow = async setup => {
@@ -772,7 +464,7 @@ const runAttackWorkflow = async setup => {
 
   // immediate attack roll
   const result = (await animatedRoll("1d100", chatMessage.speaker)).total;
-  const bestTN = Math.max(...state.targets.map(t => t.targetNumber));
+  const bestTN = Math.max(...state.targets.map(tg => tg.targetNumber));
   const success = result <= bestTN;
   let dos = success ? 1 + Math.floor((bestTN - result) / 10) : 0;
   const jam = computeJam({ result, targetNumber: bestTN, weapon, traits });
@@ -808,10 +500,10 @@ const runAttackWorkflow = async setup => {
     hits = Math.min(hits, used);
   }
 
-  const eligible = state.targets.filter(t => result <= t.targetNumber);
+  const eligible = state.targets.filter(tg => result <= tg.targetNumber);
   const alloc = allocateHits({ totalHits: hits, modeKey: state.modeKey, targets: eligible, rof });
 
-  state.targets = state.targets.map(t => ({ ...t, allocatedHits: alloc.get(t.tokenUuid) || 0 }));
+  state.targets = state.targets.map(tg => ({ ...tg, allocatedHits: alloc.get(tg.tokenUuid) || 0 }));
   state.attackRoll = result;
   state.dos = dos;
   state.totalHits = Array.from(alloc.values()).reduce((a, b) => a + b, 0);
@@ -819,7 +511,6 @@ const runAttackWorkflow = async setup => {
   if (ammoSpent > 0) {
     state.extraText = [state.extraText, `Ammo Spent: ${ammoSpent}`].filter(Boolean).join(" | ");
   }
-
 
   if (isGrenade) {
     if (!success) {
@@ -836,29 +527,56 @@ const runAttackWorkflow = async setup => {
     }
   }
 
-  // Defense is now resolved from the Defend tab by the defender owner.
-  for (const t of state.targets) {
-    if (t.allocatedHits <= 0) {
-      t.defenseOutcome = "No Defense Needed";
+  // defense dialogs: route to target owner if current user is not owner.
+  for (const tg of state.targets) {
+    if (tg.allocatedHits <= 0) continue;
+
+    const targetDoc = await fromUuid(tg.tokenUuid);
+    const targetActor = targetDoc?.actor;
+    const canCurrentUserDefend = !!targetActor?.isOwner || game.user.isGM;
+
+    if (!canCurrentUserDefend) {
+      tg.defenseOutcome = "Awaiting target owner";
+      await requestOwnerDefense({ targetState: tg, chatMessage });
       continue;
     }
 
-    const targetDoc = await fromUuid(t.tokenUuid);
-    const targetActor = targetDoc?.actor;
-    const ownerUsers = getDefenseOwners(targetActor);
-    t.defenseOutcome = ownerUsers.length
-      ? `Awaiting Defender (${ownerUsers.map(u => u.name).join(", ")})`
-      : "Awaiting Defender";
+    const decision = await promptDefenseForTarget(tg);
+    if (decision === "roll") {
+      const agility = targetActor?.system?.characteristics?.agility?.total ?? 0;
+      const r = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: targetActor }));
+      const ok = r.total <= agility;
+      tg.defenseRoll = r.total;
+      tg.defenseOutcome = ok ? "Success (-1 hit)" : "Failed";
+      if (ok && tg.allocatedHits > 0) tg.allocatedHits -= 1;
+    } else {
+      tg.defenseOutcome = "Skipped";
+    }
   }
-
-  state.statusText = `${state.statusText} | Awaiting Defense`;
 
   await chatMessage.update({
     content: buildWorkflowHtml(state),
     flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
   });
 
-  ui.notifications.info("Attack workflow created. Defenders should run this macro and use the Defend tab.");
+  const awaitingDefense = state.targets.some(tg => String(tg.defenseOutcome ?? "").toLowerCase().includes("awaiting target owner"));
+
+  // For grenades, damage already exploded/resolved above; skip weapon damage prompt.
+  // Also skip damage while any target is still awaiting owner defense resolution.
+  if (!isGrenade && !awaitingDefense) {
+    await promptDamageDialog(state, chatMessage);
+
+    await chatMessage.update({
+      content: buildWorkflowHtml(state),
+      flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
+    });
+  } else if (awaitingDefense) {
+    state.extraText = [state.extraText, "Awaiting external defense resolution"].filter(Boolean).join(" | ");
+    await chatMessage.update({
+      content: buildWorkflowHtml(state),
+      flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
+    });
+  }
 
   // Consume grenade item after use (single-use), mirroring original macro behavior.
   if (isGrenade) {
@@ -1031,16 +749,6 @@ const showAttackDialog = async () => {
     d.render(true, { width: 600 });
   });
 };
-
-ensureDefenseSocket();
-
-const mode = await showWorkflowEntryDialog();
-if (!mode) return;
-
-if (mode === "defend") {
-  await runDefenseFromTab();
-  return;
-}
 
 const setup = await showAttackDialog();
 if (!setup) return;
