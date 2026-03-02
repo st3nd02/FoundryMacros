@@ -30,11 +30,12 @@ The module provides:
 
 ## Foundry V13 Usage (Module)
 
-1. Install this folder as a module in Foundry under `Data/modules/warhammer-40k-cogitator`.
-2. Enable the module in your world.
-3. On world ready, the module can auto-create Attack/Defense/Damage/Master macros (if enabled in settings).
-4. Players can run the auto-created **DH2e External Master Workflow** macro directly (recommended).
-5. Alternative launcher access:
+1. Install as Foundry module `warhammer-40k-cogitator` (manifest available both at repository root `module.json` and module folder `warhammer-40k-cogitator/module.json`).
+2. Ensure the installed folder name is `warhammer-40k-cogitator`.
+3. Enable the module in your world.
+4. On world ready, the module can auto-create Attack/Defense/Damage/Master macros (if enabled in settings).
+5. Players can run the auto-created **DH2e External Master Workflow** macro directly (recommended).
+6. Alternative launcher access:
    - Keybinding `Ctrl+Shift+C`, or
    - `game.warhammer40kCogitator.openLauncher()` in console.
 
