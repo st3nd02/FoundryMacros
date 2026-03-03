@@ -1,9 +1,9 @@
 {
   "id": "warhammer-40k-cogitator",
   "name": "warhammer-40k-cogitator",
-  "title": "Warhammer 40k Cogitator",
+  "title": "LS-Warhammer-40k-cogitator v1.1.6",
   "description": "Workflow orchestrator for Dark Heresy 2e external Attack/Defense/Damage resolution on Foundry V13.",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "authors": [
     {
       "name": "Warhammer 40k Cogitator"
@@ -16,7 +16,7 @@
   },
   "socket": true,
   "url": "https://github.com/st3nd02/FoundryMacros",
-  "manifest": "https://raw.githubusercontent.com/st3nd02/FoundryMacros/codex/fix-high-priority-bug-in-main.js/module.json",
+  "manifest": "https://raw.githubusercontent.com/st3nd02/FoundryMacros/main/module.json",
   "download": "https://github.com/st3nd02/FoundryMacros/archive/refs/heads/main.zip",
   "esmodules": [
     "warhammer-40k-cogitator/scripts/main.js"
