@@ -3,7 +3,7 @@
   "name": "warhammer-40k-cogitator",
   "title": "Warhammer 40k Cogitator",
   "description": "Workflow orchestrator for Dark Heresy 2e external Attack/Defense/Damage resolution on Foundry V13.",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "authors": [
     {
       "name": "Warhammer 40k Cogitator"
@@ -15,6 +15,9 @@
     "maximum": "13"
   },
   "socket": true,
+  "url": "https://github.com/st3nd02/FoundryMacros",
+  "manifest": "https://raw.githubusercontent.com/st3nd02/FoundryMacros/codex/verify-communication-in-warhammer-40k-module/module.json",
+  "download": "https://github.com/st3nd02/FoundryMacros/archive/refs/heads/codex/verify-communication-in-warhammer-40k-module.zip",
   "esmodules": [
     "warhammer-40k-cogitator/scripts/main.js"
   ]

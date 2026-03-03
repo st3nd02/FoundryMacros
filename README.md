@@ -50,12 +50,16 @@ The module provides:
 If Forge reports **"Invalid manifest response received"**, check:
 
 1. The URL points to the **raw JSON** file (not a GitHub HTML page).
+   - ❌ HTML/tree URL example (will fail):
+     `https://github.com/st3nd02/FoundryMacros/tree/codex/verify-communication-in-warhammer-40k-module`
+   - ✅ Raw manifest URL example (use this):
+     `https://raw.githubusercontent.com/st3nd02/FoundryMacros/codex/verify-communication-in-warhammer-40k-module/module.json`
 2. The manifest is valid JSON and includes core fields (`id`/`name`, `title`, `version`, `compatibility`).
-3. The module package URL you publish for installation includes a valid `download` zip URL in your hosted/public manifest (Forge needs this for one-click installs).
+3. The published manifest includes a valid `download` ZIP URL (required for Forge install/update workflows).
 4. The manifest file and module folder structure match your esmodule paths.
 
 For this repo, the canonical in-repo manifests are:
-- Root: `module.json` (for repository-level distribution)
+- Root: `module.json` (repository-distribution manifest with `manifest`/`download` URLs)
 - Module folder: `warhammer-40k-cogitator/module.json`
 
 
