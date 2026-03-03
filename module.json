@@ -17,7 +17,7 @@
   "socket": true,
   "url": "https://github.com/st3nd02/FoundryMacros",
   "manifest": "https://raw.githubusercontent.com/st3nd02/FoundryMacros/main/module.json",
-  "download": "https://github.com/st3nd02/FoundryMacros/archive/refs/heads/work.zip",
+  "download": "https://github.com/st3nd02/FoundryMacros/archive/refs/heads/main.zip",
   "esmodules": [
     "warhammer-40k-cogitator/scripts/main.js"
   ]
