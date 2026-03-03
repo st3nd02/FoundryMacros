@@ -57,3 +57,17 @@ If Forge reports **"Invalid manifest response received"**, check:
 For this repo, the canonical in-repo manifests are:
 - Root: `module.json` (for repository-level distribution)
 - Module folder: `warhammer-40k-cogitator/module.json`
+
+
+### Forge-ready public manifest template
+
+A ready-to-fill public manifest template is included at `forge-manifest.template.json`.
+
+Use it like this:
+
+1. Replace `<ORG>`, `<REPO>`, and `<BRANCH>`.
+2. Upload a release ZIP named `warhammer-40k-cogitator.zip` (or adjust `download`).
+3. Host/publish the final manifest at a raw JSON URL.
+4. Paste that raw manifest URL into Forge Content Creator.
+
+> Important: Forge generally needs a working `download` URL in the published manifest for install/update workflows.

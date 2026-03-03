@@ -1,0 +1,25 @@
+{
+  "id": "warhammer-40k-cogitator",
+  "name": "warhammer-40k-cogitator",
+  "title": "Warhammer 40k Cogitator",
+  "description": "Workflow orchestrator for Dark Heresy 2e external Attack/Defense/Damage resolution on Foundry V13.",
+  "version": "1.1.1",
+  "authors": [
+    {
+      "name": "Warhammer 40k Cogitator"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13",
+    "maximum": "13"
+  },
+  "socket": true,
+  "manifest": "https://raw.githubusercontent.com/<ORG>/<REPO>/<BRANCH>/module.json",
+  "download": "https://github.com/<ORG>/<REPO>/releases/download/v1.1.1/warhammer-40k-cogitator.zip",
+  "url": "https://github.com/<ORG>/<REPO>",
+  "changelog": "https://github.com/<ORG>/<REPO>/releases/tag/v1.1.1",
+  "esmodules": [
+    "warhammer-40k-cogitator/scripts/main.js"
+  ]
+}
