@@ -16,9 +16,9 @@
   },
   "socket": true,
   "manifest": "https://raw.githubusercontent.com/st3nd02/FoundryMacros/main/module.json",
-  "download": "https://github.com/st3nd02/FoundryMacros/archive/refs/heads/work.zip",
+  "download": "https://github.com/st3nd02/FoundryMacros/archive/refs/heads/main.zip",
   "url": "https://github.com/st3nd02/FoundryMacros",
-  "changelog": "https://github.com/st3nd02/FoundryMacros/commits/work",
+  "changelog": "https://github.com/st3nd02/FoundryMacros/commits/main",
   "esmodules": [
     "warhammer-40k-cogitator/scripts/main.js"
   ]
