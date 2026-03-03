@@ -8,6 +8,16 @@ const SETTINGS = {
   autoCreateMacros: "autoCreateMacros"
 };
 
+const SOCKET_EVENTS = {
+  requestDefense: "requestDefense",
+  defenseResolved: "defenseResolved",
+  damageReady: "damageReady"
+};
+
+const WORKFLOW_NS = "foundrymacros";
+const WORKFLOW_KEY = "dh2eExternalWorkflow";
+const MACRO_FOLDER_NAME = "Warhammer 40k Cogitator";
+
 const DEFAULT_MACROS = {
   attack: {
     name: "DH2e External Attack Workflow",
@@ -92,8 +102,12 @@ Hooks.once("ready", async () => {
   game.warhammer40kCogitator = {
     openLauncher,
     ensureWorkflowMacros,
-    runStep
+    runStep,
+    emitSocket,
+    submitDefenseResult
   };
+
+  registerSocketHandlers();
 
   if (game.settings.get(COGITATOR_ID, SETTINGS.autoCreateMacros)) {
     await ensureWorkflowMacros();
@@ -101,6 +115,154 @@ Hooks.once("ready", async () => {
 
   console.log("Warhammer 40k Cogitator | Ready");
 });
+
+function registerSocketHandlers() {
+  game.socket.on(`module.${COGITATOR_ID}`, packet => {
+    if (!packet?.event || !packet?.payload) return;
+
+    if (packet.event === SOCKET_EVENTS.requestDefense) {
+      void handleDefenseRequest(packet.payload);
+      return;
+    }
+
+    if (packet.event === SOCKET_EVENTS.defenseResolved) {
+      void handleDefenseResolved(packet.payload);
+      return;
+    }
+
+    if (packet.event === SOCKET_EVENTS.damageReady) {
+      handleDamageReady(packet.payload);
+    }
+  });
+}
+
+function emitSocket(event, payload) {
+  game.socket.emit(`module.${COGITATOR_ID}`, {
+    event,
+    payload,
+    senderId: game.user.id
+  });
+}
+
+async function handleDefenseRequest(payload) {
+  const ownerIds = Array.isArray(payload.ownerIds) ? payload.ownerIds : [];
+  if (!ownerIds.includes(game.user.id)) return;
+
+  new Dialog({
+    title: `Defense Requested: ${payload.targetName}`,
+    content: `<p><b>${payload.targetName}</b> has <b>${payload.allocatedHits}</b> incoming hit(s).</p>
+              <p>Attacker: <b>${payload.attackerName}</b><br>
+              Weapon: <b>${payload.weaponName}</b></p>
+              <p>Resolve now?</p>`,
+    buttons: {
+      resolve: {
+        label: "Resolve Defense",
+        callback: async () => {
+          ui.notifications.info(`Opening defense workflow for message ${payload.chatMessageId}.`);
+          await runStep("defense");
+        }
+      },
+      later: { label: "Later" }
+    },
+    default: "resolve"
+  }).render(true);
+}
+
+async function submitDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll, defenseOutcome, allocatedHits }) {
+  const canDirectUpdate = !!game.user.isGM;
+
+  if (canDirectUpdate) {
+    await applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll, defenseOutcome, allocatedHits });
+    return { ok: true, mode: "gm-direct" };
+  }
+
+  const activeGMs = game.users.filter(u => u.active && u.isGM);
+  if (!activeGMs.length) {
+    throw new Error("No active GM is connected. Defense result cannot be applied right now.");
+  }
+
+  emitSocket(SOCKET_EVENTS.defenseResolved, {
+    chatMessageId,
+    targetTokenUuid,
+    defenseRoll,
+    defenseOutcome,
+    allocatedHits,
+    resolverUserId: game.user.id
+  });
+
+  return { ok: true, mode: "socket" };
+}
+
+async function handleDefenseResolved(payload) {
+  if (!game.user.isGM) return;
+  try {
+    await applyDefenseResult(payload);
+  } catch (err) {
+    console.error("Warhammer 40k Cogitator | Failed to apply defense result", err, payload);
+    ui.notifications.error(`Warhammer 40k Cogitator: Failed to apply defense result (${err.message ?? err}).`);
+  }
+}
+
+async function applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll, defenseOutcome, allocatedHits }) {
+  const message = game.messages.get(chatMessageId);
+  if (!message) return;
+
+  const state = foundry.utils.deepClone(message.getFlag(WORKFLOW_NS, WORKFLOW_KEY));
+  if (!state?.targets?.length) return;
+
+  const target = state.targets.find(t => t.tokenUuid === targetTokenUuid);
+  if (!target) return;
+
+  target.defenseRoll = defenseRoll;
+  target.defenseOutcome = defenseOutcome;
+  target.allocatedHits = Math.max(0, Number(allocatedHits ?? 0));
+
+  await message.update({
+    flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
+  });
+
+  const pendingDefense = state.targets.some(t => {
+    if ((t.allocatedHits ?? 0) <= 0) return false;
+    const out = String(t.defenseOutcome ?? "").toLowerCase();
+    return !out.includes("success") && !out.includes("failed") && !out.includes("skipped");
+  });
+
+  const pendingDamage = state.targets.some(t => {
+    if ((t.allocatedHits ?? 0) <= 0) return false;
+    if (t.damageResolved) return false;
+    const out = String(t.defenseOutcome ?? "").toLowerCase();
+    return out.includes("success") || out.includes("failed") || out.includes("skipped");
+  });
+
+  if (!pendingDefense && pendingDamage) {
+    const attackerActor = game.actors.get(state.attackerActorId);
+    const ownerIds = game.users
+      .filter(u => u.active && attackerActor?.testUserPermission(u, "OWNER"))
+      .map(u => u.id);
+
+    emitSocket(SOCKET_EVENTS.damageReady, {
+      ownerIds,
+      attackerName: state.attackerName,
+      chatMessageId
+    });
+  }
+}
+
+function handleDamageReady(payload) {
+  const ownerIds = Array.isArray(payload.ownerIds) ? payload.ownerIds : [];
+  if (!ownerIds.includes(game.user.id)) return;
+
+  new Dialog({
+    title: "Damage Ready",
+    content: `<p>All defense rolls are resolved for <b>${payload.attackerName}</b>.</p>
+              <p>Run damage workflow now?</p>`,
+    buttons: {
+      run: { label: "Run Damage", callback: async () => runStep("damage") },
+      later: { label: "Later" }
+    },
+    default: "run"
+  }).render(true);
+}
 
 async function openLauncher() {
   const choice = await new Promise(resolve => {
@@ -139,6 +301,8 @@ function getConfiguredMacroName(step) {
 }
 
 async function ensureWorkflowMacros() {
+  if (!game.user.isGM) return;
+
   const mapping = [
     ["attack", DEFAULT_MACROS.attack],
     ["defense", DEFAULT_MACROS.defense],
@@ -146,32 +310,57 @@ async function ensureWorkflowMacros() {
     ["master", DEFAULT_MACROS.master]
   ];
 
+  const folder = await ensureMacroFolder();
+
   for (const [step, data] of mapping) {
     const configuredName = getConfiguredMacroName(step);
-    const exists = game.macros.getName(configuredName);
-    if (exists) continue;
-
     const script = await loadBundledMacroScript(data.file);
     if (!script) {
       ui.notifications.warn(`Warhammer 40k Cogitator: Could not load bundled script ${data.file}`);
       continue;
     }
 
-    await Macro.create({
-      name: configuredName,
-      type: "script",
-      scope: "global",
-      command: script,
-      img: "icons/svg/d20-black.svg"
-    });
+    let macro = game.macros.getName(configuredName);
+    if (!macro) {
+      macro = await Macro.create({
+        name: configuredName,
+        type: "script",
+        scope: "global",
+        command: script,
+        img: "icons/svg/d20-black.svg",
+        folder: folder?.id ?? null
+      });
 
-    ui.notifications.info(`Warhammer 40k Cogitator: Created macro '${configuredName}'.`);
+      ui.notifications.info(`Warhammer 40k Cogitator: Created macro '${configuredName}'.`);
+      continue;
+    }
+
+    const updateData = {};
+    if (String(macro.command ?? "") !== String(script ?? "")) updateData.command = script;
+    if (folder?.id && macro.folder?.id !== folder.id) updateData.folder = folder.id;
+
+    if (Object.keys(updateData).length) {
+      await macro.update(updateData);
+      ui.notifications.info(`Warhammer 40k Cogitator: Updated macro '${configuredName}'.`);
+    }
   }
+}
+
+
+async function ensureMacroFolder() {
+  const existing = game.folders.find(f => f.type === "Macro" && f.name === MACRO_FOLDER_NAME);
+  if (existing) return existing;
+
+  return Folder.create({
+    name: MACRO_FOLDER_NAME,
+    type: "Macro",
+    color: "#7f5af0"
+  });
 }
 
 async function loadBundledMacroScript(relativePath) {
   try {
-    const modulePath = `modules/${COGITATOR_ID}/${relativePath}`;
+    const modulePath = `/modules/${COGITATOR_ID}/${relativePath}`;
     const response = await fetch(modulePath);
     if (!response.ok) return null;
     return await response.text();
