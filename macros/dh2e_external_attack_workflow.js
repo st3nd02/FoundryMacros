@@ -332,6 +332,7 @@ const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
       attackerName: state.attackerName,
       weaponName: state.weaponName
     });
+    return;
   }
 
   await ChatMessage.create({
@@ -545,7 +546,7 @@ const runAttackWorkflow = async setup => {
 
     const targetDoc = await fromUuid(tg.tokenUuid);
     const targetActor = targetDoc?.actor;
-    const canCurrentUserDefend = !!targetActor?.isOwner || game.user.isGM;
+    const canCurrentUserDefend = !!targetActor?.isOwner && !game.user.isGM;
 
     if (!canCurrentUserDefend) {
       tg.defenseOutcome = "Awaiting target owner";

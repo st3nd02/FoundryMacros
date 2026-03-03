@@ -44,6 +44,7 @@ The module provides:
 
 - The current build focuses on workflow orchestration and migration from macro-only flow.
 - This is a first module foundation intended for iterative expansion under the **Warhammer 40k Cogitator** project.
+- Defense prompts are now owner-routed: when the attacker is a GM/non-owner, targets receive the defense popup instead of the attacker client.
 
 ## Forge / Manifest Troubleshooting
 
