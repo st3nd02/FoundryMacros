@@ -179,18 +179,33 @@ if (!current) return ui.notifications.warn("Workflow no longer exists.");
 const targetState = current.targets.find(t => t.tokenUuid === token.document.uuid);
 if (!targetState) return ui.notifications.warn("Token no longer in workflow.");
 
-targetState.defenseRoll = roll.total;
+const defenseRoll = roll.total;
+let allocatedHits = targetState.allocatedHits ?? 0;
+let defenseOutcome = "Failed";
+
 if (dos > 0) {
-  targetState.allocatedHits = Math.max(0, (targetState.allocatedHits ?? 0) - dos);
-  targetState.defenseOutcome = `Success (-${dos} hit${dos === 1 ? "" : "s"})`;
-} else {
-  targetState.defenseOutcome = "Failed";
+  allocatedHits = Math.max(0, allocatedHits - dos);
+  defenseOutcome = `Success (-${dos} hit${dos === 1 ? "" : "s"})`;
 }
 
-await entry.msg.update({
-  content: entry.msg.content,
-  flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: current } }
-});
+if (game.warhammer40kCogitator?.submitDefenseResult) {
+  await game.warhammer40kCogitator.submitDefenseResult({
+    chatMessageId: entry.msg.id,
+    targetTokenUuid: token.document.uuid,
+    defenseRoll,
+    defenseOutcome,
+    allocatedHits
+  });
+} else {
+  targetState.defenseRoll = defenseRoll;
+  targetState.defenseOutcome = defenseOutcome;
+  targetState.allocatedHits = allocatedHits;
+
+  await entry.msg.update({
+    content: entry.msg.content,
+    flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: current } }
+  });
+}
 
 ui.notifications.info("Defense resolved and workflow updated.");
 

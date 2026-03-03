@@ -315,13 +315,24 @@ const promptDamageDialog = async (state, chatMessage) => {
   });
 };
 
-const requestOwnerDefense = async ({ targetState, chatMessage }) => {
+const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
   const targetDoc = await fromUuid(targetState.tokenUuid);
   const targetActor = targetDoc?.actor;
   if (!targetActor) return;
 
   const ownerUsers = game.users.filter(u => u.active && targetActor.testUserPermission(u, "OWNER"));
   if (!ownerUsers.length) return;
+
+  if (game.warhammer40kCogitator?.emitSocket) {
+    game.warhammer40kCogitator.emitSocket("requestDefense", {
+      ownerIds: ownerUsers.map(u => u.id),
+      chatMessageId: chatMessage.id,
+      targetName: targetState.name,
+      allocatedHits: targetState.allocatedHits,
+      attackerName: state.attackerName,
+      weaponName: state.weaponName
+    });
+  }
 
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker(),
@@ -538,7 +549,7 @@ const runAttackWorkflow = async setup => {
 
     if (!canCurrentUserDefend) {
       tg.defenseOutcome = "Awaiting target owner";
-      await requestOwnerDefense({ targetState: tg, chatMessage });
+      await requestOwnerDefense({ targetState: tg, chatMessage, state });
       continue;
     }
 
