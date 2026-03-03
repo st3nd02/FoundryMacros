@@ -196,10 +196,38 @@ async function submitDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll
 async function handleDefenseResolved(payload) {
   if (!game.user.isGM) return;
   try {
+    assertDefenseResolverAuthorized(payload);
     await applyDefenseResult(payload);
   } catch (err) {
     console.error("Warhammer 40k Cogitator | Failed to apply defense result", err, payload);
     ui.notifications.error(`Warhammer 40k Cogitator: Failed to apply defense result (${err.message ?? err}).`);
+  }
+}
+
+function assertDefenseResolverAuthorized({ resolverUserId, targetTokenUuid }) {
+  if (!resolverUserId) {
+    throw new Error("Defense payload missing resolver user.");
+  }
+
+  if (!targetTokenUuid) {
+    throw new Error("Defense payload missing target token.");
+  }
+
+  const resolverUser = game.users.get(resolverUserId);
+  if (!resolverUser) {
+    throw new Error("Defense resolver user could not be found.");
+  }
+
+  if (resolverUser.isGM) return;
+
+  const targetDoc = fromUuidSync(targetTokenUuid);
+  const targetActor = targetDoc?.actor;
+  if (!targetActor) {
+    throw new Error("Defense target could not be resolved.");
+  }
+
+  if (!targetActor.testUserPermission(resolverUser, "OWNER")) {
+    throw new Error("Defense resolver is not an owner of the target.");
   }
 }
 

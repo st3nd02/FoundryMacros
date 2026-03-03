@@ -16,7 +16,7 @@
   },
   "socket": true,
   "url": "https://github.com/st3nd02/FoundryMacros",
-  "manifest": "https://raw.githubusercontent.com/st3nd02/FoundryMacros/main/module.json",
+  "manifest": "https://raw.githubusercontent.com/st3nd02/FoundryMacros/codex/fix-high-priority-bug-in-main.js/module.json",
   "download": "https://github.com/st3nd02/FoundryMacros/archive/refs/heads/main.zip",
   "esmodules": [
     "warhammer-40k-cogitator/scripts/main.js"
