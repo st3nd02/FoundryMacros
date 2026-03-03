@@ -66,7 +66,7 @@ For this repo, the canonical in-repo manifests are:
 - Module folder: `warhammer-40k-cogitator/module.json`
 
 Direct Forge manifest URL:
-- `https://raw.githubusercontent.com/st3nd02/FoundryMacros/work/module.json`
+- `https://raw.githubusercontent.com/st3nd02/FoundryMacros/main/module.json`
 
 
 ### Forge-ready public manifest template
