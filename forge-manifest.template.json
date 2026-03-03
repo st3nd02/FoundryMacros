@@ -15,10 +15,10 @@
     "maximum": "13"
   },
   "socket": true,
-  "manifest": "https://raw.githubusercontent.com/st3nd02/FoundryMacros/main/module.json",
-  "download": "https://github.com/st3nd02/FoundryMacros/archive/refs/heads/main.zip",
+  "manifest": "https://raw.githubusercontent.com/st3nd02/FoundryMacros/work/module.json",
+  "download": "https://github.com/st3nd02/FoundryMacros/archive/refs/heads/work.zip",
   "url": "https://github.com/st3nd02/FoundryMacros",
-  "changelog": "https://github.com/st3nd02/FoundryMacros/commits/main",
+  "changelog": "https://github.com/st3nd02/FoundryMacros/commits/work",
   "esmodules": [
     "warhammer-40k-cogitator/scripts/main.js"
   ]
