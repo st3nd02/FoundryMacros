@@ -16,6 +16,7 @@ const SOCKET_EVENTS = {
 
 const WORKFLOW_NS = "foundrymacros";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
+const MACRO_FOLDER_NAME = "Warhammer 40k Cogitator";
 
 const DEFAULT_MACROS = {
   attack: {
@@ -288,6 +289,8 @@ function getConfiguredMacroName(step) {
 }
 
 async function ensureWorkflowMacros() {
+  if (!game.user.isGM) return;
+
   const mapping = [
     ["attack", DEFAULT_MACROS.attack],
     ["defense", DEFAULT_MACROS.defense],
@@ -295,32 +298,57 @@ async function ensureWorkflowMacros() {
     ["master", DEFAULT_MACROS.master]
   ];
 
+  const folder = await ensureMacroFolder();
+
   for (const [step, data] of mapping) {
     const configuredName = getConfiguredMacroName(step);
-    const exists = game.macros.getName(configuredName);
-    if (exists) continue;
-
     const script = await loadBundledMacroScript(data.file);
     if (!script) {
       ui.notifications.warn(`Warhammer 40k Cogitator: Could not load bundled script ${data.file}`);
       continue;
     }
 
-    await Macro.create({
-      name: configuredName,
-      type: "script",
-      scope: "global",
-      command: script,
-      img: "icons/svg/d20-black.svg"
-    });
+    let macro = game.macros.getName(configuredName);
+    if (!macro) {
+      macro = await Macro.create({
+        name: configuredName,
+        type: "script",
+        scope: "global",
+        command: script,
+        img: "icons/svg/d20-black.svg",
+        folder: folder?.id ?? null
+      });
 
-    ui.notifications.info(`Warhammer 40k Cogitator: Created macro '${configuredName}'.`);
+      ui.notifications.info(`Warhammer 40k Cogitator: Created macro '${configuredName}'.`);
+      continue;
+    }
+
+    const updateData = {};
+    if (String(macro.command ?? "") !== String(script ?? "")) updateData.command = script;
+    if (folder?.id && macro.folder?.id !== folder.id) updateData.folder = folder.id;
+
+    if (Object.keys(updateData).length) {
+      await macro.update(updateData);
+      ui.notifications.info(`Warhammer 40k Cogitator: Updated macro '${configuredName}'.`);
+    }
   }
+}
+
+
+async function ensureMacroFolder() {
+  const existing = game.folders.find(f => f.type === "Macro" && f.name === MACRO_FOLDER_NAME);
+  if (existing) return existing;
+
+  return Folder.create({
+    name: MACRO_FOLDER_NAME,
+    type: "Macro",
+    color: "#7f5af0"
+  });
 }
 
 async function loadBundledMacroScript(relativePath) {
   try {
-    const modulePath = `modules/${COGITATOR_ID}/${relativePath}`;
+    const modulePath = `/modules/${COGITATOR_ID}/${relativePath}`;
     const response = await fetch(modulePath);
     if (!response.ok) return null;
     return await response.text();
