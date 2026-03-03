@@ -44,3 +44,16 @@ The module provides:
 
 - The current build focuses on workflow orchestration and migration from macro-only flow.
 - This is a first module foundation intended for iterative expansion under the **Warhammer 40k Cogitator** project.
+
+## Forge / Manifest Troubleshooting
+
+If Forge reports **"Invalid manifest response received"**, check:
+
+1. The URL points to the **raw JSON** file (not a GitHub HTML page).
+2. The manifest is valid JSON and includes core fields (`id`/`name`, `title`, `version`, `compatibility`).
+3. The module package URL you publish for installation includes a valid `download` zip URL in your hosted/public manifest (Forge needs this for one-click installs).
+4. The manifest file and module folder structure match your esmodule paths.
+
+For this repo, the canonical in-repo manifests are:
+- Root: `module.json` (for repository-level distribution)
+- Module folder: `warhammer-40k-cogitator/module.json`
