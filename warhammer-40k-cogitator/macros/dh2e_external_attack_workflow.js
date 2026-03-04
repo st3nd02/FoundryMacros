@@ -244,6 +244,35 @@ const rollGrenadeDamageTotal = async (weapon, speaker) => {
   return roll.total;
 };
 
+const promptAttackFateReroll = async ({ actorDoc, rollValue, bestTN }) => {
+  const fate = actorDoc.system.fate?.value ?? 0;
+  if (fate <= 0) return false;
+
+  return new Promise(resolve => {
+    new Dialog({
+      title: "Spend Fate?",
+      content: `<p><b>Attack Missed!</b></p>
+                <p>Attack Roll: <b>${rollValue}</b> vs Target Number <b>${bestTN}</b></p>
+                <p>Spend 1 Fate Point to reroll?</p>
+                <p>Remaining Fate: <b>${fate}</b></p>`,
+      buttons: {
+        yes: { label: "Reroll (-1 Fate)", callback: () => resolve(true) },
+        no: { label: "Keep Result", callback: () => resolve(false) }
+      },
+      default: "no"
+    }).render(true);
+  });
+};
+
+const evaluateAttackResult = ({ result, targets, weapon, traits }) => {
+  const bestTN = Math.max(...targets.map(tg => tg.targetNumber));
+  const success = result <= bestTN;
+  let dos = success ? 1 + Math.floor((bestTN - result) / 10) : 0;
+  const jam = computeJam({ result, targetNumber: bestTN, weapon, traits });
+  if (jam) dos = 0;
+  return { bestTN, success, dos, jam };
+};
+
 const buildWorkflowHtml = state => {
   const cards = state.targets.map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
@@ -488,12 +517,18 @@ const runAttackWorkflow = async setup => {
   });
 
   // immediate attack roll
-  const result = (await animatedRoll("1d100", chatMessage.speaker)).total;
-  const bestTN = Math.max(...state.targets.map(tg => tg.targetNumber));
-  const success = result <= bestTN;
-  let dos = success ? 1 + Math.floor((bestTN - result) / 10) : 0;
-  const jam = computeJam({ result, targetNumber: bestTN, weapon, traits });
-  if (jam) dos = 0;
+  let result = (await animatedRoll("1d100", chatMessage.speaker)).total;
+  let { success, dos, jam, bestTN } = evaluateAttackResult({ result, targets: state.targets, weapon, traits });
+
+  if (!success) {
+    const useFate = await promptAttackFateReroll({ actorDoc: attacker, rollValue: result, bestTN });
+    if (useFate) {
+      await attacker.update({ "system.fate.value": Math.max(0, (attacker.system.fate?.value ?? 0) - 1) });
+      result = (await animatedRoll("1d100", chatMessage.speaker)).total;
+      ({ success, dos, jam, bestTN } = evaluateAttackResult({ result, targets: state.targets, weapon, traits }));
+      state.extraText = [state.extraText, `${attacker.name} spent Fate to reroll attack`].filter(Boolean).join(" | ");
+    }
+  }
 
   let hits = success && !jam ? 1 : 0;
   if (success && !isMelee) {
