@@ -330,22 +330,21 @@ const promptDamageDialog = async (state, chatMessage) => {
 };
 
 const getDefenseRecipients = targetDocumentOrActor => {
-  const ownershipSource = targetDocumentOrActor?.ownership
-    ? targetDocumentOrActor
-    : targetDocumentOrActor?.prototypeToken?.ownership
-      ? targetDocumentOrActor.prototypeToken
-      : targetDocumentOrActor;
-  if (!ownershipSource) return [];
-
+  const actor = targetDocumentOrActor?.actor
+    ?? targetDocumentOrActor?.baseActor
+    ?? (targetDocumentOrActor?.documentName === "Actor" ? targetDocumentOrActor : null);
   const ownerLevel = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
-  const activeGMs = game.users.filter(u => u.active && u.isGM);
-  const playerOwners = game.users.filter(user => {
-    if (!user.active || user.isGM) return false;
-    return ownershipSource.testUserPermission(user, ownerLevel);
-  });
 
-  if (playerOwners.length) return playerOwners;
-  return activeGMs;
+  const activePlayerOwners = game.users
+    .filter(user => user.active && !user.isGM)
+    .filter(user => actor?.testUserPermission(user, ownerLevel));
+
+  if (activePlayerOwners.length) {
+    const controllingOwners = activePlayerOwners.filter(user => user.character?.id === actor?.id);
+    return controllingOwners.length ? controllingOwners : activePlayerOwners;
+  }
+
+  return game.users.filter(user => user.active && user.isGM);
 };
 
 const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {

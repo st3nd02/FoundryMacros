@@ -256,22 +256,39 @@ async function removeUsedEvasionEffect(actor) {
 }
 
 function getDefenseRecipients(targetDocumentOrActor) {
-  const ownershipSource = targetDocumentOrActor?.ownership
-    ? targetDocumentOrActor
-    : targetDocumentOrActor?.prototypeToken?.ownership
-      ? targetDocumentOrActor.prototypeToken
-      : targetDocumentOrActor;
-  if (!ownershipSource) return [];
+  const actor = resolveActorForOwnership(targetDocumentOrActor);
+  const ownerLevel = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
+
+  const activePlayerOwners = game.users
+    .filter(user => user.active && !user.isGM)
+    .filter(user => actor?.testUserPermission(user, ownerLevel));
+
+  if (activePlayerOwners.length) {
+    const controllingOwners = activePlayerOwners.filter(user => user.character?.id === actor?.id);
+    return controllingOwners.length ? controllingOwners : activePlayerOwners;
+  }
+
+  return game.users.filter(user => user.active && user.isGM);
+}
+
+function resolveActorForOwnership(documentOrActor) {
+  if (!documentOrActor) return null;
+  if (documentOrActor.documentName === "Actor") return documentOrActor;
+  if (documentOrActor.actor) return documentOrActor.actor;
+  if (documentOrActor.baseActor) return documentOrActor.baseActor;
+  return null;
+}
+
+function getAttackerDamageRecipients(attackerActor) {
+  if (!attackerActor) return game.users.filter(user => user.active && user.isGM);
 
   const ownerLevel = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
-  const activeGMs = game.users.filter(u => u.active && u.isGM);
-  const playerOwners = game.users.filter(user => {
-    if (!user.active || user.isGM) return false;
-    return ownershipSource.testUserPermission(user, ownerLevel);
-  });
+  const activePlayerOwners = game.users
+    .filter(user => user.active && !user.isGM)
+    .filter(user => attackerActor.testUserPermission(user, ownerLevel));
 
-  if (playerOwners.length) return playerOwners;
-  return activeGMs;
+  if (activePlayerOwners.length) return activePlayerOwners;
+  return game.users.filter(user => user.active && user.isGM);
 }
 
 function registerSocketHandlers() {
@@ -436,9 +453,7 @@ async function applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll,
 
   if (!pendingDefense && pendingDamage) {
     const attackerActor = game.actors.get(state.attackerActorId);
-    const ownerIds = game.users
-      .filter(u => u.active && attackerActor?.testUserPermission(u, "OWNER"))
-      .map(u => u.id);
+    const ownerIds = getAttackerDamageRecipients(attackerActor).map(u => u.id);
 
     emitSocket(SOCKET_EVENTS.damageReady, {
       ownerIds,
