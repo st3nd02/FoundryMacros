@@ -297,21 +297,6 @@ const buildWorkflowHtml = state => {
   </div>`;
 };
 
-const promptDefenseForTarget = async targetState => {
-  return new Promise(resolve => {
-    new Dialog({
-      title: `Defense: ${targetState.name}`,
-      content: `<p><b>${targetState.name}</b> has <b>${targetState.allocatedHits}</b> incoming hits.</p>
-                <p>Click <b>Roll Defense</b> to roll Agility defense now, or Skip.</p>`,
-      buttons: {
-        roll: { label: "Roll Defense", callback: () => resolve("roll") },
-        skip: { label: "Skip", callback: () => resolve("skip") }
-      },
-      default: "roll"
-    }).render(true);
-  });
-};
-
 const promptDamageDialog = async (state, chatMessage) => {
   const rows = state.targets.filter(t => t.allocatedHits > 0).map(t => `<li>${t.name}: ${t.allocatedHits} hits</li>`).join("");
   if (!rows) return;
@@ -357,23 +342,24 @@ const getDefenseRecipients = targetActor => {
 const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
   const targetDoc = await fromUuid(targetState.tokenUuid);
   const targetActor = targetDoc?.actor;
-  if (!targetActor) return;
+  if (!targetActor) return false;
 
   const recipientUsers = game.warhammer40kCogitator?.getDefenseRecipients
     ? game.warhammer40kCogitator.getDefenseRecipients(targetActor)
     : getDefenseRecipients(targetActor);
-  if (!recipientUsers.length) return;
+  if (!recipientUsers.length) return false;
 
   if (game.warhammer40kCogitator?.emitSocket) {
     game.warhammer40kCogitator.emitSocket("requestDefense", {
       ownerIds: recipientUsers.map(u => u.id),
       chatMessageId: chatMessage.id,
+      targetTokenUuid: targetState.tokenUuid,
       targetName: targetState.name,
       allocatedHits: targetState.allocatedHits,
       attackerName: state.attackerName,
       weaponName: state.weaponName
     });
-    return;
+    return true;
   }
 
   await ChatMessage.create({
@@ -382,6 +368,7 @@ const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
     content: `<b>Defense Requested</b><br>${targetState.name} has ${targetState.allocatedHits} incoming hit(s).<br>
               Please resolve defense for this workflow message: <code>${chatMessage.id}</code>.`
   });
+  return true;
 };
 
 const runAttackWorkflow = async setup => {
@@ -599,28 +586,11 @@ const runAttackWorkflow = async setup => {
       continue;
     }
 
-    const recipientUsers = game.warhammer40kCogitator?.getDefenseRecipients
-      ? game.warhammer40kCogitator.getDefenseRecipients(targetActor)
-      : getDefenseRecipients(targetActor);
-    const canCurrentUserDefend = recipientUsers.some(u => u.id === game.user.id);
-
-    if (canCurrentUserDefend) {
-      const decision = await promptDefenseForTarget(tg);
-      if (decision === "roll") {
-        const agility = targetActor?.system?.characteristics?.agility?.total ?? 0;
-        const r = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: targetActor }));
-        const ok = r.total <= agility;
-        tg.defenseRoll = r.total;
-        tg.defenseOutcome = ok ? "Success (-1 hit)" : "Failed";
-        if (ok && tg.allocatedHits > 0) tg.allocatedHits -= 1;
-      } else {
-        tg.defenseOutcome = "Skipped";
-      }
-      continue;
-    }
-
     tg.defenseOutcome = "Awaiting target owner";
-    await requestOwnerDefense({ targetState: tg, chatMessage, state });
+    const requested = await requestOwnerDefense({ targetState: tg, chatMessage, state });
+    if (!requested) {
+      tg.defenseOutcome = "No active owner/GM for defense";
+    }
   }
 
   await chatMessage.update({
