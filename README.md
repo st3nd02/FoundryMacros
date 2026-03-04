@@ -11,7 +11,9 @@ This repository now contains the **Warhammer 40k Cogitator** workflow project fo
 - `macros/dh2e_external_attack_workflow.js` (Version 1.0)
 - `macros/dh2e_external_defense_workflow.js` (Version 1.0)
 - `macros/dh2e_external_damage_workflow.js` (Version 1.0)
-- `macros/dh2e_external_master_workflow.js` (Version 1.0)
+- `macros/dh2e_external_master_workflow.js` (Version 1.1)
+- `macros/dh2e_external_gm_master_workflow.js` (Version 1.0, GM-only)
+- `macros/dh2e_external_apply_damage_workflow.js` (Version 1.2, GM-only)
 
 These can be used directly as script macros.
 
@@ -35,7 +37,7 @@ The module provides:
 2. Ensure the installed folder name is `warhammer-40k-cogitator`.
 3. Enable the module in your world.
 4. Log in as a **GM** at least once after enabling (macro creation/update is GM-only).
-5. On world ready, the module auto-creates or updates Attack/Defense/Damage/Master macros in the **Warhammer 40k Cogitator** macro folder (if enabled in settings).
+5. On world ready, the module auto-creates or updates Attack/Defense/Damage/Master plus GM Master/Apply Damage macros in the **Warhammer 40k Cogitator** macro folder (if enabled in settings).
 6. Players can run the auto-created **DH2e External Master Workflow** macro directly (recommended).
 7. Alternative launcher access:
    - Keybinding `Ctrl+Shift+C`, or

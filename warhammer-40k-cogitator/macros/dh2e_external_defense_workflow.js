@@ -62,7 +62,7 @@ for (const msg of game.messages.contents) {
   const state = msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
   if (!state?.targets?.length) continue;
   for (const t of state.targets) {
-    if (t.tokenUuid !== token.document.uuid) continue;
+    if ((t.tokenUuid ?? t.targetTokenUuid) !== token.document.uuid) continue;
     if ((t.allocatedHits ?? 0) <= 0) continue;
     if (t.damageResolved) continue;
     const out = String(t.defenseOutcome ?? "").toLowerCase();
@@ -162,7 +162,7 @@ const notes = [];
 let actionText = pick.type === "parry" ? "Parry" : "Dodge";
 
 if (pick.type === "skip") {
-  const targetState = entry.state.targets.find(t => t.tokenUuid === token.document.uuid);
+  const targetState = entry.state.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === token.document.uuid);
   if (!targetState) return ui.notifications.warn("Token no longer in workflow.");
 
   try {
@@ -241,7 +241,7 @@ if (dos <= 0 && (actor.system.fate?.value ?? 0) > 0) {
 
 const current = entry.msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
 if (!current) return ui.notifications.warn("Workflow no longer exists.");
-const targetState = current.targets.find(t => t.tokenUuid === token.document.uuid);
+const targetState = current.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === token.document.uuid);
 if (!targetState) return ui.notifications.warn("Token no longer in workflow.");
 
 const defenseRoll = roll.total;
