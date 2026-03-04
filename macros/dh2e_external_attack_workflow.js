@@ -553,33 +553,39 @@ const runAttackWorkflow = async setup => {
   }
 
   // Defense handling order: online target owner, otherwise online GM.
+  // Skip when reaction has already been spent this round.
   for (const tg of state.targets) {
     if (tg.allocatedHits <= 0) continue;
 
     const targetDoc = await fromUuid(tg.tokenUuid);
     const targetActor = targetDoc?.actor;
+    if (game.warhammer40kCogitator?.hasDefenseReaction?.(targetActor)) {
+      tg.defenseOutcome = "Skipped (Reaction already used)";
+      continue;
+    }
+
     const recipientUsers = game.warhammer40kCogitator?.getDefenseRecipients
       ? game.warhammer40kCogitator.getDefenseRecipients(targetActor)
       : getDefenseRecipients(targetActor);
     const canCurrentUserDefend = recipientUsers.some(u => u.id === game.user.id);
 
-    if (!canCurrentUserDefend) {
-      tg.defenseOutcome = "Awaiting target owner";
-      await requestOwnerDefense({ targetState: tg, chatMessage, state });
+    if (canCurrentUserDefend) {
+      const decision = await promptDefenseForTarget(tg);
+      if (decision === "roll") {
+        const agility = targetActor?.system?.characteristics?.agility?.total ?? 0;
+        const r = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: targetActor }));
+        const ok = r.total <= agility;
+        tg.defenseRoll = r.total;
+        tg.defenseOutcome = ok ? "Success (-1 hit)" : "Failed";
+        if (ok && tg.allocatedHits > 0) tg.allocatedHits -= 1;
+      } else {
+        tg.defenseOutcome = "Skipped";
+      }
       continue;
     }
 
-    const decision = await promptDefenseForTarget(tg);
-    if (decision === "roll") {
-      const agility = targetActor?.system?.characteristics?.agility?.total ?? 0;
-      const r = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: targetActor }));
-      const ok = r.total <= agility;
-      tg.defenseRoll = r.total;
-      tg.defenseOutcome = ok ? "Success (-1 hit)" : "Failed";
-      if (ok && tg.allocatedHits > 0) tg.allocatedHits -= 1;
-    } else {
-      tg.defenseOutcome = "Skipped";
-    }
+    tg.defenseOutcome = "Awaiting target owner";
+    await requestOwnerDefense({ targetState: tg, chatMessage, state });
   }
 
   await chatMessage.update({

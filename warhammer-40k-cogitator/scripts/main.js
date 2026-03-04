@@ -18,6 +18,7 @@ const WORKFLOW_NS = "foundrymacros";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const MACRO_FOLDER_NAME = "Warhammer 40k Cogitator";
 const REACTION_FLAG = "reactionUsedForDefense";
+const REACTION_COUNT_FLAG = "reactionUsedForDefenseCount";
 const REACTION_EFFECT_NAME = "Reaction Used";
 const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 
@@ -134,30 +135,57 @@ function registerCombatHooks() {
 }
 
 function hasDefenseReaction(actor) {
-  return !!actor?.getFlag(COGITATOR_ID, REACTION_FLAG);
+  if (!actor) return false;
+  const used = Number(actor.getFlag(COGITATOR_ID, REACTION_COUNT_FLAG) ?? (actor.getFlag(COGITATOR_ID, REACTION_FLAG) ? 1 : 0));
+  return used >= getDefenseReactionLimit(actor);
+}
+
+function getDefenseReactionLimit(actor) {
+  if (!actor) return 1;
+
+  const hasBonusReactionTalent = actor.items.some(item => {
+    const itemName = String(item?.name ?? "").trim().toLowerCase();
+    return itemName === "step aside" || itemName === "wall of steel";
+  });
+
+  return hasBonusReactionTalent ? 2 : 1;
+}
+
+function getUsedDefenseReactions(actor) {
+  if (!actor) return 0;
+  return Number(actor.getFlag(COGITATOR_ID, REACTION_COUNT_FLAG) ?? (actor.getFlag(COGITATOR_ID, REACTION_FLAG) ? 1 : 0));
 }
 
 async function consumeDefenseReaction(actor) {
-  if (!actor || hasDefenseReaction(actor)) return;
+  if (!actor) return;
+  const maxReactions = getDefenseReactionLimit(actor);
+  const alreadyUsed = getUsedDefenseReactions(actor);
+  if (alreadyUsed >= maxReactions) return;
+
+  const nextUsed = Math.min(maxReactions, alreadyUsed + 1);
 
   const existing = actor.effects.find(e => e.getFlag(COGITATOR_ID, REACTION_FLAG));
+  const effectName = `${REACTION_EFFECT_NAME} (${nextUsed}/${maxReactions})`;
   if (!existing) {
     await actor.createEmbeddedDocuments("ActiveEffect", [{
-      name: REACTION_EFFECT_NAME,
+      name: effectName,
       img: REACTION_EFFECT_ICON,
       icon: REACTION_EFFECT_ICON,
       transfer: false,
       disabled: false,
       flags: { [COGITATOR_ID]: { [REACTION_FLAG]: true } }
     }]);
+  } else {
+    await existing.update({ name: effectName });
   }
 
+  await actor.setFlag(COGITATOR_ID, REACTION_COUNT_FLAG, nextUsed);
   await actor.setFlag(COGITATOR_ID, REACTION_FLAG, true);
 }
 
 async function clearDefenseReaction(actor) {
   if (!actor) return;
-  if (!hasDefenseReaction(actor)) return;
+  if (!hasDefenseReaction(actor) && !getUsedDefenseReactions(actor)) return;
 
   const toDelete = actor.effects
     .filter(e => e.getFlag(COGITATOR_ID, REACTION_FLAG))
@@ -168,6 +196,7 @@ async function clearDefenseReaction(actor) {
   }
 
   await actor.unsetFlag(COGITATOR_ID, REACTION_FLAG);
+  await actor.unsetFlag(COGITATOR_ID, REACTION_COUNT_FLAG);
 }
 
 function getDefenseRecipients(targetActor) {
