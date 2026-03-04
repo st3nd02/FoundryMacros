@@ -371,7 +371,7 @@ const buildWorkflowHtml = state => {
   const cards = (state.targets ?? []).map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
     const damageSummary = t.damageSummary
-      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#11131a;">${t.damageSummary}${t.applySummary ? `<hr>${t.applySummary}` : ""}</div>`
+      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}${t.applySummary ? `<hr>${t.applySummary}` : ""}</div>`
       : `<div><b>Damage:</b> ${(t.damageRolls ?? []).map(d => `${d.total} ${d.loc}`).join(", ") || "—"}</div>`;
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
