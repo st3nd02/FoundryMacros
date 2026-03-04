@@ -17,6 +17,9 @@ const SOCKET_EVENTS = {
 const WORKFLOW_NS = "foundrymacros";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const MACRO_FOLDER_NAME = "Warhammer 40k Cogitator";
+const REACTION_FLAG = "reactionUsedForDefense";
+const REACTION_EFFECT_NAME = "Reaction Used";
+const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 
 const DEFAULT_MACROS = {
   attack: {
@@ -104,10 +107,15 @@ Hooks.once("ready", async () => {
     ensureWorkflowMacros,
     runStep,
     emitSocket,
-    submitDefenseResult
+    submitDefenseResult,
+    getDefenseRecipients,
+    hasDefenseReaction,
+    consumeDefenseReaction,
+    clearDefenseReaction
   };
 
   registerSocketHandlers();
+  registerCombatHooks();
 
   if (game.settings.get(COGITATOR_ID, SETTINGS.autoCreateMacros)) {
     await ensureWorkflowMacros();
@@ -115,6 +123,64 @@ Hooks.once("ready", async () => {
 
   console.log("Warhammer 40k Cogitator | Ready");
 });
+
+function registerCombatHooks() {
+  Hooks.on("updateCombat", async (combat, changed) => {
+    if (!("turn" in changed) && !("round" in changed)) return;
+    const actor = combat?.combatant?.actor;
+    if (!actor) return;
+    await clearDefenseReaction(actor);
+  });
+}
+
+function hasDefenseReaction(actor) {
+  return !!actor?.getFlag(COGITATOR_ID, REACTION_FLAG);
+}
+
+async function consumeDefenseReaction(actor) {
+  if (!actor || hasDefenseReaction(actor)) return;
+
+  const existing = actor.effects.find(e => e.getFlag(COGITATOR_ID, REACTION_FLAG));
+  if (!existing) {
+    await actor.createEmbeddedDocuments("ActiveEffect", [{
+      name: REACTION_EFFECT_NAME,
+      img: REACTION_EFFECT_ICON,
+      icon: REACTION_EFFECT_ICON,
+      transfer: false,
+      disabled: false,
+      flags: { [COGITATOR_ID]: { [REACTION_FLAG]: true } }
+    }]);
+  }
+
+  await actor.setFlag(COGITATOR_ID, REACTION_FLAG, true);
+}
+
+async function clearDefenseReaction(actor) {
+  if (!actor) return;
+  if (!hasDefenseReaction(actor)) return;
+
+  const toDelete = actor.effects
+    .filter(e => e.getFlag(COGITATOR_ID, REACTION_FLAG))
+    .map(e => e.id)
+    .filter(Boolean);
+  if (toDelete.length) {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", toDelete);
+  }
+
+  await actor.unsetFlag(COGITATOR_ID, REACTION_FLAG);
+}
+
+function getDefenseRecipients(targetActor) {
+  if (!targetActor) return [];
+
+  const activeGMs = game.users.filter(u => u.active && u.isGM);
+  if (!targetActor.hasPlayerOwner) return activeGMs;
+
+  const playerOwners = game.users.filter(u => u.active && !u.isGM && targetActor.testUserPermission(u, "OWNER"));
+  if (playerOwners.length) return playerOwners;
+
+  return activeGMs;
+}
 
 function registerSocketHandlers() {
   game.socket.on(`module.${COGITATOR_ID}`, packet => {

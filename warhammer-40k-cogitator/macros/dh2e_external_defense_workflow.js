@@ -14,6 +14,7 @@ if (!token) return ui.notifications.warn("Select your defender token first.");
 const actor = token.actor;
 if (!actor) return ui.notifications.warn("Selected token has no actor.");
 
+
 const difficulties = [
   { value: 60, label: "Trivial (+60)" },
   { value: 50, label: "Elementary (+50)" },
@@ -179,6 +180,21 @@ if (!current) return ui.notifications.warn("Workflow no longer exists.");
 const targetState = current.targets.find(t => t.tokenUuid === token.document.uuid);
 if (!targetState) return ui.notifications.warn("Token no longer in workflow.");
 
+if (game.warhammer40kCogitator?.hasDefenseReaction?.(actor)) {
+  try {
+    await game.warhammer40kCogitator.submitDefenseResult({
+      chatMessageId: entry.msg.id,
+      targetTokenUuid: token.document.uuid,
+      defenseRoll: null,
+      defenseOutcome: "Skipped (Reaction already used)",
+      allocatedHits: targetState.allocatedHits ?? 0
+    });
+  } catch (err) {
+    ui.notifications.error(`Defense result could not be applied: ${err.message ?? err}`);
+  }
+  return;
+}
+
 const defenseRoll = roll.total;
 let allocatedHits = targetState.allocatedHits ?? 0;
 let defenseOutcome = "Failed";
@@ -215,6 +231,10 @@ if (game.warhammer40kCogitator?.submitDefenseResult) {
     ui.notifications.error(`Direct workflow update failed: ${err.message ?? err}`);
     return;
   }
+}
+
+if (game.warhammer40kCogitator?.consumeDefenseReaction) {
+  await game.warhammer40kCogitator.consumeDefenseReaction(actor);
 }
 
 ui.notifications.info("Defense resolved and workflow updated.");

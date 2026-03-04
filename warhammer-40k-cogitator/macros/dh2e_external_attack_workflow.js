@@ -320,12 +320,14 @@ const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
   const targetActor = targetDoc?.actor;
   if (!targetActor) return;
 
-  const ownerUsers = game.users.filter(u => u.active && targetActor.testUserPermission(u, "OWNER"));
-  if (!ownerUsers.length) return;
+  const recipientUsers = game.warhammer40kCogitator?.getDefenseRecipients
+    ? game.warhammer40kCogitator.getDefenseRecipients(targetActor)
+    : game.users.filter(u => u.active && targetActor.testUserPermission(u, "OWNER"));
+  if (!recipientUsers.length) return;
 
   if (game.warhammer40kCogitator?.emitSocket) {
     game.warhammer40kCogitator.emitSocket("requestDefense", {
-      ownerIds: ownerUsers.map(u => u.id),
+      ownerIds: recipientUsers.map(u => u.id),
       chatMessageId: chatMessage.id,
       targetName: targetState.name,
       allocatedHits: targetState.allocatedHits,
@@ -337,7 +339,7 @@ const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
 
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker(),
-    whisper: ownerUsers.map(u => u.id),
+    whisper: recipientUsers.map(u => u.id),
     content: `<b>Defense Requested</b><br>${targetState.name} has ${targetState.allocatedHits} incoming hit(s).<br>
               Please resolve defense for this workflow message: <code>${chatMessage.id}</code>.`
   });
@@ -540,31 +542,20 @@ const runAttackWorkflow = async setup => {
     }
   }
 
-  // defense dialogs: route to target owner if current user is not owner.
+  // Defense handling is fully server-side: request defender owner (or GM fallback),
+  // unless reaction has already been spent this round.
   for (const tg of state.targets) {
     if (tg.allocatedHits <= 0) continue;
 
     const targetDoc = await fromUuid(tg.tokenUuid);
     const targetActor = targetDoc?.actor;
-    const canCurrentUserDefend = !!targetActor?.isOwner && !game.user.isGM;
-
-    if (!canCurrentUserDefend) {
-      tg.defenseOutcome = "Awaiting target owner";
-      await requestOwnerDefense({ targetState: tg, chatMessage, state });
+    if (game.warhammer40kCogitator?.hasDefenseReaction?.(targetActor)) {
+      tg.defenseOutcome = "Skipped (Reaction already used)";
       continue;
     }
 
-    const decision = await promptDefenseForTarget(tg);
-    if (decision === "roll") {
-      const agility = targetActor?.system?.characteristics?.agility?.total ?? 0;
-      const r = await animatedRoll("1d100", ChatMessage.getSpeaker({ actor: targetActor }));
-      const ok = r.total <= agility;
-      tg.defenseRoll = r.total;
-      tg.defenseOutcome = ok ? "Success (-1 hit)" : "Failed";
-      if (ok && tg.allocatedHits > 0) tg.allocatedHits -= 1;
-    } else {
-      tg.defenseOutcome = "Skipped";
-    }
+    tg.defenseOutcome = "Awaiting target owner";
+    await requestOwnerDefense({ targetState: tg, chatMessage, state });
   }
 
   await chatMessage.update({
