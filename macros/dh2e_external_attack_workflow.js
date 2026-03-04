@@ -315,17 +315,29 @@ const promptDamageDialog = async (state, chatMessage) => {
   });
 };
 
+const getDefenseRecipients = targetActor => {
+  if (!targetActor) return [];
+
+  const activeGMs = game.users.filter(u => u.active && u.isGM);
+  const playerOwners = game.users.filter(u => u.active && !u.isGM && targetActor.testUserPermission(u, "OWNER"));
+  if (playerOwners.length) return playerOwners;
+
+  return activeGMs;
+};
+
 const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
   const targetDoc = await fromUuid(targetState.tokenUuid);
   const targetActor = targetDoc?.actor;
   if (!targetActor) return;
 
-  const ownerUsers = game.users.filter(u => u.active && targetActor.testUserPermission(u, "OWNER"));
-  if (!ownerUsers.length) return;
+  const recipientUsers = game.warhammer40kCogitator?.getDefenseRecipients
+    ? game.warhammer40kCogitator.getDefenseRecipients(targetActor)
+    : getDefenseRecipients(targetActor);
+  if (!recipientUsers.length) return;
 
   if (game.warhammer40kCogitator?.emitSocket) {
     game.warhammer40kCogitator.emitSocket("requestDefense", {
-      ownerIds: ownerUsers.map(u => u.id),
+      ownerIds: recipientUsers.map(u => u.id),
       chatMessageId: chatMessage.id,
       targetName: targetState.name,
       allocatedHits: targetState.allocatedHits,
@@ -337,7 +349,7 @@ const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
 
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker(),
-    whisper: ownerUsers.map(u => u.id),
+    whisper: recipientUsers.map(u => u.id),
     content: `<b>Defense Requested</b><br>${targetState.name} has ${targetState.allocatedHits} incoming hit(s).<br>
               Please resolve defense for this workflow message: <code>${chatMessage.id}</code>.`
   });
@@ -540,13 +552,16 @@ const runAttackWorkflow = async setup => {
     }
   }
 
-  // defense dialogs: route to target owner if current user is not owner.
+  // Defense handling order: online target owner, otherwise online GM.
   for (const tg of state.targets) {
     if (tg.allocatedHits <= 0) continue;
 
     const targetDoc = await fromUuid(tg.tokenUuid);
     const targetActor = targetDoc?.actor;
-    const canCurrentUserDefend = !!targetActor?.isOwner && !game.user.isGM;
+    const recipientUsers = game.warhammer40kCogitator?.getDefenseRecipients
+      ? game.warhammer40kCogitator.getDefenseRecipients(targetActor)
+      : getDefenseRecipients(targetActor);
+    const canCurrentUserDefend = recipientUsers.some(u => u.id === game.user.id);
 
     if (!canCurrentUserDefend) {
       tg.defenseOutcome = "Awaiting target owner";
