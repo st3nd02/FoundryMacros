@@ -6,7 +6,7 @@
 
 (async () => {
 
-const WORKFLOW_NS = "foundrymacros";
+const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 
 const requestedDefense = game.warhammer40kCogitator?.consumePendingDefenseContext?.() ?? null;
