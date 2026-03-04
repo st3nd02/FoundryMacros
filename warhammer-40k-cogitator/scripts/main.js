@@ -22,6 +22,7 @@ const REACTION_COUNT_FLAG = "reactionUsedForDefenseCount";
 const REACTION_EFFECT_NAME = "Reaction Used";
 const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 const USED_EVASION_EFFECT_ID = "ce-used-evasion";
+let pendingDefenseContext = null;
 
 const DEFAULT_MACROS = {
   attack: {
@@ -113,7 +114,9 @@ Hooks.once("ready", async () => {
     getDefenseRecipients,
     hasDefenseReaction,
     consumeDefenseReaction,
-    clearDefenseReaction
+    clearDefenseReaction,
+    setPendingDefenseContext,
+    consumePendingDefenseContext
   };
 
   registerSocketHandlers();
@@ -296,6 +299,8 @@ async function handleDefenseRequest(payload) {
   const ownerIds = Array.isArray(payload.ownerIds) ? payload.ownerIds : [];
   if (!ownerIds.includes(game.user.id)) return;
 
+  setPendingDefenseContext(payload);
+
   new Dialog({
     title: `Defense Requested: ${payload.targetName}`,
     content: `<p><b>${payload.targetName}</b> has <b>${payload.allocatedHits}</b> incoming hit(s).</p>
@@ -306,6 +311,8 @@ async function handleDefenseRequest(payload) {
       resolve: {
         label: "Resolve Defense",
         callback: async () => {
+          await focusDefenseTarget(payload.targetTokenUuid);
+          setPendingDefenseContext(payload);
           ui.notifications.info(`Opening defense workflow for message ${payload.chatMessageId}.`);
           await runStep("defense");
         }
@@ -314,6 +321,34 @@ async function handleDefenseRequest(payload) {
     },
     default: "resolve"
   }).render(true);
+}
+
+function setPendingDefenseContext(payload) {
+  pendingDefenseContext = payload ?? null;
+}
+
+function consumePendingDefenseContext() {
+  const context = pendingDefenseContext;
+  pendingDefenseContext = null;
+  return context;
+}
+
+async function focusDefenseTarget(targetTokenUuid) {
+  if (!targetTokenUuid) return;
+
+  const tokenDoc = await fromUuid(targetTokenUuid);
+  const tokenObject = tokenDoc?.object;
+  if (!tokenObject) return;
+
+  tokenObject.control({ releaseOthers: true });
+
+  if (tokenObject.center) {
+    await canvas.animatePan({ x: tokenObject.center.x, y: tokenObject.center.y, duration: 250 });
+  }
+
+  if (tokenDoc.id) {
+    game.user.updateTokenTargets([tokenDoc.id]);
+  }
 }
 
 async function submitDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll, defenseOutcome, allocatedHits }) {

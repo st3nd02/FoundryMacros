@@ -1,6 +1,6 @@
 /**
  * DH2e External Defense Workflow (Foundry V13)
- * Version: 1.1
+ * Version: 1.2
  * Run this as the defender owner to resolve pending defenses on existing attack workflows.
  */
 
@@ -9,7 +9,21 @@
 const WORKFLOW_NS = "foundrymacros";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 
-const token = canvas.tokens.controlled[0];
+const requestedDefense = game.warhammer40kCogitator?.consumePendingDefenseContext?.() ?? null;
+
+const resolveTokenFromRequest = async () => {
+  if (!requestedDefense?.targetTokenUuid) return null;
+  const tokenDoc = await fromUuid(requestedDefense.targetTokenUuid);
+  const tokenObject = tokenDoc?.object;
+  if (!tokenObject) return null;
+  tokenObject.control({ releaseOthers: true });
+  if (tokenDoc.id) {
+    game.user.updateTokenTargets([tokenDoc.id]);
+  }
+  return tokenObject;
+};
+
+const token = canvas.tokens.controlled[0] ?? await resolveTokenFromRequest();
 if (!token) return ui.notifications.warn("Select your defender token first.");
 const actor = token.actor;
 if (!actor) return ui.notifications.warn("Selected token has no actor.");
@@ -59,7 +73,10 @@ const weaponOptions = meleeWeapons.length
   ? meleeWeapons.map(w => `<option value="${w.id}">${w.name}</option>`).join("")
   : `<option value="">No melee weapons</option>`;
 const workflowOptions = pending
-  .map((p, i) => `<option value="${i}">${p.state.attackerName} vs ${p.target.name} (${p.target.allocatedHits} hit${p.target.allocatedHits === 1 ? "" : "s"})</option>`)
+  .map((p, i) => {
+    const selected = requestedDefense?.chatMessageId === p.msg.id ? "selected" : "";
+    return `<option value="${i}" ${selected}>${p.state.attackerName} vs ${p.target.name} (${p.target.allocatedHits} hit${p.target.allocatedHits === 1 ? "" : "s"})</option>`;
+  })
   .join("");
 
 const pick = await new Promise(resolve => {
