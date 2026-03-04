@@ -310,7 +310,7 @@ new Dialog({
 
         for (let h = 1; h <= hits; h++) {
           const roll = new Roll(formula);
-          await roll.evaluate({ async: true });
+          await roll.evaluate();
           if (game.dice3d) await game.dice3d.showForRoll(roll, game.user, true);
           const dice = roll.dice[0]?.results.map(r => r.result) ?? [];
           const flatBonus = roll.total - dice.reduce((a, b) => a + b, 0);

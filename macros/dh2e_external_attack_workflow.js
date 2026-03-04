@@ -119,7 +119,7 @@ const parseWeaponTraits = weapon =>
 const hasTrait = (traits, key) => traits.some(t => t.includes(key));
 
 const animatedRoll = async (formula, speaker) => {
-  const roll = await new Roll(formula).roll({ async: true });
+  const roll = await new Roll(formula).evaluate();
   await roll.toMessage({ speaker, rollMode: "roll" });
   return roll;
 };
@@ -663,7 +663,8 @@ const showAttackDialog = async () => {
     const isMelee = (weaponDoc?.system.class ?? "").toLowerCase() === "melee";
     const normalRange = getNormalRangeForWeapon(weaponDoc);
     return targetTokens.map(t => {
-      const d = Math.round(canvas.grid.measureDistance(attackerToken.center, t.center));
+      const pathMeasurement = canvas.grid.measurePath([attackerToken.center, t.center], { gridSpaces: false });
+      const d = Math.round(pathMeasurement.distance ?? 0);
       const size = getSizeModifier(t.actor);
       const effectiveDistance = Math.max(0, d - Math.max(0, (size.sizeValue ?? 4) - 4));
       const rangeMod = getAutoRangeBand(effectiveDistance, normalRange, isMelee);
