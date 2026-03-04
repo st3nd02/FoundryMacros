@@ -14,7 +14,7 @@ const SOCKET_EVENTS = {
   damageReady: "damageReady"
 };
 
-const WORKFLOW_NS = "foundrymacros";
+const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const MACRO_FOLDER_NAME = "Warhammer 40k Cogitator";
 const REACTION_FLAG = "reactionUsedForDefense";
