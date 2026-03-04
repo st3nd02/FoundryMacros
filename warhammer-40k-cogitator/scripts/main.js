@@ -23,6 +23,7 @@ const REACTION_EFFECT_NAME = "Reaction Used";
 const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 const USED_EVASION_EFFECT_ID = "ce-used-evasion";
 let pendingDefenseContext = null;
+let pendingDamageContext = null;
 const recentDefensePromptKeys = new Map();
 
 const DEFAULT_MACROS = {
@@ -41,6 +42,14 @@ const DEFAULT_MACROS = {
   master: {
     name: "DH2e External Master Workflow",
     file: "macros/dh2e_external_master_workflow.js"
+  },
+  gmMaster: {
+    name: "DH2e External GM Master Workflow",
+    file: "macros/dh2e_external_gm_master_workflow.js"
+  },
+  applyDamage: {
+    name: "DH2e External Apply Damage Workflow",
+    file: "macros/dh2e_external_apply_damage_workflow.js"
   }
 };
 
@@ -117,7 +126,9 @@ Hooks.once("ready", async () => {
     consumeDefenseReaction,
     clearDefenseReaction,
     setPendingDefenseContext,
-    consumePendingDefenseContext
+    consumePendingDefenseContext,
+    setPendingDamageContext,
+    consumePendingDamageContext
   };
 
   registerSocketHandlers();
@@ -461,8 +472,16 @@ async function handleDefenseRequest(payload) {
 
   setPendingDefenseContext(payload);
   await focusDefenseTarget(payload.targetTokenUuid);
-  ui.notifications.info(`Defense requested for ${payload.targetName}. Opening defense workflow.`);
-  await runStep("defense");
+
+  new Dialog({
+    title: "Defense Requested",
+    content: `<p><b>${payload.targetName ?? "A target"}</b> has incoming hit(s) from <b>${payload.attackerName ?? "an attacker"}</b>.</p><p>Run defense workflow now?</p>`,
+    buttons: {
+      run: { label: "Run Defense", callback: async () => runStep("defense") },
+      later: { label: "Later" }
+    },
+    default: "run"
+  }).render(true);
 }
 
 function setPendingDefenseContext(payload) {
@@ -472,6 +491,16 @@ function setPendingDefenseContext(payload) {
 function consumePendingDefenseContext() {
   const context = pendingDefenseContext;
   pendingDefenseContext = null;
+  return context;
+}
+
+function setPendingDamageContext(payload) {
+  pendingDamageContext = payload ?? null;
+}
+
+function consumePendingDamageContext() {
+  const context = pendingDamageContext;
+  pendingDamageContext = null;
   return context;
 }
 
@@ -563,7 +592,7 @@ async function applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll,
   const state = foundry.utils.deepClone(message.getFlag(WORKFLOW_NS, WORKFLOW_KEY));
   if (!state?.targets?.length) return;
 
-  const target = state.targets.find(t => t.tokenUuid === targetTokenUuid);
+  const target = state.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === targetTokenUuid);
   if (!target) return;
 
   target.defenseRoll = defenseRoll;
@@ -616,6 +645,8 @@ async function applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll,
 function handleDamageReady(payload) {
   const ownerIds = Array.isArray(payload.ownerIds) ? payload.ownerIds : [];
   if (!ownerIds.includes(game.user.id)) return;
+
+  setPendingDamageContext(payload);
 
   new Dialog({
     title: "Damage Ready",
@@ -699,6 +730,8 @@ function getStepSettingKey(step) {
 }
 
 function getConfiguredMacroName(step) {
+  if (step === "gmMaster") return DEFAULT_MACROS.gmMaster.name;
+  if (step === "applyDamage") return DEFAULT_MACROS.applyDamage.name;
   return game.settings.get(COGITATOR_ID, getStepSettingKey(step));
 }
 
@@ -709,7 +742,9 @@ async function ensureWorkflowMacros() {
     ["attack", DEFAULT_MACROS.attack],
     ["defense", DEFAULT_MACROS.defense],
     ["damage", DEFAULT_MACROS.damage],
-    ["master", DEFAULT_MACROS.master]
+    ["master", DEFAULT_MACROS.master],
+    ["gmMaster", DEFAULT_MACROS.gmMaster],
+    ["applyDamage", DEFAULT_MACROS.applyDamage]
   ];
 
   const folder = await ensureMacroFolder();

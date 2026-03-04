@@ -78,6 +78,8 @@ if (!token) return ui.notifications.warn("Select your character first.");
 const actor = token.actor;
 if (!actor) return ui.notifications.warn("Selected token has no actor.");
 
+const pendingDamageContext = game.warhammer40kCogitator?.consumePendingDamageContext?.() ?? null;
+
 const pending = [];
 for (const msg of game.messages.contents) {
   const state = msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
@@ -89,7 +91,7 @@ for (const msg of game.messages.contents) {
     if (target.damageResolved) continue;
     const out = String(target.defenseOutcome ?? "").toLowerCase();
     if (out.includes("awaiting")) continue;
-    pending.push({ msg, state, target });
+    pending.push({ msg, state, target, targetUuid: target.tokenUuid ?? target.targetTokenUuid });
   }
 }
 
@@ -99,7 +101,10 @@ const hasTalent = name => actor.items.some(i => i.type === "talent" && i.name.to
 const hasMighty = hasTalent("mighty shot");
 const hasCrushing = hasTalent("crushing blow");
 
-const optionHtml = pending.map((p, i) => `<option value="${i}">${p.state.attackerName} -> ${p.target.name} (${p.target.allocatedHits} hits) [${p.state.weaponName}]</option>`).join("");
+const optionHtml = pending.map((p, i) => {
+  const selected = pendingDamageContext?.chatMessageId === p.msg.id && pendingDamageContext?.targetTokenUuid === p.targetUuid ? "selected" : "";
+  return `<option value="${i}" ${selected}>${p.state.attackerName} -> ${p.target.name} (${p.target.allocatedHits} hits) [${p.state.weaponName}]</option>`;
+}).join("");
 
 const pick = await new Promise(resolve => {
   new Dialog({
@@ -120,7 +125,7 @@ if (!entry) return ui.notifications.warn("Pending entry no longer available.");
 const attackData = {
   attacker: entry.state.attackerName,
   target: entry.target.name,
-  targetTokenUuid: entry.target.tokenUuid,
+  targetTokenUuid: entry.targetUuid,
   weapon: entry.state.weaponName,
   hits: entry.target.allocatedHits,
   dos: entry.state.dos ?? 0,
@@ -423,11 +428,26 @@ ${furyHtml}
 
         const latest = entry.msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
         if (latest) {
-          const tgt = latest.targets.find(t => t.tokenUuid === entry.target.tokenUuid);
+          const tgt = latest.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === entry.targetUuid);
           if (tgt) {
             tgt.damageRolls = hitsData.map(hd => ({ total: hd.damage, loc: hd.location }));
             tgt.damageSummary = damageSummary;
             tgt.damageResolved = true;
+            tgt.damageApplied = false;
+            tgt.applySummary = null;
+            tgt.damageApplicationData = {
+              attacker: attackData.attacker,
+              target: attackData.target,
+              targetTokenUuid: attackData.targetTokenUuid,
+              weapon: attackData.weapon,
+              damageType,
+              penetration: pen,
+              hits,
+              hitsData,
+              dos,
+              fury: furyResults,
+              properties
+            };
           }
           await entry.msg.update({
             content: buildWorkflowHtml(latest),
@@ -446,7 +466,8 @@ ${furyHtml}
           hitsData,
           dos,
           fury: furyResults,
-          properties
+          properties,
+          chatMessageId: entry.msg.id
         };
       }
     },

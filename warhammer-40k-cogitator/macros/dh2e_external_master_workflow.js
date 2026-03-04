@@ -1,6 +1,6 @@
 /**
  * DH2e External Master Workflow (Foundry V13)
- * Version: 1.0
+ * Version: 1.1
  * Launcher macro: Attack / Defense / Damage
  */
 
