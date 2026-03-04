@@ -300,27 +300,9 @@ async function handleDefenseRequest(payload) {
   if (!ownerIds.includes(game.user.id)) return;
 
   setPendingDefenseContext(payload);
-
-  new Dialog({
-    title: `Defense Requested: ${payload.targetName}`,
-    content: `<p><b>${payload.targetName}</b> has <b>${payload.allocatedHits}</b> incoming hit(s).</p>
-              <p>Attacker: <b>${payload.attackerName}</b><br>
-              Weapon: <b>${payload.weaponName}</b></p>
-              <p>Resolve now?</p>`,
-    buttons: {
-      resolve: {
-        label: "Resolve Defense",
-        callback: async () => {
-          await focusDefenseTarget(payload.targetTokenUuid);
-          setPendingDefenseContext(payload);
-          ui.notifications.info(`Opening defense workflow for message ${payload.chatMessageId}.`);
-          await runStep("defense");
-        }
-      },
-      later: { label: "Later" }
-    },
-    default: "resolve"
-  }).render(true);
+  await focusDefenseTarget(payload.targetTokenUuid);
+  ui.notifications.info(`Defense requested for ${payload.targetName}. Opening defense workflow.`);
+  await runStep("defense");
 }
 
 function setPendingDefenseContext(payload) {
