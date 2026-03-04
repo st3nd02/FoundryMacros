@@ -35,7 +35,7 @@ const buildWorkflowHtml = state => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
     const dmgTxt = (t.damageRolls ?? []).map(d => `${d.total} ${d.loc}`).join(", ") || "—";
     const defenseSummary = t.defenseAction
-      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#151515;">
+      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">
           <div style="font-style:italic;"><b>${t.name}</b> attempts <b>${t.defenseAction}</b> against <b>${state.attackerName}</b> with <b>${state.weaponName}</b>.</div>
           <div><b>Incoming Hits:</b> ${t.incomingHits ?? t.allocatedHits ?? 0}</div>
           <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
@@ -46,7 +46,7 @@ const buildWorkflowHtml = state => {
       : `<div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>`;
 
     const damageSummary = t.damageSummary
-      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#11131a;">${t.damageSummary}</div>`
+      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
       : `<div><b>Damage:</b> ${dmgTxt}</div>`;
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
