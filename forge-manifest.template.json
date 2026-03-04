@@ -1,7 +1,7 @@
 {
   "id": "warhammer-40k-cogitator",
   "name": "warhammer-40k-cogitator",
-  "title": "LS-Warhammer-40k-cogitator v1.1.6",
+  "title": "Warhammer 40k Cogitator",
   "description": "Workflow orchestrator for Dark Heresy 2e external Attack/Defense/Damage resolution on Foundry V13.",
   "version": "1.1.6",
   "authors": [

@@ -17,7 +17,7 @@ These can be used directly as script macros.
 
 ### Foundry Module Scaffold
 
-- `warhammer-40k-cogitator/module.json`
+- `module.json` (single canonical manifest for Forge/Foundry installs)
 - `warhammer-40k-cogitator/scripts/main.js`
 - `warhammer-40k-cogitator/macros/*.js` (bundled copies of the workflow scripts)
 
@@ -31,7 +31,7 @@ The module provides:
 
 ## Foundry V13 Usage (Module)
 
-1. Install as Foundry module `warhammer-40k-cogitator` (manifest available both at repository root `module.json` and module folder `warhammer-40k-cogitator/module.json`).
+1. Install as Foundry module `warhammer-40k-cogitator` using root manifest `module.json`.
 2. Ensure the installed folder name is `warhammer-40k-cogitator`.
 3. Enable the module in your world.
 4. Log in as a **GM** at least once after enabling (macro creation/update is GM-only).
@@ -41,33 +41,17 @@ The module provides:
    - Keybinding `Ctrl+Shift+C`, or
    - `game.warhammer40kCogitator.openLauncher()` in console.
 
-## Notes
-
-- The current build focuses on workflow orchestration and migration from macro-only flow.
-- This is a first module foundation intended for iterative expansion under the **Warhammer 40k Cogitator** project.
-- Defense prompts are now owner-routed: when the attacker is a GM/non-owner, targets receive the defense popup instead of the attacker client.
-- Defense result submission now surfaces explicit errors (e.g. no active GM connected) instead of generic failure messages.
-
 ## Forge / Manifest Troubleshooting
 
 If Forge reports **"Invalid manifest response received"**, check:
 
 1. The URL points to the **raw JSON** file (not a GitHub HTML page).
-   - ❌ HTML/tree URL example (will fail):
-     `https://github.com/st3nd02/FoundryMacros/tree/main`
-   - ✅ Raw manifest URL example (use this):
-     `https://raw.githubusercontent.com/st3nd02/FoundryMacros/work/module.json`
 2. The manifest is valid JSON and includes core fields (`id`/`name`, `title`, `version`, `compatibility`).
 3. The published manifest includes a valid `download` ZIP URL (required for Forge install/update workflows).
-4. The manifest file and module folder structure match your esmodule paths.
-
-For this repo, the canonical in-repo manifests are:
-- Root: `module.json` (repository-distribution manifest with `manifest`/`download` URLs)
-- Module folder: `warhammer-40k-cogitator/module.json`
+4. Only one manifest for this module ID is shipped in the install ZIP (to avoid loader ambiguity).
 
 Direct Forge manifest URL:
 - `https://raw.githubusercontent.com/st3nd02/FoundryMacros/main/module.json`
-
 
 ### Forge-ready public manifest template
 
@@ -75,7 +59,7 @@ A ready-to-fill public manifest template is included at `forge-manifest.template
 
 Use it like this:
 
-1. Confirm the repo/branch URLs match your intended release branch (currently `work`).
+1. Confirm the repo/branch URLs match your intended release branch (currently `main`).
 2. Upload a release ZIP named `warhammer-40k-cogitator.zip` (or adjust `download`).
 3. Host/publish the final manifest at a raw JSON URL.
 4. Paste that raw manifest URL into Forge Content Creator.
