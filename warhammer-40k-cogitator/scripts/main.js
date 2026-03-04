@@ -460,20 +460,57 @@ async function openLauncher() {
 }
 
 async function runStep(step) {
-  const macroName = getConfiguredMacroName(step);
-  const macro = game.macros.getName(macroName);
+  const { macro, configuredName } = resolveStepMacro(step);
   if (!macro) {
-    ui.notifications.warn(`Warhammer 40k Cogitator: Macro not found: ${macroName}`);
+    ui.notifications.warn(`Warhammer 40k Cogitator: Macro not found. Checked: ${getMacroLookupNames(step).join(", ")}`);
     return;
   }
+
+  if (configuredName && macro.name !== configuredName && game.user.isGM) {
+    await game.settings.set(COGITATOR_ID, getStepSettingKey(step), macro.name);
+  }
+
   await macro.execute();
 }
 
+function resolveStepMacro(step) {
+  const configuredName = getConfiguredMacroName(step);
+  const lookupNames = getMacroLookupNames(step);
+  const candidates = lookupNames
+    .map(name => game.macros.getName(name))
+    .filter(Boolean);
+
+  if (!candidates.length) return { macro: null, configuredName };
+
+  const preferred = candidates.find(isCurrentWorkflowMacro) ?? candidates[0];
+  return { macro: preferred, configuredName };
+}
+
+function isCurrentWorkflowMacro(macro) {
+  const command = String(macro?.command ?? "");
+  return command.includes("DH2e External") && command.includes("Foundry V13");
+}
+
+function getMacroLookupNames(step) {
+  const names = [getConfiguredMacroName(step), DEFAULT_MACROS[step]?.name];
+
+  if (step === "attack") names.push("dh2e_external_attack_workflow");
+  if (step === "defense") names.push("dh2e_external_defense_workflow");
+  if (step === "damage") names.push("dh2e_external_damage_workflow");
+  if (step === "master") names.push("dh2e_external_master_workflow");
+
+  return [...new Set(names.filter(Boolean))];
+}
+
+function getStepSettingKey(step) {
+  if (step === "attack") return SETTINGS.attackMacroName;
+  if (step === "defense") return SETTINGS.defenseMacroName;
+  if (step === "damage") return SETTINGS.damageMacroName;
+  return SETTINGS.masterMacroName;
+}
+
 function getConfiguredMacroName(step) {
-  if (step === "attack") return game.settings.get(COGITATOR_ID, SETTINGS.attackMacroName);
-  if (step === "defense") return game.settings.get(COGITATOR_ID, SETTINGS.defenseMacroName);
-  if (step === "damage") return game.settings.get(COGITATOR_ID, SETTINGS.damageMacroName);
-  return game.settings.get(COGITATOR_ID, SETTINGS.masterMacroName);
+  return game.settings.get(COGITATOR_ID, getStepSettingKey(step));
 }
 
 async function ensureWorkflowMacros() {
