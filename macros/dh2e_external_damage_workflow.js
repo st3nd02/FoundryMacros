@@ -11,6 +11,19 @@ const WORKFLOW_KEY = "dh2eExternalWorkflow";
 
 const buildWorkflowHtml = state => {
   const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${text}</span>`;
+  const statusColor = status => {
+    const normalized = String(status ?? "").toLowerCase();
+    if (normalized.includes("jam")) return "#b267ff";
+    if (normalized.includes("miss")) return "#ff3b3b";
+    if (normalized.includes("hit") || normalized.includes("ok") || normalized.includes("out of ammo")) return "#1aff1a";
+    return "#d9d9d9";
+  };
+  const styledAttackDegrees = () => {
+    const value = Number(state.attackDegrees ?? 0);
+    if (!value) return "";
+    if (value > 0) return `<div>${outlined(`${value} Degrees of Success`, "#1aff1a")}</div>`;
+    return `<div>${outlined(`${Math.abs(value)} Degrees of Failure`, "#ff2a2a")}</div>`;
+  };
   const styledDegrees = target => {
     const value = Number(target.defenseDegrees ?? 0);
     if (!value) return "—";
@@ -50,8 +63,10 @@ const buildWorkflowHtml = state => {
     <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes?.join(", ") || "None"}</div>
     <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
-    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>DoS:</b> ${state.dos ?? "—"} | <b>Status:</b> ${state.statusText ?? "Pending"} | <b>Total Hits:</b> ${state.totalHits ?? 0}</div>
+    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))}</div>
+    <div style="font-size:1.1em;"><b>Total Hits:</b> ${state.totalHits ?? 0}</div>
     ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
+    ${styledAttackDegrees()}
     <hr>${cards}
   </div>`;
 };
@@ -355,6 +370,7 @@ new Dialog({
         const hitLocations = buildHitLocations(attackData.location || "Body", hits);
         const hitsData = [];
         const damageResults = [];
+        const furyQueue = [];
 
         for (let h = 1; h <= hits; h++) {
           const roll = new Roll(formula);
@@ -371,7 +387,30 @@ new Dialog({
 
           damageResults.push(total);
           hitsData.push({ hit: h, location: hitLocations[h - 1], damage: total, fury: null });
+
+          const dieMax = Number(dieType);
+          const furyNumbers = gauss && dieMax === 10 ? [9, 10] : [dieMax];
+          if (dice.some(d => furyNumbers.includes(d))) {
+            furyQueue.push(h);
+          }
         }
+
+        const furyResults = [];
+        for (const hitIndex of furyQueue) {
+          const furyRoll = new Roll("1d5");
+          await furyRoll.evaluate();
+          if (game.dice3d) await game.dice3d.showForRoll(furyRoll, game.user, true);
+          furyResults.push({
+            hit: hitIndex,
+            location: hitLocations[hitIndex - 1] ?? "-",
+            result: furyRoll.total
+          });
+          hitsData[hitIndex - 1].fury = { result: furyRoll.total };
+        }
+
+        const furyHtml = furyResults.length
+          ? `<hr><div style="color:gold;font-size:1.1em;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">✦ RIGHTEOUS FURY ✦</div>${furyResults.map((f, i) => `<div>${i + 1}. <b>Location:</b> <i>${f.location}</i> — Righteous Fury: <b>${f.result}</b></div>`).join("")}`
+          : "";
 
         const damageSummary = `<div style="text-align:center; color:#d8e2ff;">
 <div style="font-style:italic;font-size:1.1em;"><b>${attackData.attacker}</b> hits <b>${attackData.target}</b> with <b>${attackData.weapon}</b></div>
@@ -379,6 +418,7 @@ new Dialog({
 <div><b>Penetration:</b> ${pen}</div>
 ${damageResults.map((d, i) => `<div><b>Hit ${i + 1}</b> (${hitLocations[i]}): <b>${d}</b></div>`).join("")}
 <div style="margin-top:6px;"><b>Properties:</b> ${properties.join(", ") || "None"}</div>
+${furyHtml}
 </div>`;
 
         const latest = entry.msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
@@ -405,6 +445,7 @@ ${damageResults.map((d, i) => `<div><b>Hit ${i + 1}</b> (${hitLocations[i]}): <b
           hits,
           hitsData,
           dos,
+          fury: furyResults,
           properties
         };
       }

@@ -277,6 +277,19 @@ const evaluateAttackResult = ({ result, targets, weapon, traits }) => {
 
 const buildWorkflowHtml = state => {
   const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${text}</span>`;
+  const statusColor = status => {
+    const normalized = String(status ?? "").toLowerCase();
+    if (normalized.includes("jam")) return "#b267ff";
+    if (normalized.includes("miss")) return "#ff3b3b";
+    if (normalized.includes("hit") || normalized.includes("ok") || normalized.includes("out of ammo")) return "#1aff1a";
+    return "#d9d9d9";
+  };
+  const styledAttackDegrees = () => {
+    const value = Number(state.attackDegrees ?? 0);
+    if (!value) return "";
+    if (value > 0) return `<div>${outlined(`${value} Degrees of Success`, "#1aff1a")}</div>`;
+    return `<div>${outlined(`${Math.abs(value)} Degrees of Failure`, "#ff2a2a")}</div>`;
+  };
   const styledDegrees = target => {
     const value = Number(target.defenseDegrees ?? 0);
     if (!value) return "—";
@@ -316,8 +329,10 @@ const buildWorkflowHtml = state => {
     <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes.join(", ") || "None"}</div>
     <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
-    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>DoS:</b> ${state.dos ?? "—"} | <b>Status:</b> ${state.statusText ?? "Pending"} | <b>Total Hits:</b> ${state.totalHits ?? 0}</div>
+    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))}</div>
+    <div style="font-size:1.1em;"><b>Total Hits:</b> ${state.totalHits ?? 0}</div>
     ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
+    ${styledAttackDegrees()}
     <hr>${cards}
   </div>`;
 };
@@ -597,8 +612,9 @@ const runAttackWorkflow = async setup => {
   state.targets = state.targets.map(tg => ({ ...tg, allocatedHits: alloc.get(tg.tokenUuid) || 0 }));
   state.attackRoll = result;
   state.dos = dos;
+  state.attackDegrees = success ? dos : -Math.max(1, 1 + Math.floor((result - bestTN) / 10));
   state.totalHits = Array.from(alloc.values()).reduce((a, b) => a + b, 0);
-  state.statusText = jam ? "JAM" : (success ? (outOfAmmoAfter ? "OUT OF AMMO" : "OK") : "MISS");
+  state.statusText = jam ? "JAM" : (success ? (outOfAmmoAfter ? "HIT (OUT OF AMMO)" : "HIT") : "MISS");
   if (ammoSpent > 0) {
     state.extraText = [state.extraText, `Ammo Spent: ${ammoSpent}`].filter(Boolean).join(" | ");
   }
@@ -654,7 +670,6 @@ const runAttackWorkflow = async setup => {
       flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
     });
   } else if (awaitingDefense) {
-    state.extraText = [state.extraText, "Awaiting external defense resolution"].filter(Boolean).join(" | ");
     await chatMessage.update({
       content: buildWorkflowHtml(state),
       flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
