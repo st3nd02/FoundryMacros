@@ -21,6 +21,7 @@ const REACTION_FLAG = "reactionUsedForDefense";
 const REACTION_COUNT_FLAG = "reactionUsedForDefenseCount";
 const REACTION_EFFECT_NAME = "Reaction Used";
 const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
+const USED_EVASION_EFFECT_ID = "ce-used-evasion";
 
 const DEFAULT_MACROS = {
   attack: {
@@ -136,8 +137,15 @@ function registerCombatHooks() {
 
 function hasDefenseReaction(actor) {
   if (!actor) return false;
+  if (!isCombatTurnTrackingActive(actor)) return false;
   const used = Number(actor.getFlag(COGITATOR_ID, REACTION_COUNT_FLAG) ?? (actor.getFlag(COGITATOR_ID, REACTION_FLAG) ? 1 : 0));
   return used >= getDefenseReactionLimit(actor);
+}
+
+function isCombatTurnTrackingActive(actor) {
+  if (!game.combat?.started) return false;
+  if (!actor) return false;
+  return game.combat.combatants.some(c => c.actorId === actor.id);
 }
 
 function getDefenseReactionLimit(actor) {
@@ -158,6 +166,7 @@ function getUsedDefenseReactions(actor) {
 
 async function consumeDefenseReaction(actor) {
   if (!actor) return;
+  if (!isCombatTurnTrackingActive(actor)) return;
   const maxReactions = getDefenseReactionLimit(actor);
   const alreadyUsed = getUsedDefenseReactions(actor);
   if (alreadyUsed >= maxReactions) return;
@@ -181,6 +190,7 @@ async function consumeDefenseReaction(actor) {
 
   await actor.setFlag(COGITATOR_ID, REACTION_COUNT_FLAG, nextUsed);
   await actor.setFlag(COGITATOR_ID, REACTION_FLAG, true);
+  await applyUsedEvasionEffect(actor);
 }
 
 async function clearDefenseReaction(actor) {
@@ -197,6 +207,49 @@ async function clearDefenseReaction(actor) {
 
   await actor.unsetFlag(COGITATOR_ID, REACTION_FLAG);
   await actor.unsetFlag(COGITATOR_ID, REACTION_COUNT_FLAG);
+  await removeUsedEvasionEffect(actor);
+}
+
+async function applyUsedEvasionEffect(actor) {
+  const effectInterface = game.dfreds?.effectInterface;
+  if (!effectInterface?.addEffect) return;
+
+  const paramsByPriority = [
+    { effectId: USED_EVASION_EFFECT_ID, uuid: actor.uuid },
+    { effectId: USED_EVASION_EFFECT_ID, uuids: [actor.uuid] },
+    { effectName: USED_EVASION_EFFECT_ID, uuid: actor.uuid },
+    { effectName: USED_EVASION_EFFECT_ID, uuids: [actor.uuid] }
+  ];
+
+  for (const params of paramsByPriority) {
+    try {
+      await effectInterface.addEffect(params);
+      return;
+    } catch (_) {
+      // Try next signature to support different CE versions.
+    }
+  }
+}
+
+async function removeUsedEvasionEffect(actor) {
+  const effectInterface = game.dfreds?.effectInterface;
+  if (!effectInterface?.removeEffect) return;
+
+  const paramsByPriority = [
+    { effectId: USED_EVASION_EFFECT_ID, uuid: actor.uuid },
+    { effectId: USED_EVASION_EFFECT_ID, uuids: [actor.uuid] },
+    { effectName: USED_EVASION_EFFECT_ID, uuid: actor.uuid },
+    { effectName: USED_EVASION_EFFECT_ID, uuids: [actor.uuid] }
+  ];
+
+  for (const params of paramsByPriority) {
+    try {
+      await effectInterface.removeEffect(params);
+      return;
+    } catch (_) {
+      // Try next signature to support different CE versions.
+    }
+  }
 }
 
 function getDefenseRecipients(targetActor) {
