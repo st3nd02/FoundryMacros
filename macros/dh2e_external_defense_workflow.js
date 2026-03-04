@@ -14,6 +14,11 @@ if (!token) return ui.notifications.warn("Select your defender token first.");
 const actor = token.actor;
 if (!actor) return ui.notifications.warn("Selected token has no actor.");
 
+if (game.warhammer40kCogitator?.hasDefenseReaction?.(actor)) {
+  return ui.notifications.warn("No defense reactions remaining this turn for this actor.");
+}
+
+
 const difficulties = [
   { value: 60, label: "Trivial (+60)" },
   { value: 50, label: "Elementary (+50)" },
@@ -66,6 +71,7 @@ const pick = await new Promise(resolve => {
       <h3>Defence Type</h3>
       <label><input type="radio" name="defence" value="dodge" checked> Dodge (${dodgeBase})</label>
       <label><input type="radio" name="defence" value="parry"> Parry (${parryBase})</label>
+      <label><input type="radio" name="defence" value="skip"> Skip</label>
       <hr>
       <div id="weaponBlock" style="opacity:.35;">
         <label><b>Parry Weapon</b></label>
@@ -112,6 +118,27 @@ if (!entry) return ui.notifications.warn("Selected workflow no longer available.
 let base = pick.type === "parry" ? parryBase : dodgeBase;
 const notes = [];
 let actionText = pick.type === "parry" ? "Parry" : "Dodge";
+
+if (pick.type === "skip") {
+  const targetState = entry.state.targets.find(t => t.tokenUuid === token.document.uuid);
+  if (!targetState) return ui.notifications.warn("Token no longer in workflow.");
+
+  try {
+    await game.warhammer40kCogitator.submitDefenseResult({
+      chatMessageId: entry.msg.id,
+      targetTokenUuid: token.document.uuid,
+      defenseRoll: null,
+      defenseOutcome: "Skipped",
+      allocatedHits: targetState.allocatedHits ?? 0
+    });
+  } catch (err) {
+    ui.notifications.error(`Defense result could not be applied: ${err.message ?? err}`);
+    return;
+  }
+
+  ui.notifications.info("Defense skipped and workflow updated.");
+  return;
+}
 
 if (pick.type === "parry") {
   if (!pick.weaponId) return ui.notifications.warn("Select a melee weapon.");
@@ -215,6 +242,10 @@ if (game.warhammer40kCogitator?.submitDefenseResult) {
     ui.notifications.error(`Direct workflow update failed: ${err.message ?? err}`);
     return;
   }
+}
+
+if (game.warhammer40kCogitator?.consumeDefenseReaction) {
+  await game.warhammer40kCogitator.consumeDefenseReaction(actor);
 }
 
 ui.notifications.info("Defense resolved and workflow updated.");
