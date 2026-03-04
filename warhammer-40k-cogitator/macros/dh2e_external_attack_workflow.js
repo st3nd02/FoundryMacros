@@ -118,9 +118,11 @@ const parseWeaponTraits = weapon =>
   (weapon.system.special ?? "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
 const hasTrait = (traits, key) => traits.some(t => t.includes(key));
 
-const animatedRoll = async (formula, speaker) => {
+const animatedRoll = async formula => {
   const roll = await new Roll(formula).evaluate();
-  await roll.toMessage({ speaker, rollMode: "roll" });
+  if (game.dice3d?.showForRoll) {
+    await game.dice3d.showForRoll(roll, game.user, true);
+  }
   return roll;
 };
 
@@ -287,7 +289,7 @@ const buildWorkflowHtml = state => {
   }).join("");
 
   return `<div data-workflow-id="${state.id}">
-    <h3 style="margin:0 0 6px 0;">${state.attackerName} attacks with ${state.weaponName}</h3>
+    <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;"><b>${state.attackerName}</b> attacks with <b>${state.weaponName}</b></div>
     <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes.join(", ") || "None"}</div>
     <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
