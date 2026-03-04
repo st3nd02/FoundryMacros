@@ -358,7 +358,7 @@ const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
   if (!recipientUsers.length) return false;
 
   if (game.warhammer40kCogitator?.emitSocket) {
-    game.warhammer40kCogitator.emitSocket("requestDefense", {
+    const payload = {
       ownerIds: recipientUsers.map(u => u.id),
       chatMessageId: chatMessage.id,
       targetTokenUuid: targetState.tokenUuid,
@@ -366,7 +366,17 @@ const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
       allocatedHits: targetState.allocatedHits,
       attackerName: state.attackerName,
       weaponName: state.weaponName
-    });
+    };
+
+    game.warhammer40kCogitator.emitSocket("requestDefense", payload);
+
+    // Fallback for local self-defense when the Foundry socket implementation
+    // does not loop module events back to the emitting client.
+    if (payload.ownerIds.includes(game.user.id)) {
+      game.warhammer40kCogitator.setPendingDefenseContext?.(payload);
+      await game.warhammer40kCogitator.runStep?.("defense");
+    }
+
     return true;
   }
 

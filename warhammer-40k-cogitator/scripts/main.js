@@ -23,6 +23,7 @@ const REACTION_EFFECT_NAME = "Reaction Used";
 const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 const USED_EVASION_EFFECT_ID = "ce-used-evasion";
 let pendingDefenseContext = null;
+const recentDefensePromptKeys = new Map();
 
 const DEFAULT_MACROS = {
   attack: {
@@ -322,6 +323,14 @@ function emitSocket(event, payload) {
 async function handleDefenseRequest(payload) {
   const ownerIds = Array.isArray(payload.ownerIds) ? payload.ownerIds : [];
   if (!ownerIds.includes(game.user.id)) return;
+
+  const dedupeKey = `${payload.chatMessageId ?? ""}:${payload.targetTokenUuid ?? ""}`;
+  if (dedupeKey !== ":") {
+    const now = Date.now();
+    const lastPromptAt = recentDefensePromptKeys.get(dedupeKey) ?? 0;
+    if (now - lastPromptAt < 3000) return;
+    recentDefensePromptKeys.set(dedupeKey, now);
+  }
 
   setPendingDefenseContext(payload);
   await focusDefenseTarget(payload.targetTokenUuid);
