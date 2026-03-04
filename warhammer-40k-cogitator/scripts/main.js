@@ -320,6 +320,30 @@ function emitSocket(event, payload) {
   });
 }
 
+function buildWorkflowHtml(state) {
+  const cards = (state.targets ?? []).map(t => {
+    const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
+    const dmgTxt = (t.damageRolls ?? []).map(d => `${d.total} ${d.loc}`).join(", ") || "—";
+    return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
+      <div><b>${t.name}</b></div>
+      <div><b>Dist:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel} | <b>Size:</b> ${sizeTxt}</div>
+      <div><b>TN:</b> ${t.targetNumber} | <b>Hits:</b> ${t.allocatedHits}</div>
+      <div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>
+      <div><b>Damage:</b> ${dmgTxt}</div>
+    </div>`;
+  }).join("");
+
+  return `<div data-workflow-id="${state.id}">
+    <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;"><b>${state.attackerName}</b> attacks with <b>${state.weaponName}</b></div>
+    <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
+    <div><b>Modifiers:</b> ${state.modifierNotes?.join(", ") || "None"}</div>
+    <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
+    <div><b>Attack Roll:</b> ${state.attackRoll ?? "—"} | <b>DoS:</b> ${state.dos ?? "—"} | <b>Status:</b> ${state.statusText ?? "Pending"} | <b>Total Hits:</b> ${state.totalHits ?? 0}</div>
+    ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
+    <hr>${cards}
+  </div>`;
+}
+
 async function handleDefenseRequest(payload) {
   const ownerIds = Array.isArray(payload.ownerIds) ? payload.ownerIds : [];
   if (!ownerIds.includes(game.user.id)) return;
@@ -444,6 +468,7 @@ async function applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll,
   target.allocatedHits = Math.max(0, Number(allocatedHits ?? 0));
 
   await message.update({
+    content: buildWorkflowHtml(state),
     flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
   });
 
@@ -469,6 +494,10 @@ async function applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll,
       attackerName: state.attackerName,
       chatMessageId
     });
+
+    if (ownerIds.includes(game.user.id)) {
+      handleDamageReady({ ownerIds, attackerName: state.attackerName, chatMessageId });
+    }
   }
 }
 

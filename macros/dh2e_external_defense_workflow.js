@@ -1,6 +1,6 @@
 /**
  * DH2e External Defense Workflow (Foundry V13)
- * Version: 1.2
+ * Version: 1.3
  * Run this as the defender owner to resolve pending defenses on existing attack workflows.
  */
 
@@ -8,6 +8,14 @@
 
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
+
+const rollWithDiceSoNice = async formula => {
+  const roll = await new Roll(formula).evaluate();
+  if (game.dice3d?.showForRoll) {
+    await game.dice3d.showForRoll(roll, game.user, true);
+  }
+  return roll;
+};
 
 const requestedDefense = game.warhammer40kCogitator?.consumePendingDefenseContext?.() ?? null;
 
@@ -99,7 +107,6 @@ const pick = await new Promise(resolve => {
         <label><input type="radio" name="defence" value="dodge" checked> Dodge (${dodgeBase})</label>
         <label><input type="radio" name="defence" value="parry"> Parry (${parryBase})</label>
       </div>
-      <label style="margin-top:8px;"><input type="radio" name="defence" value="skip"> Skip</label>
       <hr>
       <div id="weaponBlock" class="weaponBlock">
         <label><b>Parry Weapon</b></label>
@@ -133,6 +140,13 @@ const pick = await new Promise(resolve => {
           manualMod: Number(html.find("#mod").val() || 0)
         })
       },
+      skip: {
+        label: "Skip",
+        callback: html => resolve({
+          idx: Number(html.find("#workflowPick").val() || 0),
+          type: "skip"
+        })
+      },
       cancel: { label: "Cancel", callback: () => resolve(null) }
     },
     default: "roll"
@@ -156,7 +170,7 @@ if (pick.type === "skip") {
       chatMessageId: entry.msg.id,
       targetTokenUuid: token.document.uuid,
       defenseRoll: null,
-      defenseOutcome: "Skipped",
+      defenseOutcome: "Skipped (failed defense)",
       allocatedHits: targetState.allocatedHits ?? 0
     });
   } catch (err) {
@@ -181,7 +195,7 @@ if (pick.type === "parry") {
 }
 
 let target = Math.max(1, base + pick.difficultyMod + pick.manualMod);
-let roll = await new Roll("1d100").evaluate();
+let roll = await rollWithDiceSoNice("1d100");
 
 const postResult = async ({ usedFate }) => {
   const val = roll.total;
@@ -189,19 +203,16 @@ const postResult = async ({ usedFate }) => {
   const degrees = Math.floor(Math.abs(target - val) / 10) + 1;
   const color = success ? "#1aff1a" : "#ff2a2a";
 
-  await roll.toMessage({
+  await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
-    flavor: `<div style="text-align:center; color:#000;">
-      ${usedFate ? `<b style="color:gold;font-style:italic;font-size:1.1em;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">✦ ${actor.name} spends Fate and rerolls! ✦</b><hr>` : ""}
-      <div style="font-style:italic;font-size:1.1em;"><b>${actor.name}</b> attempts a <b>${actionText}</b> against <b>${entry.state.attackerName}</b>'s <b>${entry.state.weaponName}</b> (<b>${entry.target.allocatedHits}</b> hits)</div>
-      <hr>
-      <div><u>Difficulty</u></div>
-      <div style="font-weight:bold;font-size:1.1em;">${pick.difficultyLabel}</div>
-      <div><b>Target:</b> <span style="color:#ffad55;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${target}</span></div>
-      <div><b>Roll:</b> <span style="color:#bd7548;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${val}</span></div>
-      ${notes.length ? `<div style="font-style:italic">${notes.join(" | ")}</div>` : ""}
-      <hr>
-      <div style="font-size:1.2em;font-weight:900;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${success ? `${degrees} Degrees of Success` : `${degrees} Degrees of Failure`}</div>
+    content: `<div style="border:1px solid #555;border-radius:6px;padding:8px;">
+      ${usedFate ? `<div style="font-style:italic;"><b>${actor.name}</b> spends <b>Fate</b> and rerolls.</div><hr>` : ""}
+      <div style="font-style:italic;"><b>${actor.name}</b> attempts <b>${actionText}</b> against <b>${entry.state.attackerName}</b> with <b>${entry.state.weaponName}</b>.</div>
+      <div><b>Incoming Hits:</b> ${entry.target.allocatedHits}</div>
+      <div><b>Difficulty:</b> ${pick.difficultyLabel}</div>
+      <div><b>Target:</b> ${target} | <b>Roll:</b> ${val}</div>
+      ${notes.length ? `<div><b>Notes:</b> ${notes.join(" | ")}</div>` : ""}
+      <div><b>Result:</b> <span style="color:${color};font-weight:700;">${success ? `${degrees} Degrees of Success` : `${degrees} Degrees of Failure`}</span></div>
     </div>`
   });
 
@@ -225,7 +236,7 @@ if (dos <= 0 && (actor.system.fate?.value ?? 0) > 0) {
 
   if (useFate) {
     await actor.update({ "system.fate.value": Math.max(0, (actor.system.fate?.value ?? 0) - 1) });
-    roll = await new Roll("1d100").evaluate();
+    roll = await rollWithDiceSoNice("1d100");
     dos = await postResult({ usedFate: true });
   }
 }
