@@ -1,6 +1,6 @@
 /**
  * DH2e External Damage Workflow (Foundry V13)
- * Version: 1.0
+ * Version: 1.1
  * Run this as the attacker owner to resolve pending damage on existing workflows.
  */
 
@@ -10,15 +10,38 @@ const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 
 const buildWorkflowHtml = state => {
+  const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${text}</span>`;
+  const styledDegrees = target => {
+    const value = Number(target.defenseDegrees ?? 0);
+    if (!value) return "—";
+    if (target.defenseSuccess) return outlined(`${value} Degrees of Success`, "#1aff1a");
+    return outlined(`${value} Degrees of Failure`, "#ff2a2a");
+  };
+
   const cards = (state.targets ?? []).map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
     const dmgTxt = (t.damageRolls ?? []).map(d => `${d.total} ${d.loc}`).join(", ") || "—";
+    const defenseSummary = t.defenseAction
+      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#151515;">
+          <div style="font-style:italic;"><b>${t.name}</b> attempts <b>${t.defenseAction}</b> against <b>${state.attackerName}</b> with <b>${state.weaponName}</b>.</div>
+          <div><b>Incoming Hits:</b> ${t.incomingHits ?? t.allocatedHits ?? 0}</div>
+          <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
+          <div><b>Target:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} | <b>Roll:</b> ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
+          ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
+          <div><b>Result:</b> ${styledDegrees(t)}</div>
+        </div>`
+      : `<div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>`;
+
+    const damageSummary = t.damageSummary
+      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#11131a;">${t.damageSummary}</div>`
+      : `<div><b>Damage:</b> ${dmgTxt}</div>`;
+
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
       <div><b>Dist:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel} | <b>Size:</b> ${sizeTxt}</div>
-      <div><b>TN:</b> ${t.targetNumber} | <b>Hits:</b> ${t.allocatedHits}</div>
-      <div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>
-      <div><b>Damage:</b> ${dmgTxt}</div>
+      <div><b>TN:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Hits:</b> ${t.allocatedHits}</div>
+      ${defenseSummary}
+      ${damageSummary}
     </div>`;
   }).join("");
 
@@ -27,11 +50,12 @@ const buildWorkflowHtml = state => {
     <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes?.join(", ") || "None"}</div>
     <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
-    <div><b>Attack Roll:</b> ${state.attackRoll ?? "—"} | <b>DoS:</b> ${state.dos ?? "—"} | <b>Status:</b> ${state.statusText ?? "Pending"} | <b>Total Hits:</b> ${state.totalHits ?? 0}</div>
+    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>DoS:</b> ${state.dos ?? "—"} | <b>Status:</b> ${state.statusText ?? "Pending"} | <b>Total Hits:</b> ${state.totalHits ?? 0}</div>
     ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
     <hr>${cards}
   </div>`;
 };
+
 
 const token = canvas.tokens.controlled[0];
 if (!token) return ui.notifications.warn("Select your character first.");
@@ -349,7 +373,7 @@ new Dialog({
           hitsData.push({ hit: h, location: hitLocations[h - 1], damage: total, fury: null });
         }
 
-        const flavor = `<div style="text-align:center; color:#000;">
+        const damageSummary = `<div style="text-align:center; color:#d8e2ff;">
 <div style="font-style:italic;font-size:1.1em;"><b>${attackData.attacker}</b> hits <b>${attackData.target}</b> with <b>${attackData.weapon}</b></div>
 <hr>
 <div><b>Penetration:</b> ${pen}</div>
@@ -357,13 +381,12 @@ ${damageResults.map((d, i) => `<div><b>Hit ${i + 1}</b> (${hitLocations[i]}): <b
 <div style="margin-top:6px;"><b>Properties:</b> ${properties.join(", ") || "None"}</div>
 </div>`;
 
-        await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: flavor });
-
         const latest = entry.msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
         if (latest) {
           const tgt = latest.targets.find(t => t.tokenUuid === entry.target.tokenUuid);
           if (tgt) {
             tgt.damageRolls = hitsData.map(hd => ({ total: hd.damage, loc: hd.location }));
+            tgt.damageSummary = damageSummary;
             tgt.damageResolved = true;
           }
           await entry.msg.update({

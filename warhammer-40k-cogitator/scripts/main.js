@@ -133,10 +133,58 @@ Hooks.once("ready", async () => {
 function registerCombatHooks() {
   Hooks.on("updateCombat", async (combat, changed) => {
     if (!("turn" in changed) && !("round" in changed)) return;
+    if ("round" in changed && game.user.isGM) {
+      await clearResidualWorkflowsOnRoundChange(combat);
+    }
     const actor = combat?.combatant?.actor;
     if (!actor) return;
     await clearDefenseReaction(actor);
   });
+}
+
+async function clearResidualWorkflowsOnRoundChange(combat) {
+  if (!combat?.started) return;
+
+  for (const message of game.messages.contents) {
+    const state = message.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
+    if (!state?.targets?.length) continue;
+
+    const hasPending = state.targets.some(target => {
+      if ((target.allocatedHits ?? 0) <= 0) return false;
+      const outcome = String(target.defenseOutcome ?? "").toLowerCase();
+      const defensePending = !outcome.includes("success") && !outcome.includes("failed") && !outcome.includes("skipped") && !outcome.includes("expired");
+      return defensePending || !target.damageResolved;
+    });
+
+    if (!hasPending) continue;
+
+    for (const target of state.targets) {
+      const outcome = String(target.defenseOutcome ?? "").toLowerCase();
+      const defensePending = !outcome.includes("success") && !outcome.includes("failed") && !outcome.includes("skipped") && !outcome.includes("expired");
+      if (defensePending) {
+        target.defenseOutcome = "Expired (round advanced)";
+        target.defenseRoll = null;
+        target.defenseAction = null;
+        target.defenseDegrees = 0;
+        target.defenseSuccess = false;
+      }
+
+      if (!target.damageResolved) {
+        target.damageResolved = true;
+        target.damageSummary = "<div><b>Damage:</b> Expired (round advanced)</div>";
+        target.damageRolls = [];
+      }
+
+      target.allocatedHits = 0;
+    }
+
+    state.statusText = "Expired (round advanced)";
+
+    await message.update({
+      content: buildWorkflowHtml(state),
+      flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
+    });
+  }
 }
 
 function hasDefenseReaction(actor) {
@@ -321,15 +369,38 @@ function emitSocket(event, payload) {
 }
 
 function buildWorkflowHtml(state) {
+  const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${text}</span>`;
+  const styledDegrees = target => {
+    const value = Number(target.defenseDegrees ?? 0);
+    if (!value) return "—";
+    if (target.defenseSuccess) return outlined(`${value} Degrees of Success`, "#1aff1a");
+    return outlined(`${value} Degrees of Failure`, "#ff2a2a");
+  };
+
   const cards = (state.targets ?? []).map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
     const dmgTxt = (t.damageRolls ?? []).map(d => `${d.total} ${d.loc}`).join(", ") || "—";
+    const defenseSummary = t.defenseAction
+      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#151515;">
+          <div style="font-style:italic;"><b>${t.name}</b> attempts <b>${t.defenseAction}</b> against <b>${state.attackerName}</b> with <b>${state.weaponName}</b>.</div>
+          <div><b>Incoming Hits:</b> ${t.incomingHits ?? t.allocatedHits ?? 0}</div>
+          <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
+          <div><b>Target:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} | <b>Roll:</b> ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
+          ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
+          <div><b>Result:</b> ${styledDegrees(t)}</div>
+        </div>`
+      : `<div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>`;
+
+    const damageSummary = t.damageSummary
+      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#11131a;">${t.damageSummary}</div>`
+      : `<div><b>Damage:</b> ${dmgTxt}</div>`;
+
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
       <div><b>Dist:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel} | <b>Size:</b> ${sizeTxt}</div>
-      <div><b>TN:</b> ${t.targetNumber} | <b>Hits:</b> ${t.allocatedHits}</div>
-      <div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>
-      <div><b>Damage:</b> ${dmgTxt}</div>
+      <div><b>TN:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Hits:</b> ${t.allocatedHits}</div>
+      ${defenseSummary}
+      ${damageSummary}
     </div>`;
   }).join("");
 
@@ -338,7 +409,7 @@ function buildWorkflowHtml(state) {
     <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes?.join(", ") || "None"}</div>
     <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
-    <div><b>Attack Roll:</b> ${state.attackRoll ?? "—"} | <b>DoS:</b> ${state.dos ?? "—"} | <b>Status:</b> ${state.statusText ?? "Pending"} | <b>Total Hits:</b> ${state.totalHits ?? 0}</div>
+    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>DoS:</b> ${state.dos ?? "—"} | <b>Status:</b> ${state.statusText ?? "Pending"} | <b>Total Hits:</b> ${state.totalHits ?? 0}</div>
     ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
     <hr>${cards}
   </div>`;
@@ -453,7 +524,7 @@ function assertDefenseResolverAuthorized({ resolverUserId, targetTokenUuid }) {
   }
 }
 
-async function applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll, defenseOutcome, allocatedHits }) {
+async function applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll, defenseOutcome, allocatedHits, defenseDetails }) {
   const message = game.messages.get(chatMessageId);
   if (!message) return;
 
@@ -466,6 +537,15 @@ async function applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll,
   target.defenseRoll = defenseRoll;
   target.defenseOutcome = defenseOutcome;
   target.allocatedHits = Math.max(0, Number(allocatedHits ?? 0));
+  if (defenseDetails) {
+    target.defenseAction = defenseDetails.actionText ?? null;
+    target.incomingHits = Number(defenseDetails.incomingHits ?? target.incomingHits ?? target.allocatedHits ?? 0);
+    target.defenseDifficultyLabel = defenseDetails.difficultyLabel ?? null;
+    target.defenseTargetNumber = defenseDetails.targetNumber ?? null;
+    target.defenseNotes = Array.isArray(defenseDetails.notes) ? defenseDetails.notes : [];
+    target.defenseDegrees = Number(defenseDetails.degrees ?? 0);
+    target.defenseSuccess = !!defenseDetails.success;
+  }
 
   await message.update({
     content: buildWorkflowHtml(state),
