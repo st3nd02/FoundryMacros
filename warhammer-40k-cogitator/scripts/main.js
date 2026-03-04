@@ -255,15 +255,22 @@ async function removeUsedEvasionEffect(actor) {
   }
 }
 
-function getDefenseRecipients(targetActor) {
-  if (!targetActor) return [];
+function getDefenseRecipients(targetDocumentOrActor) {
+  const ownershipSource = targetDocumentOrActor?.ownership
+    ? targetDocumentOrActor
+    : targetDocumentOrActor?.prototypeToken?.ownership
+      ? targetDocumentOrActor.prototypeToken
+      : targetDocumentOrActor;
+  if (!ownershipSource) return [];
 
+  const ownerLevel = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
   const activeGMs = game.users.filter(u => u.active && u.isGM);
-  if (!targetActor.hasPlayerOwner) return activeGMs;
+  const playerOwners = game.users.filter(user => {
+    if (!user.active || user.isGM) return false;
+    return ownershipSource.testUserPermission(user, ownerLevel);
+  });
 
-  const playerOwners = game.users.filter(u => u.active && !u.isGM && targetActor.testUserPermission(u, "OWNER"));
   if (playerOwners.length) return playerOwners;
-
   return activeGMs;
 }
 

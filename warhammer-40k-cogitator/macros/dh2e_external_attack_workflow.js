@@ -329,13 +329,22 @@ const promptDamageDialog = async (state, chatMessage) => {
   });
 };
 
-const getDefenseRecipients = targetActor => {
-  if (!targetActor) return [];
+const getDefenseRecipients = targetDocumentOrActor => {
+  const ownershipSource = targetDocumentOrActor?.ownership
+    ? targetDocumentOrActor
+    : targetDocumentOrActor?.prototypeToken?.ownership
+      ? targetDocumentOrActor.prototypeToken
+      : targetDocumentOrActor;
+  if (!ownershipSource) return [];
 
+  const ownerLevel = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
   const activeGMs = game.users.filter(u => u.active && u.isGM);
-  const playerOwners = game.users.filter(u => u.active && !u.isGM && targetActor.testUserPermission(u, "OWNER"));
-  if (playerOwners.length) return playerOwners;
+  const playerOwners = game.users.filter(user => {
+    if (!user.active || user.isGM) return false;
+    return ownershipSource.testUserPermission(user, ownerLevel);
+  });
 
+  if (playerOwners.length) return playerOwners;
   return activeGMs;
 };
 
@@ -345,8 +354,8 @@ const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
   if (!targetActor) return false;
 
   const recipientUsers = game.warhammer40kCogitator?.getDefenseRecipients
-    ? game.warhammer40kCogitator.getDefenseRecipients(targetActor)
-    : getDefenseRecipients(targetActor);
+    ? game.warhammer40kCogitator.getDefenseRecipients(targetDoc ?? targetActor)
+    : getDefenseRecipients(targetDoc ?? targetActor);
   if (!recipientUsers.length) return false;
 
   if (game.warhammer40kCogitator?.emitSocket) {
