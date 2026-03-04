@@ -1,6 +1,6 @@
 /**
  * DH2e External Defense Workflow (Foundry V13)
- * Version: 1.0
+ * Version: 1.1
  * Run this as the defender owner to resolve pending defenses on existing attack workflows.
  */
 
@@ -65,15 +65,26 @@ const workflowOptions = pending
 const pick = await new Promise(resolve => {
   new Dialog({
     title: "External Defense Workflow",
-    content: `<form class="def-wrap">
+    content: `<style>
+      .def-wrap { min-height: 260px; }
+      .twoCol { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .def-wrap label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+      .def-wrap label input[type="radio"], .def-wrap label input[type="checkbox"] { width:auto; margin:0; }
+      .weaponBlock { margin-top:8px; opacity:.35; }
+      .weaponBlock.enabled { opacity:1; }
+      .def-wrap select, .def-wrap input { width:100%; }
+    </style>
+    <form class="def-wrap">
       <div class="form-group"><label><b>Pending Attack</b></label><select id="workflowPick">${workflowOptions}</select></div>
       <hr>
       <h3>Defence Type</h3>
-      <label><input type="radio" name="defence" value="dodge" checked> Dodge (${dodgeBase})</label>
-      <label><input type="radio" name="defence" value="parry"> Parry (${parryBase})</label>
-      <label><input type="radio" name="defence" value="skip"> Skip</label>
+      <div class="twoCol">
+        <label><input type="radio" name="defence" value="dodge" checked> Dodge (${dodgeBase})</label>
+        <label><input type="radio" name="defence" value="parry"> Parry (${parryBase})</label>
+      </div>
+      <label style="margin-top:8px;"><input type="radio" name="defence" value="skip"> Skip</label>
       <hr>
-      <div id="weaponBlock" style="opacity:.35;">
+      <div id="weaponBlock" class="weaponBlock">
         <label><b>Parry Weapon</b></label>
         <select id="weapon" disabled><option value="">Choose Melee Weapon</option>${weaponOptions}</select>
       </div>
@@ -89,7 +100,7 @@ const pick = await new Promise(resolve => {
     render: html => {
       html.find('input[name="defence"]').on("change", function () {
         const parry = this.value === "parry" && this.checked;
-        html.find("#weaponBlock").css("opacity", parry ? 1 : 0.35);
+        html.find("#weaponBlock").toggleClass("enabled", parry);
         html.find("#weapon").prop("disabled", !parry);
       });
     },
@@ -164,15 +175,16 @@ const postResult = async ({ usedFate }) => {
   await roll.toMessage({
     speaker: ChatMessage.getSpeaker({ actor }),
     flavor: `<div style="text-align:center; color:#000;">
-      ${usedFate ? `<b style="color:gold;font-style:italic;font-size:1.1em;">✦ ${actor.name} spends Fate and rerolls! ✦</b><hr>` : ""}
+      ${usedFate ? `<b style="color:gold;font-style:italic;font-size:1.1em;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">✦ ${actor.name} spends Fate and rerolls! ✦</b><hr>` : ""}
       <div style="font-style:italic;font-size:1.1em;"><b>${actor.name}</b> attempts a <b>${actionText}</b> against <b>${entry.state.attackerName}</b>'s <b>${entry.state.weaponName}</b> (<b>${entry.target.allocatedHits}</b> hits)</div>
       <hr>
-      <div><u>Difficulty</u> ${pick.difficultyLabel}</div>
-      <div><b>Target:</b> <span style="color:#ffad55;">${target}</span></div>
-      <div><b>Roll:</b> <span style="color:#bd7548;">${val}</span></div>
+      <div><u>Difficulty</u></div>
+      <div style="font-weight:bold;font-size:1.1em;">${pick.difficultyLabel}</div>
+      <div><b>Target:</b> <span style="color:#ffad55;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${target}</span></div>
+      <div><b>Roll:</b> <span style="color:#bd7548;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${val}</span></div>
       ${notes.length ? `<div style="font-style:italic">${notes.join(" | ")}</div>` : ""}
       <hr>
-      <div style="font-size:1.2em;font-weight:900;color:${color};">${success ? `${degrees} Degrees of Success` : `${degrees} Degrees of Failure`}</div>
+      <div style="font-size:1.2em;font-weight:900;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${success ? `${degrees} Degrees of Success` : `${degrees} Degrees of Failure`}</div>
     </div>`
   });
 
