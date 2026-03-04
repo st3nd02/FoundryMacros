@@ -181,7 +181,7 @@ if (pick.type === "parry") {
 }
 
 let target = Math.max(1, base + pick.difficultyMod + pick.manualMod);
-let roll = await new Roll("1d100").roll({ async: true });
+let roll = await new Roll("1d100").evaluate();
 
 const postResult = async ({ usedFate }) => {
   const val = roll.total;
@@ -225,7 +225,7 @@ if (dos <= 0 && (actor.system.fate?.value ?? 0) > 0) {
 
   if (useFate) {
     await actor.update({ "system.fate.value": Math.max(0, (actor.system.fate?.value ?? 0) - 1) });
-    roll = await new Roll("1d100").roll({ async: true });
+    roll = await new Roll("1d100").evaluate();
     dos = await postResult({ usedFate: true });
   }
 }
