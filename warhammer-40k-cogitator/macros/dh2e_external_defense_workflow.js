@@ -1,6 +1,6 @@
 /**
  * DH2e External Defense Workflow (Foundry V13)
- * Version: 1.3
+ * Version: 1.4
  * Run this as the defender owner to resolve pending defenses on existing attack workflows.
  */
 
@@ -171,7 +171,16 @@ if (pick.type === "skip") {
       targetTokenUuid: token.document.uuid,
       defenseRoll: null,
       defenseOutcome: "Skipped (failed defense)",
-      allocatedHits: targetState.allocatedHits ?? 0
+      allocatedHits: targetState.allocatedHits ?? 0,
+      defenseDetails: {
+        actionText: "Skipped",
+        incomingHits: targetState.allocatedHits ?? 0,
+        difficultyLabel: "—",
+        targetNumber: null,
+        notes: [],
+        degrees: 0,
+        success: false
+      }
     });
   } catch (err) {
     ui.notifications.error(`Defense result could not be applied: ${err.message ?? err}`);
@@ -197,30 +206,18 @@ if (pick.type === "parry") {
 let target = Math.max(1, base + pick.difficultyMod + pick.manualMod);
 let roll = await rollWithDiceSoNice("1d100");
 
-const postResult = async ({ usedFate }) => {
+const postResult = ({ usedFate }) => {
   const val = roll.total;
   const success = val === 1 ? true : (val === 100 ? false : val <= target);
   const degrees = Math.floor(Math.abs(target - val) / 10) + 1;
-  const color = success ? "#1aff1a" : "#ff2a2a";
 
-  await ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ actor }),
-    content: `<div style="border:1px solid #555;border-radius:6px;padding:8px;">
-      ${usedFate ? `<div style="font-style:italic;"><b>${actor.name}</b> spends <b>Fate</b> and rerolls.</div><hr>` : ""}
-      <div style="font-style:italic;"><b>${actor.name}</b> attempts <b>${actionText}</b> against <b>${entry.state.attackerName}</b> with <b>${entry.state.weaponName}</b>.</div>
-      <div><b>Incoming Hits:</b> ${entry.target.allocatedHits}</div>
-      <div><b>Difficulty:</b> ${pick.difficultyLabel}</div>
-      <div><b>Target:</b> ${target} | <b>Roll:</b> ${val}</div>
-      ${notes.length ? `<div><b>Notes:</b> ${notes.join(" | ")}</div>` : ""}
-      <div><b>Result:</b> <span style="color:${color};font-weight:700;">${success ? `${degrees} Degrees of Success` : `${degrees} Degrees of Failure`}</span></div>
-    </div>`
-  });
+  if (usedFate) notes.unshift("Spent Fate reroll");
 
-  return success ? degrees : 0;
+  return { success, degrees, value: val };
 };
 
-let dos = await postResult({ usedFate: false });
-
+let defenseResult = postResult({ usedFate: false });
+let dos = defenseResult.success ? defenseResult.degrees : 0;
 if (dos <= 0 && (actor.system.fate?.value ?? 0) > 0) {
   const useFate = await new Promise(resolve => {
     new Dialog({
@@ -237,7 +234,8 @@ if (dos <= 0 && (actor.system.fate?.value ?? 0) > 0) {
   if (useFate) {
     await actor.update({ "system.fate.value": Math.max(0, (actor.system.fate?.value ?? 0) - 1) });
     roll = await rollWithDiceSoNice("1d100");
-    dos = await postResult({ usedFate: true });
+    defenseResult = postResult({ usedFate: true });
+    dos = defenseResult.success ? defenseResult.degrees : 0;
   }
 }
 
@@ -262,7 +260,16 @@ if (game.warhammer40kCogitator?.submitDefenseResult) {
       targetTokenUuid: token.document.uuid,
       defenseRoll,
       defenseOutcome,
-      allocatedHits
+      allocatedHits,
+      defenseDetails: {
+        actionText,
+        incomingHits: targetState.allocatedHits ?? 0,
+        difficultyLabel: pick.difficultyLabel,
+        targetNumber: target,
+        notes,
+        degrees: defenseResult.degrees,
+        success: defenseResult.success
+      }
     });
   } catch (err) {
     ui.notifications.error(`Defense result could not be applied: ${err.message ?? err}`);
