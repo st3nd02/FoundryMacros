@@ -3,7 +3,7 @@
   "name": "warhammer-40k-cogitator",
   "title": "Warhammer 40k Cogitator",
   "description": "Workflow orchestrator for Dark Heresy 2e external Attack/Defense/Damage resolution on Foundry V13.",
-  "version": "1.3.22",
+  "version": "1.3.23",
   "authors": [
     {
       "name": "Lord Stendor"
@@ -17,7 +17,7 @@
   "media": [
         {
             "type": "cover",
-            "link": "https://github.com/st3nd02/FoundryMacros/blob/main/WH40k%20Cogitator%20Cover.png"
+            "link": "https://i.imgur.com/1RlaExH.png"
         }
     ],
   "socket": true,
