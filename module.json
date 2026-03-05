@@ -14,6 +14,12 @@
     "verified": "13",
     "maximum": "13"
   },
+   "media": [
+        {
+            "type": "cover",
+            "link": "https://github.com/st3nd02/FoundryMacros/blob/main/WH40k%20Cogitator%20Cover.png"
+        }
+    ],
   "socket": true,
   "url": "https://github.com/st3nd02/FoundryMacros",
   "manifest": "https://raw.githubusercontent.com/st3nd02/FoundryMacros/main/module.json",
