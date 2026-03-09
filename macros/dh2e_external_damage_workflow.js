@@ -1,6 +1,6 @@
 /**
  * DH2e External Damage Workflow (Foundry V13)
- * Version: 1.1
+ * Version: 1.2
  * Run this as the attacker owner to resolve pending damage on existing workflows.
  */
 
@@ -285,8 +285,8 @@ new Dialog({
         if (hammer && isMelee) {
           const sb = actor.system.characteristics.strength.bonus;
           const bonus = Math.ceil(sb / 2);
-          flat += bonus;
-          properties.push(`Hammer Blow +${bonus}`);
+          pen += bonus;
+          properties.push(`Hammer Blow Pen +${bonus}`);
           const concBox = html.find("#concussive")[0];
           const concValField = html.find("#concussiveVal");
           let current = 0;

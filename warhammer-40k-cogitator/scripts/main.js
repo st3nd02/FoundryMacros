@@ -11,7 +11,8 @@ const SETTINGS = {
 const SOCKET_EVENTS = {
   requestDefense: "requestDefense",
   defenseResolved: "defenseResolved",
-  damageReady: "damageReady"
+  damageReady: "damageReady",
+  mirrorAttackReady: "mirrorAttackReady"
 };
 
 const WORKFLOW_NS = "warhammer-40k-cogitator";
@@ -24,6 +25,7 @@ const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 const USED_EVASION_EFFECT_ID = "ce-used-evasion";
 let pendingDefenseContext = null;
 let pendingDamageContext = null;
+let pendingAttackContext = null;
 const recentDefensePromptKeys = new Map();
 
 const DEFAULT_MACROS = {
@@ -128,7 +130,9 @@ Hooks.once("ready", async () => {
     setPendingDefenseContext,
     consumePendingDefenseContext,
     setPendingDamageContext,
-    consumePendingDamageContext
+    consumePendingDamageContext,
+    setPendingAttackContext,
+    consumePendingAttackContext
   };
 
   registerSocketHandlers();
@@ -384,6 +388,11 @@ function registerSocketHandlers() {
 
     if (packet.event === SOCKET_EVENTS.damageReady) {
       handleDamageReady(packet.payload);
+      return;
+    }
+
+    if (packet.event === SOCKET_EVENTS.mirrorAttackReady) {
+      handleMirrorAttackReady(packet.payload);
     }
   });
 }
@@ -501,6 +510,16 @@ function setPendingDamageContext(payload) {
 function consumePendingDamageContext() {
   const context = pendingDamageContext;
   pendingDamageContext = null;
+  return context;
+}
+
+function setPendingAttackContext(payload) {
+  pendingAttackContext = payload ?? null;
+}
+
+function consumePendingAttackContext() {
+  const context = pendingAttackContext;
+  pendingAttackContext = null;
   return context;
 }
 
@@ -654,6 +673,23 @@ function handleDamageReady(payload) {
               <p>Run damage workflow now?</p>`,
     buttons: {
       run: { label: "Run Damage", callback: async () => runStep("damage") },
+      later: { label: "Later" }
+    },
+    default: "run"
+  }).render(true);
+}
+
+function handleMirrorAttackReady(payload) {
+  const ownerIds = Array.isArray(payload.ownerIds) ? payload.ownerIds : [];
+  if (!ownerIds.includes(game.user.id)) return;
+
+  setPendingAttackContext(payload.setup ?? null);
+
+  new Dialog({
+    title: "Devastating Assault",
+    content: `<p><b>${payload.attackerName ?? "Attacker"}</b> can make a second mirrored All Out attack.</p><p>Run attack workflow now?</p>`,
+    buttons: {
+      run: { label: "Run Attack", callback: async () => runStep("attack") },
       later: { label: "Later" }
     },
     default: "run"
