@@ -45,6 +45,8 @@ const buildWorkflowHtml = state => {
         </div>`
       : `<div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>`;
 
+    const shownHits = state.horde?.active ? (t.hordeHitsPreview ?? t.allocatedHits ?? 0) : (t.allocatedHits ?? 0);
+    const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
     const damageSummary = t.damageSummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
       : `<div><b>Damage:</b> ${dmgTxt}</div>`;
@@ -52,7 +54,7 @@ const buildWorkflowHtml = state => {
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
       <div><b>Dist:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel} | <b>Size:</b> ${sizeTxt}</div>
-      <div><b>TN:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Hits:</b> ${t.allocatedHits}</div>
+      <div><b>TN:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>${hitsLabel}:</b> ${shownHits}</div>
       ${defenseSummary}
       ${damageSummary}
     </div>`;
@@ -64,7 +66,7 @@ const buildWorkflowHtml = state => {
     <div><b>Modifiers:</b> ${state.modifierNotes?.join(", ") || "None"}</div>
     <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
     <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))}</div>
-    <div style="font-size:1.1em;"><b>Total Hits:</b> ${state.totalHits ?? 0}</div>
+    <div style="font-size:1.1em;"><b>Total ${state.horde?.active ? "Hits vs Horde" : "Hits"}:</b> ${state.totalHits ?? 0}</div>
     ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
     ${styledAttackDegrees()}
     <hr>${cards}

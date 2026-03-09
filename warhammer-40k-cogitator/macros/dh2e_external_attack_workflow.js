@@ -151,13 +151,19 @@ const parseTraitNumber = (traits, key, fallback = 0) => {
 
 const getHordeBonusFromMagnitude = magnitude => {
   const value = Number(magnitude ?? 0);
-  if (value >= 120) return 60;
-  if (value >= 90) return 50;
-  if (value >= 60) return 40;
-  if (value >= 30) return 30;
-  if (value >= 20) return 20;
-  if (value >= 10) return 10;
-  return 0;
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.max(0, Math.min(60, Math.floor(value / 10) * 10));
+};
+
+const getHordeMagnitudeValue = actorDoc => {
+  if (!actorDoc) return 0;
+  const candidateValues = [
+    actorDoc.system?.magnitude?.value,
+    actorDoc.system?.horde?.magnitude,
+    actorDoc.system?.wounds?.value,
+    actorDoc.system?.wounds?.max
+  ].map(v => Number(v));
+  return candidateValues.find(v => Number.isFinite(v) && v >= 0) ?? 0;
 };
 
 const animatedRoll = async formula => {
@@ -355,6 +361,8 @@ const buildWorkflowHtml = state => {
   const cards = state.targets.map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
     const dmgTxt = (t.damageRolls ?? []).map(d => `${d.total} ${d.loc}`).join(", ") || "—";
+    const shownHits = state.horde?.active ? (t.hordeHitsPreview ?? t.allocatedHits ?? 0) : (t.allocatedHits ?? 0);
+    const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
     const defenseSummary = t.defenseAction
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#151515;">
           <div style="font-style:italic;"><b>${t.name}</b> attempts <b>${t.defenseAction}</b> against <b>${state.attackerName}</b> with <b>${state.weaponName}</b>.</div>
@@ -367,13 +375,13 @@ const buildWorkflowHtml = state => {
       : `<div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>`;
 
     const damageSummary = t.damageSummary
-      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#11131a;">${t.damageSummary}</div>`
+      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
       : `<div><b>Damage:</b> ${dmgTxt}</div>`;
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
       <div><b>Dist:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel} | <b>Size:</b> ${sizeTxt}</div>
-      <div><b>TN:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Hits:</b> ${t.allocatedHits}</div>
+      <div><b>TN:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>${hitsLabel}:</b> ${shownHits}</div>
       ${defenseSummary}
       ${damageSummary}
     </div>`;
@@ -385,7 +393,7 @@ const buildWorkflowHtml = state => {
     <div><b>Modifiers:</b> ${state.modifierNotes.join(", ") || "None"}</div>
     <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
     <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))}</div>
-    <div style="font-size:1.1em;"><b>Total Hits:</b> ${state.totalHits ?? 0}</div>
+    <div style="font-size:1.1em;"><b>Total ${state.horde?.active ? "Hits vs Horde" : "Hits"}:</b> ${state.totalHits ?? 0}</div>
     ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
     ${styledAttackDegrees()}
     <hr>${cards}
@@ -609,9 +617,10 @@ const runAttackWorkflow = async setup => {
   if (setup.manualMod) modifierNotes.push(`Manual ${setup.manualMod >= 0 ? "+" : ""}${setup.manualMod}`);
   if (setup.aimMod) modifierNotes.push(setup.aimLabel);
 
-  if (setup.isHorde && setup.hordeBonus) {
-    sharedMod += setup.hordeBonus;
-    modifierNotes.push(`Horde ${setup.hordeBonus >= 0 ? "+" : ""}${setup.hordeBonus}`);
+  if (setup.isHorde) {
+    const hordeBonus = Number(setup.hordeBonus ?? 0);
+    sharedMod += hordeBonus;
+    modifierNotes.push(`Horde ${hordeBonus >= 0 ? "+" : ""}${hordeBonus}`);
   }
 
   const t = { ...(setup.toggles ?? {}), ...(setup.detectedItems ?? {}) };
@@ -829,7 +838,16 @@ const runAttackWorkflow = async setup => {
   state.attackRoll = result;
   state.dos = dos;
   state.attackDegrees = success ? dos : -Math.max(1, 1 + Math.floor((result - bestTN) / 10));
-  state.totalHits = state.targets.reduce((sum, tg) => sum + Number(tg.allocatedHits ?? 0), 0);
+  if (state.horde?.active) {
+    state.targets = state.targets.map(tg => ({
+      ...tg,
+      hordeHitsPreview: getHordeMagnitudeHits({ state, target: tg })
+    }));
+  }
+  state.totalHits = state.targets.reduce((sum, tg) => {
+    const hitValue = state.horde?.active ? Number(tg.hordeHitsPreview ?? tg.allocatedHits ?? 0) : Number(tg.allocatedHits ?? 0);
+    return sum + hitValue;
+  }, 0);
   state.statusText = jam ? "JAM" : (success ? (outOfAmmoAfter ? "HIT (OUT OF AMMO)" : "HIT") : "MISS");
   state.devastatingFollowUp = {
     available: !!(setup.toggles?.devastating && setup.modeKey === "allout" && state.totalHits > 0),
@@ -1013,7 +1031,7 @@ const showAttackDialog = async () => {
           html.find("#talent_force_channel").prop("disabled", !!isHorde);
           if (!isHorde) return;
           const firstTarget = targetTokens[0]?.actor;
-          const magnitude = Number(firstTarget?.system?.wounds?.value ?? 0);
+          const magnitude = getHordeMagnitudeValue(firstTarget);
           hordeInput.val(getHordeBonusFromMagnitude(magnitude));
           html.find("#talent_force_channel").prop("checked", false);
         };
