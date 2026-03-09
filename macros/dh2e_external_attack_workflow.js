@@ -196,9 +196,11 @@ const getCraftData = weapon => {
   return {
     name: craft,
     meleeBonus: craft === "poor" ? -10 : craft === "good" ? 5 : craft === "best" ? 10 : 0,
+    meleeBestDamageBonus: craft === "best" ? 1 : 0,
     rangedPoor: craft === "poor",
     rangedGood: craft === "good",
-    rangedBest: craft === "best"
+    rangedBest: craft === "best",
+    label: craft.charAt(0).toUpperCase() + craft.slice(1)
   };
 };
 
@@ -207,16 +209,19 @@ const computeJam = ({ result, targetNumber, weapon, traits }) => {
   if (isMelee) return false;
 
   const craft = getCraftData(weapon);
-  const reliable = hasTrait(traits, "reliable");
-  const unreliable = hasTrait(traits, "unreliable");
+  let reliable = hasTrait(traits, "reliable");
+  let unreliable = hasTrait(traits, "unreliable");
+
+  if (craft.rangedGood || craft.rangedBest) {
+    unreliable = false;
+    if (!reliable) reliable = true;
+  }
 
   let jamLow = 95;
   if (reliable) jamLow = 100;
   if (unreliable) jamLow = 91;
 
-  if (craft.rangedBest) jamLow = 101;
-  else if (craft.rangedGood && !unreliable) jamLow = 100;
-  else if (craft.rangedPoor) jamLow = unreliable ? targetNumber + 1 : 91;
+  if (craft.rangedBest) jamLow = 100;
 
   return result >= jamLow;
 };
@@ -268,7 +273,7 @@ const promptAttackFateReroll = async ({ actorDoc, rollValue, bestTN }) => {
 
 const evaluateAttackResult = ({ result, targets, weapon, traits }) => {
   const bestTN = Math.max(...targets.map(tg => tg.targetNumber));
-  const success = result <= bestTN;
+  const success = result === 1 ? true : (result === 100 ? false : result <= bestTN);
   let dos = success ? 1 + Math.floor((bestTN - result) / 10) : 0;
   const jam = computeJam({ result, targetNumber: bestTN, weapon, traits });
   if (jam) dos = 0;
@@ -338,6 +343,28 @@ const buildWorkflowHtml = state => {
 };
 
 
+const buildDamageApplicationData = ({ state, target, rolls, hitLoc }) => ({
+  attacker: state.attackerName,
+  target: target.name,
+  targetTokenUuid: target.tokenUuid ?? target.targetTokenUuid,
+  weapon: state.weaponName,
+  damageType: String(state.weaponType ?? "impact").toLowerCase(),
+  penetration: Number(state.weaponPen ?? 0),
+  hits: rolls.length,
+  hitsData: rolls.map((r, idx) => ({ hit: idx + 1, location: r.loc ?? hitLoc, damage: r.total, fury: null })),
+  dos: Number(state.dos ?? 0),
+  fury: [],
+  properties: state.horde?.active ? ["Horde Target"] : []
+});
+
+const getHordeMagnitudeHits = ({ state, rolls }) => {
+  const traits = parseWeaponTraits({ system: { special: state.weaponSpecial ?? "" } });
+  const explosive = hasTrait(traits, "explosive") || String(state.weaponType ?? "").toLowerCase().includes("explosive");
+  const forceOrPower = hasTrait(traits, "force") || hasTrait(traits, "power");
+  let bonus = (explosive || forceOrPower) ? 1 : 0;
+  return Math.max(0, rolls.length + bonus);
+};
+
 const promptDamageDialog = async (state, chatMessage) => {
   const rows = state.targets.filter(t => t.allocatedHits > 0).map(t => `<li>${t.name}: ${t.allocatedHits} hits</li>`).join("");
   if (!rows) return;
@@ -353,17 +380,27 @@ const promptDamageDialog = async (state, chatMessage) => {
             for (const t of state.targets) {
               if (t.allocatedHits <= 0) continue;
               const damageRolls = [];
-              for (let i = 0; i < t.allocatedHits; i += 1) {
-                const r = await animatedRoll(state.weaponDamage, chatMessage.speaker);
+              const rollCount = state.horde?.active ? 1 : t.allocatedHits;
+              for (let i = 0; i < rollCount; i += 1) {
+                const bonusFormula = Number(state.meleeBestDamageBonus ?? 0) > 0 ? `(${state.weaponDamage}) + ${Number(state.meleeBestDamageBonus)}` : state.weaponDamage;
+                const r = await animatedRoll(bonusFormula, chatMessage.speaker);
                 damageRolls.push({ total: r.total, loc: getHitLocation(state.attackRoll || r.total) });
               }
               t.damageRolls = damageRolls;
               t.damageResolved = true;
+              t.damageApplied = false;
+              t.applySummary = null;
+              t.damageApplicationData = buildDamageApplicationData({ state, target: t, rolls: damageRolls, hitLoc: getHitLocation(state.attackRoll || 50) });
+              if (state.horde?.active) {
+                const magHits = getHordeMagnitudeHits({ state, rolls: damageRolls });
+                t.damageSummary = `<div><b>Horde Damage:</b> Rolled once for penetration (${damageRolls[0]?.total ?? 0}). <b>Magnitude Hits:</b> ${magHits}</div>`;
+                t.damageApplicationData.horde = { active: true, magnitudeHits: magHits };
+              }
             }
             resolve();
           }
         },
-        later: { label: "Later", callback: () => resolve() }
+        later: { label: "Open Damage Dialog", callback: () => resolve() }
       },
       default: "roll"
     }).render(true);
@@ -495,8 +532,12 @@ const runAttackWorkflow = async setup => {
 
   const craftData = getCraftData(weapon);
   if (isMelee && craftData.meleeBonus !== 0) {
-    sharedMod += craftData.meleeBonus;
-    selectedTalents.push(`Craftsmanship ${craftData.meleeBonus >= 0 ? "+" : ""}${craftData.meleeBonus}`);
+    const craftBonus = craftData.meleeBonus;
+    sharedMod += craftBonus;
+    selectedTalents.push(`Craftsmanship (${craftData.label}) ${craftBonus >= 0 ? "+" : ""}${craftBonus}`);
+  }
+  if (isMelee && craftData.meleeBestDamageBonus) {
+    selectedTalents.push("Best Craftsmanship: +1 damage");
   }
 
   if (t.deadeye && !isMelee && setup.modeKey === "called") { sharedMod += 10; selectedTalents.push("Deadeye +10"); }
@@ -521,7 +562,7 @@ const runAttackWorkflow = async setup => {
     sizeLabel: conf.sizeLabel,
     sizeMod: conf.sizeMod,
     sizeIgnored: conf.sizeIgnored,
-    targetNumber: Math.max(1, baseSkill + sharedMod + conf.rangeMod + conf.sizeMod),
+    targetNumber: Math.max(1, Math.min(100, baseSkill + sharedMod + conf.rangeMod + conf.sizeMod)),
     allocatedHits: 0,
     defenseRoll: null,
     defenseOutcome: null,
@@ -530,6 +571,10 @@ const runAttackWorkflow = async setup => {
   }));
 
   const powerMode = POWER_MODES[setup.powerModeKey] ?? POWER_MODES[1];
+  if (!isMelee && (craftData.rangedGood || craftData.rangedBest)) {
+    selectedTalents.push("Good/Best Craftsmanship: Unreliable removed; Reliable gained if absent");
+  }
+
   const state = {
     id: foundry.utils.randomID(),
     attackerActorId: attacker.id,
@@ -538,6 +583,10 @@ const runAttackWorkflow = async setup => {
     weaponId: weapon.id,
     weaponName: weapon.name,
     weaponDamage: weapon.system.damage || "1d10",
+    weaponPen: weapon.system.penetration || 0,
+    weaponType: weapon.system.damageType || "impact",
+    weaponSpecial: weapon.system.special || "",
+    meleeBestDamageBonus: (isMelee && craftData.meleeBestDamageBonus) ? 1 : 0,
     modeKey: setup.modeKey,
     modeLabel: mode.label,
     powerModeLabel: powerMode.label,
@@ -552,6 +601,7 @@ const runAttackWorkflow = async setup => {
     statusText: "Pending",
     extraText: "",
     grenade: { isGrenade, scatter: null, damage: null },
+    horde: { active: !!setup.isHorde },
     targets,
     flags: { immediate: true }
   };
@@ -580,6 +630,11 @@ const runAttackWorkflow = async setup => {
   if (success && !isMelee) {
     if (["semi", "suppressSemi"].includes(state.modeKey)) hits = Math.min(1 + Math.floor((dos - 1) / 2), rof.burst ?? 1);
     else if (["full", "suppressFull"].includes(state.modeKey)) hits = Math.min(dos, rof.full ?? 1);
+  }
+  if (success && isMelee) {
+    const wsb = attacker.system.characteristics.weaponSkill?.bonus ?? 1;
+    if (state.modeKey === "swift") hits = Math.min(1 + Math.floor(Math.max(0, dos - 1) / 2), wsb);
+    else if (state.modeKey === "lightning") hits = Math.min(Math.max(1, dos), wsb);
   }
 
   // Ammo consumption (legacy behavior): spent by firing mode, not by number of hits.
@@ -615,6 +670,18 @@ const runAttackWorkflow = async setup => {
   state.attackDegrees = success ? dos : -Math.max(1, 1 + Math.floor((result - bestTN) / 10));
   state.totalHits = Array.from(alloc.values()).reduce((a, b) => a + b, 0);
   state.statusText = jam ? "JAM" : (success ? (outOfAmmoAfter ? "HIT (OUT OF AMMO)" : "HIT") : "MISS");
+
+  if (!success && isMelee && setup.toggles?.blademaster && !attacker.effects.some(e => String(e.name ?? "").toLowerCase().includes("blademaster used"))) {
+    const reroll = (await animatedRoll("1d100", chatMessage.speaker)).total;
+    const evalRe = evaluateAttackResult({ result: reroll, targets: state.targets, weapon, traits });
+    state.extraText = [state.extraText, `Blademaster reroll: ${result} → ${reroll}`].filter(Boolean).join(" | ");
+    result = reroll; success = evalRe.success; dos = evalRe.dos; jam = evalRe.jam; bestTN = evalRe.bestTN;
+    await attacker.createEmbeddedDocuments("ActiveEffect", [{ name: "Blademaster Used", img: "icons/svg/sword.svg", origin: attacker.uuid }]);
+  }
+
+  if (success && state.modeKey === "allout" && game.warhammer40kCogitator?.consumeDefenseReaction) {
+    await game.warhammer40kCogitator.consumeDefenseReaction(attacker);
+  }
   if (ammoSpent > 0) {
     state.extraText = [state.extraText, `Ammo Spent: ${ammoSpent}`].filter(Boolean).join(" | ");
   }
@@ -638,6 +705,11 @@ const runAttackWorkflow = async setup => {
   // Skip when reaction has already been spent this round.
   for (const tg of state.targets) {
     if (tg.allocatedHits <= 0) continue;
+    if (state.horde?.active) {
+      tg.defenseOutcome = "Failed (Hordes do not defend)";
+      tg.defenseRoll = "—";
+      continue;
+    }
 
     const targetDoc = await fromUuid(tg.tokenUuid);
     const targetActor = targetDoc?.actor;
@@ -851,6 +923,11 @@ const showAttackDialog = async () => {
 
 const setup = await showAttackDialog();
 if (!setup) return;
+const singleTargetModes = ["single","called","standard"];
+if (singleTargetModes.includes(setup.modeKey) && setup.targetConfigs.length > 1) {
+  ui.notifications.warn("Selected attack type can only target one opponent.");
+  return;
+}
 await runAttackWorkflow(setup);
 
 })().catch(err => {
