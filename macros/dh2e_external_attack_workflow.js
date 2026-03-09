@@ -49,6 +49,26 @@ const rangedModes = {
   called: { label: "Called Shot (-20)", mod: -20 }
 };
 
+const getAvailableRangedModeKeys = weaponDoc => {
+  const rof = weaponDoc?.system?.rateOfFire ?? {};
+  const single = Number(rof.single ?? rof.singleShot ?? rof.s ?? 0);
+  const burst = Number(rof.burst ?? rof.semi ?? 0);
+  const full = Number(rof.full ?? rof.auto ?? 0);
+  const available = [];
+
+  if (single > 0 || (burst <= 0 && full <= 0)) {
+    available.push("single", "called");
+  }
+  if (burst > 0) {
+    available.push("semi", "suppressSemi");
+  }
+  if (full > 0) {
+    available.push("full", "suppressFull");
+  }
+
+  return available.length ? available : ["single", "called"];
+};
+
 const RANGE_BANDS = [
   { label: "Point Blank (+30)", mod: 30 },
   { label: "Short (+10)", mod: 10 },
@@ -146,6 +166,15 @@ const animatedRoll = async formula => {
     await game.dice3d.showForRoll(roll, game.user, true);
   }
   return roll;
+};
+
+const rollAgilityEvasionTest = async actorDoc => {
+  const ag = Number(actorDoc?.system?.characteristics?.agility?.total ?? 0);
+  const target = Math.max(1, Math.min(100, ag));
+  const roll = await animatedRoll("1d100");
+  const success = roll.total <= target;
+  const ab = Number(actorDoc?.system?.characteristics?.agility?.bonus ?? 0);
+  return { target, roll: roll.total, success, evadeMeters: ab };
 };
 
 const getHitLocation = rollValue => {
@@ -552,6 +581,7 @@ const runAttackWorkflow = async setup => {
   if (isMelee && setup.modeKey === "lightning" && !hasTalent(attacker, "lightning attack")) return ui.notifications.warn("Requires talent: Lightning Attack");
 
   const rof = weapon.system.rateOfFire ?? {};
+  const isSpray = hasTrait(traits, "spray");
   const infiniteAmmo = hasTrait(traits, "living ammunition") || hasTrait(traits, "infammo");
   const isGrenade = hasTrait(traits, "grenade");
   if (!isMelee) {
@@ -744,7 +774,10 @@ const runAttackWorkflow = async setup => {
   outOfAmmoAfter = firstAmmo.outOfAmmo;
 
   const eligible = state.targets.filter(tg => result <= tg.targetNumber);
-  const alloc = allocateHits({ totalHits: hits, modeKey: state.modeKey, targets: eligible, rof });
+  const sprayAlloc = isSpray && success && !jam
+    ? new Map(eligible.map(tg => [tg.tokenUuid, 1]))
+    : null;
+  const alloc = sprayAlloc ?? allocateHits({ totalHits: hits, modeKey: state.modeKey, targets: eligible, rof });
 
   state.targets = state.targets.map(tg => ({ ...tg, allocatedHits: alloc.get(tg.tokenUuid) || 0 }));
 
@@ -760,7 +793,7 @@ const runAttackWorkflow = async setup => {
     state.extraText = [state.extraText, `Whirlwind attacks: ${notes.join(", ")}`].filter(Boolean).join(" | ");
   }
 
-  if (t.doubletap && !isMelee && hits > 0 && !jam) {
+    if (t.doubletap && !isMelee && !isSpray && hits > 0 && !jam) {
     const boostedTargets = state.targets.map(tg => ({ ...tg, targetNumber: Math.max(1, Math.min(100, tg.targetNumber + 20)) }));
     let secondRoll = (await animatedRoll("1d100", chatMessage.speaker)).total;
     let secondEval = evaluateAttackResult({ result: secondRoll, targets: boostedTargets, weapon, traits });
@@ -832,6 +865,18 @@ const runAttackWorkflow = async setup => {
 
     const targetDoc = await fromUuid(tg.tokenUuid);
     const targetActor = targetDoc?.actor;
+    if (isSpray) {
+      const sprayDefense = await rollAgilityEvasionTest(targetActor);
+      tg.defenseRoll = sprayDefense.roll;
+      if (sprayDefense.success) {
+        tg.allocatedHits = 0;
+        tg.defenseOutcome = `Success (Spray Agility test ${sprayDefense.roll}/${sprayDefense.target}; can move ${sprayDefense.evadeMeters}m)`;
+        continue;
+      }
+      tg.defenseOutcome = `Failed (Spray Agility test ${sprayDefense.roll}/${sprayDefense.target})`;
+      continue;
+    }
+
     if (game.warhammer40kCogitator?.hasDefenseReaction?.(targetActor)) {
       tg.defenseOutcome = "Skipped (Reaction already used)";
       continue;
@@ -884,11 +929,9 @@ const showAttackDialog = async () => {
         return `<option value="${k}" ${bad ? "disabled" : ""}>${v.label}</option>`;
       }).join("");
     }
-    const rof = weaponDoc?.system?.rateOfFire ?? {};
-    return Object.entries(rangedModes).map(([k, v]) => {
-      const bad = (["semi", "suppressSemi"].includes(k) && (rof.burst ?? 0) <= 0) || (["full", "suppressFull"].includes(k) && (rof.full ?? 0) <= 0);
-      return `<option value="${k}" ${bad ? "disabled" : ""}>${v.label}</option>`;
-    }).join("");
+    return getAvailableRangedModeKeys(weaponDoc)
+      .map(k => `<option value="${k}">${rangedModes[k].label}</option>`)
+      .join("");
   };
 
   const targetRows = weaponDoc => {
@@ -1090,8 +1133,11 @@ if (setup.toggles?.whirlwind) {
     setup.targetConfigs = setup.targetConfigs.slice(0, wsb);
   }
 }
+const selectedWeapon = attacker.items.get(setup.weaponId);
+const setupTraits = parseWeaponTraits(selectedWeapon ?? { system: { special: "" } });
+const isSprayWeapon = hasTrait(setupTraits, "spray");
 const singleTargetModes = ["single","called","standard"];
-if (!setup.toggles?.whirlwind && singleTargetModes.includes(setup.modeKey) && setup.targetConfigs.length > 1) {
+if (!setup.toggles?.whirlwind && !isSprayWeapon && singleTargetModes.includes(setup.modeKey) && setup.targetConfigs.length > 1) {
   ui.notifications.warn("Selected attack type can only target one opponent.");
   return;
 }
