@@ -122,11 +122,22 @@ const presentWeaponItems = detected => {
 const parseWeaponTraits = weapon =>
   (weapon.system.special ?? "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
 const hasTrait = (traits, key) => traits.some(t => t.includes(key));
-const parseTraitValue = (traits, key, fallback = 0) => {
-  const entry = traits.find(t => t.includes(key));
-  if (!entry) return fallback;
-  const match = entry.match(/\(([-+]?\d+)\)/);
+const parseTraitNumber = (traits, key, fallback = 0) => {
+  const trait = traits.find(t => t.includes(key));
+  if (!trait) return fallback;
+  const match = trait.match(/\((\d+)\)/);
   return match ? Number(match[1]) : fallback;
+};
+
+const getHordeBonusFromMagnitude = magnitude => {
+  const value = Number(magnitude ?? 0);
+  if (value >= 120) return 60;
+  if (value >= 90) return 50;
+  if (value >= 60) return 40;
+  if (value >= 30) return 30;
+  if (value >= 20) return 20;
+  if (value >= 1) return 10;
+  return 0;
 };
 
 const animatedRoll = async formula => {
@@ -228,12 +239,7 @@ const computeJam = ({ result, targetNumber, weapon, traits }) => {
     if (!reliable) reliable = true;
   }
 
-  const hasSpray = hasTrait(traits, "spray");
-  const hasOverheats = hasTrait(traits, "overheats");
-
-  if (hasSpray) return false;
-
-  let jamLow = hasOverheats ? 91 : 95;
+  let jamLow = 95;
   if (reliable) jamLow = 100;
   if (unreliable) jamLow = 91;
 
@@ -373,16 +379,54 @@ const buildDamageApplicationData = ({ state, target, rolls, hitLoc }) => ({
   properties: state.horde?.active ? ["Horde Target"] : []
 });
 
-const getHordeMagnitudeHits = ({ state, rolls }) => {
+
+const estimateMinimumDamage = formula => {
+  const text = String(formula ?? "").replace(/\s+/g, "");
+  const match = text.match(/^(\d+)d(5|10)([+-]\d+)?$/i);
+  if (!match) return null;
+  const dice = Number(match[1]);
+  const flat = Number(match[3] ?? 0);
+  return dice + flat;
+};
+
+const getHordeSoakThreshold = targetActor => {
+  if (!targetActor) return 0;
+  const tTotal = Number(targetActor.system?.characteristics?.toughness?.total ?? 0);
+  const tUnnat = Number(targetActor.system?.characteristics?.toughness?.unnatural ?? 0);
+  const tb = Math.floor(tTotal / 10) + tUnnat;
+  const armour = targetActor.system?.armour ?? {};
+  const maxArmour = Math.max(
+    Number(armour.head?.value ?? 0),
+    Number(armour.body?.value ?? 0),
+    Number(armour.leftArm?.value ?? 0),
+    Number(armour.rightArm?.value ?? 0),
+    Number(armour.leftLeg?.value ?? 0),
+    Number(armour.rightLeg?.value ?? 0)
+  );
+  return maxArmour + tb;
+};
+const getHordeMagnitudeHits = ({ state, target }) => {
   const traits = parseWeaponTraits({ system: { special: state.weaponSpecial ?? "" } });
+  const inflictedHits = Number(target?.allocatedHits ?? 0);
+  const blast = parseTraitNumber(traits, "blast", 0);
+  const devastating = parseTraitNumber(traits, "devastating", 0);
+  const isFlame = hasTrait(traits, "flame");
   const explosive = hasTrait(traits, "explosive") || String(state.weaponType ?? "").toLowerCase().includes("explosive");
   const forceOrPower = hasTrait(traits, "force") || hasTrait(traits, "power");
+  let magnitude = inflictedHits;
+  if (isFlame) {
+    const range = Number(state.weaponRange ?? 0);
+    magnitude = Math.ceil(range / 4) + (Math.ceil(Math.random() * 5));
+  }
+  if (blast > 0) {
+    magnitude = blast;
+  }
   let bonus = (explosive || forceOrPower) ? 1 : 0;
   if (state.whirlwind?.active) {
     const wsb = Number(state.whirlwind.wsBonus ?? 0);
     bonus += Math.floor(wsb / 2);
   }
-  return Math.max(0, rolls.length + bonus);
+  return Math.max(0, magnitude + bonus + devastating);
 };
 
 const promptDamageDialog = async (state, chatMessage) => {
@@ -412,9 +456,16 @@ const promptDamageDialog = async (state, chatMessage) => {
               t.applySummary = null;
               t.damageApplicationData = buildDamageApplicationData({ state, target: t, rolls: damageRolls, hitLoc: getHitLocation(state.attackRoll || 50) });
               if (state.horde?.active) {
-                const magHits = getHordeMagnitudeHits({ state, rolls: damageRolls });
-                t.damageSummary = `<div><b>Horde Damage:</b> Rolled once for penetration (${damageRolls[0]?.total ?? 0}). <b>Magnitude Hits:</b> ${magHits}</div>`;
-                t.damageApplicationData.horde = { active: true, magnitudeHits: magHits };
+                const targetDoc = await fromUuid(t.tokenUuid ?? t.targetTokenUuid);
+                const soakThreshold = getHordeSoakThreshold(targetDoc?.actor);
+                const minDamage = estimateMinimumDamage(bonusFormula);
+                const canSkipRoll = Number.isFinite(minDamage) && minDamage > soakThreshold;
+                const magHits = getHordeMagnitudeHits({ state, target: t });
+                const rollNote = canSkipRoll
+                  ? `No damage roll required (minimum damage ${minDamage} exceeds soak ${soakThreshold}).`
+                  : `Rolled once for penetration (${damageRolls[0]?.total ?? 0}).`;
+                t.damageSummary = `<div><b>Horde Damage:</b> ${rollNote} <b>Magnitude Hits:</b> ${magHits}</div>`;
+                t.damageApplicationData.horde = { active: true, magnitudeHits: magHits, canSkipRoll, soakThreshold, minimumDamage: minDamage };
               }
             }
             resolve();
@@ -519,41 +570,9 @@ const runAttackWorkflow = async setup => {
 
   const modifierNotes = [mode.label];
   const selectedTalents = [];
-  const isInaccurate = hasTrait(traits, "inaccurate");
-  const isAccurate = hasTrait(traits, "accurate");
-  const isDefensive = hasTrait(traits, "defensive");
-  const isUnbalanced = hasTrait(traits, "unbalanced");
-  const isSpray = hasTrait(traits, "spray");
-  const isTwinLinked = hasTrait(traits, "twin-linked") || hasTrait(traits, "twin linked");
-
-  let effectiveAimMod = setup.aimMod;
-  if (isInaccurate && effectiveAimMod > 0) {
-    effectiveAimMod = 0;
-    modifierNotes.push("Inaccurate (ignores Aim)");
-  }
-
-  let sharedMod = mode.mod + setup.manualMod + effectiveAimMod;
+  let sharedMod = mode.mod + setup.manualMod + setup.aimMod;
   if (setup.manualMod) modifierNotes.push(`Manual ${setup.manualMod >= 0 ? "+" : ""}${setup.manualMod}`);
-  if (effectiveAimMod) modifierNotes.push(setup.aimLabel);
-
-  if (isAccurate && effectiveAimMod > 0) {
-    sharedMod += 10;
-    modifierNotes.push("Accurate +10");
-  }
-  if (isDefensive && !isMelee) {
-    sharedMod -= 10;
-    modifierNotes.push("Defensive -10");
-  }
-  if (isUnbalanced && isMelee && setup.modeKey === "lightning") {
-    return ui.notifications.warn("Unbalanced weapons cannot make Lightning Attack actions.");
-  }
-  if (isSpray && setup.modeKey === "called") {
-    return ui.notifications.warn("Spray weapons cannot make Called Shots.");
-  }
-  if (isTwinLinked && !isMelee) {
-    sharedMod += 20;
-    modifierNotes.push("Twin-Linked +20");
-  }
+  if (setup.aimMod) modifierNotes.push(setup.aimLabel);
 
   if (setup.isHorde && setup.hordeBonus) {
     sharedMod += setup.hordeBonus;
@@ -605,7 +624,7 @@ const runAttackWorkflow = async setup => {
   if (t.marksman && !isMelee) selectedTalents.push("Marksman (ignore Long/Extreme penalties)");
 
   const targets = setup.targetConfigs.map(conf => {
-    const effectiveRangeMod = isSpray ? 0 : ((!isMelee && t.marksman && conf.rangeMod < 0) ? 0 : conf.rangeMod);
+    const effectiveRangeMod = (!isMelee && t.marksman && conf.rangeMod < 0) ? 0 : conf.rangeMod;
     return ({
     tokenUuid: conf.tokenUuid,
     targetTokenUuid: conf.tokenUuid,
@@ -646,7 +665,7 @@ const runAttackWorkflow = async setup => {
     modeLabel: mode.label,
     powerModeLabel: powerMode.label,
     powerMultiplier: powerMode.multiplier,
-    aimLabel: effectiveAimMod > 0 ? setup.aimLabel : "No Aim",
+    aimLabel: setup.aimLabel,
     craftName: (weapon.system.craftsmanship ?? "Common"),
     modifierNotes,
     selectedTalents,
@@ -661,14 +680,6 @@ const runAttackWorkflow = async setup => {
     setupSnapshot: foundry.utils.deepClone(setup),
     targets,
     flags: { immediate: true }
-  };
-
-  state.qualityData = {
-    spray: isSpray,
-    twinLinked: isTwinLinked,
-    lancePenBonus: hasTrait(traits, "lance") ? Number(weapon.system.penetration || 0) : 0,
-    scatter: hasTrait(traits, "scatter"),
-    melta: hasTrait(traits, "melta")
   };
 
   const chatMessage = await ChatMessage.create({
@@ -693,13 +704,8 @@ const runAttackWorkflow = async setup => {
   };
 
   // immediate attack roll
-  let result = isSpray ? 1 : (await animatedRoll("1d100", chatMessage.speaker)).total;
+  let result = (await animatedRoll("1d100", chatMessage.speaker)).total;
   let { success, dos, jam, bestTN } = evaluateAttackResult({ result, targets: state.targets, weapon, traits });
-  if (isSpray) {
-    success = true;
-    dos = 1;
-    jam = false;
-  }
 
   if (!success) {
     const useFate = await promptAttackFateReroll({ actorDoc: attacker, rollValue: result, bestTN });
@@ -716,16 +722,18 @@ const runAttackWorkflow = async setup => {
     if (["semi", "suppressSemi"].includes(state.modeKey)) hits = Math.min(1 + Math.floor((dos - 1) / 2), rof.burst ?? 1);
     else if (["full", "suppressFull"].includes(state.modeKey)) hits = Math.min(dos, rof.full ?? 1);
   }
-  if (success && !isMelee && isTwinLinked && dos >= 2) {
-    hits += 1;
+  if (success && isMelee) {
+    const wsb = attacker.system.characteristics.weaponSkill?.bonus ?? 1;
+    if (state.horde?.active && state.modeKey !== "lightning") {
+      hits = Math.min(1 + Math.floor(Math.max(0, dos - 1) / 2), wsb);
+    } else if (state.modeKey === "swift") hits = Math.min(1 + Math.floor(Math.max(0, dos - 1) / 2), wsb);
+    else if (state.modeKey === "lightning") hits = Math.min(Math.max(1, dos), wsb);
   }
   if (success && hasTrait(traits, "storm")) {
     hits *= 2;
-  }
-  if (success && isMelee) {
-    const wsb = attacker.system.characteristics.weaponSkill?.bonus ?? 1;
-    if (state.modeKey === "swift") hits = Math.min(1 + Math.floor(Math.max(0, dos - 1) / 2), wsb);
-    else if (state.modeKey === "lightning") hits = Math.min(Math.max(1, dos), wsb);
+    if (["full", "suppressFull"].includes(state.modeKey)) {
+      hits = Math.min(hits, (rof.full ?? hits) * 2);
+    }
   }
 
   let ammoSpent = 0;
@@ -777,14 +785,6 @@ const runAttackWorkflow = async setup => {
   state.attackDegrees = success ? dos : -Math.max(1, 1 + Math.floor((result - bestTN) / 10));
   state.totalHits = state.targets.reduce((sum, tg) => sum + Number(tg.allocatedHits ?? 0), 0);
   state.statusText = jam ? "JAM" : (success ? (outOfAmmoAfter ? "HIT (OUT OF AMMO)" : "HIT") : "MISS");
-  if (hasTrait(traits, "overheats") && result >= 91) {
-    state.statusText = success ? "OVERHEAT" : "MISS / OVERHEAT";
-  }
-  if (hasTrait(traits, "lance") && dos > 0) {
-    const basePen = Number(weapon.system.penetration || 0);
-    state.weaponPen = basePen + (basePen * dos);
-    state.extraText = [state.extraText, `Lance: Pen ${basePen} + ${basePen}x${dos} = ${state.weaponPen}`].filter(Boolean).join(" | ");
-  }
   state.devastatingFollowUp = {
     available: !!(setup.toggles?.devastating && setup.modeKey === "allout" && state.totalHits > 0),
     prompted: false
@@ -944,6 +944,16 @@ const showAttackDialog = async () => {
         <table style="width:100%;"><thead><tr><th>Target</th><th>Distance</th><th>Range</th></tr></thead><tbody id="targetsBody"></tbody></table>
       </form>`,
       render: html => {
+        const syncHordeBonus = () => {
+          const isHorde = html.find("#horde")[0]?.checked;
+          const hordeInput = html.find("#hordeBonus");
+          hordeInput.prop("readonly", !!isHorde);
+          if (!isHorde) return;
+          const firstTarget = targetTokens[0]?.actor;
+          const magnitude = Number(firstTarget?.system?.wounds?.value ?? 0);
+          hordeInput.val(getHordeBonusFromMagnitude(magnitude));
+        };
+
         const refresh = () => {
           const weaponDoc = attacker.items.get(html.find("#weaponId").val());
           const mode = html.find("#modeKey");
@@ -963,6 +973,7 @@ const showAttackDialog = async () => {
           const showPower = ["las", "plasma"].includes(wType);
           html.find("#powerModeGroup").toggle(showPower);
           if (!showPower) html.find("#powerMode").val("1");
+          syncHordeBonus();
         };
 
         html.find("#talent_deadeye").prop("checked", hasTalent(attacker, "deadeye"));
@@ -1003,6 +1014,7 @@ const showAttackDialog = async () => {
         }
 
         html.find("#weaponId").on("change", refresh);
+        html.find("#horde").on("change", syncHordeBonus);
         refresh();
         if (pendingMirrorSetup) {
           html.find("#modeKey").val(pendingMirrorSetup.modeKey ?? html.find("#modeKey").val());
