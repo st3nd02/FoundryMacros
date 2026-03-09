@@ -162,12 +162,7 @@ const getHordeBonusFromMagnitude = magnitude => {
 
 const getHordeMagnitudeValue = actorDoc => {
   if (!actorDoc) return 0;
-  const candidateValues = [
-    actorDoc.system?.magnitude?.value,
-    actorDoc.system?.horde?.magnitude,
-    actorDoc.system?.wounds?.value,
-    actorDoc.system?.wounds?.max
-  ].map(v => Number(v));
+  const candidateValues = [actorDoc.system?.wounds?.value, actorDoc.system?.wounds?.max].map(v => Number(v));
   return candidateValues.find(v => Number.isFinite(v) && v >= 0) ?? 0;
 };
 
@@ -994,17 +989,25 @@ const showAttackDialog = async () => {
       content: `<form>
         <style>
           .attack-specifics-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; align-items:center; }
-          .attack-talents-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 8px; }
+          .attack-dialog-row-2col { display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; }
+          .attack-talents-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; align-items:start; }
+          .attack-talents-col { display:grid; gap:4px; }
           .talent-unavailable { color:#8a8a8a; }
           .talent-auto input { opacity:0.65; }
         </style>
         <div class="form-group"><label><b>Weapon</b></label><select id="weaponId">${weaponOptions}</select></div>
-        <div class="form-group"><label><b>Attack Type</b></label><select id="modeKey"></select></div>
+        <div class="attack-dialog-row-2col">
+          <div class="form-group"><label><b>Attack Type</b></label><select id="modeKey"></select></div>
+          <div class="form-group"><label><b>Weapon Range:</b> <span id="weaponRangeDisplay">—</span></label></div>
+        </div>
+        <div class="attack-dialog-row-2col">
+          <div class="form-group"><label><b>Aim</b></label><select id="aimMod"><option value="0">No Aim</option><option value="10">Half Aim (+10)</option><option value="20">Full Aim (+20)</option></select></div>
+          <div class="form-group"><label><b>Craftsmanship:</b> <span id="weaponCraftDisplay">—</span></label></div>
+        </div>
         <div class="form-group"><label><b>Modifier</b></label><input id="manualMod" type="number" value="0"/></div>
-        <div class="form-group"><label><b>Aim</b></label><select id="aimMod"><option value="0">No Aim</option><option value="10">Half Aim (+10)</option><option value="20">Full Aim (+20)</option></select></div>
-        <div class="form-group"><label><b>Weapon Range:</b> <span id="weaponRangeDisplay">—</span></label></div>
-        <div class="form-group"><label><b>Craftsmanship:</b> <span id="weaponCraftDisplay">—</span></label></div>
+        <div class="form-group"><label><b>Weapon Modifications:</b> <span id="detectedItems">—</span></label></div>
         <div class="form-group"><label><b>Weapon Traits:</b> <span id="weaponTraitsDisplay">—</span></label></div>
+        <hr><h3>Attack Specifics</h3>
         <div class="attack-specifics-grid">
           <div class="form-group"><label><input type="checkbox" id="horde"/> Horde?</label></div>
           <div class="form-group"><label><b>Horde Size Modifier</b></label><input id="hordeBonus" type="number" value="0"/></div>
@@ -1015,26 +1018,28 @@ const showAttackDialog = async () => {
         <div class="form-group" id="forceChannelGroup" style="display:none;"><label><input type="checkbox" id="talent_force_channel"/> Force Channeling</label></div>
         <hr><h3>Talents</h3>
         <div class="attack-talents-grid">
-          <label class="talent-toggle" data-needle="deadeye"><input type="checkbox" id="talent_deadeye"/> Deadeye Shot</label>
-          <label class="talent-toggle talent-auto" data-needle="marksman"><input type="checkbox" id="talent_marksman" disabled/> Marksman (auto)</label>
-          <label class="talent-toggle" data-needle="double tap"><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
-          <label class="talent-toggle" data-needle="target selection"><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
-          <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
-          <label class="talent-toggle" data-needle="blademaster"><input type="checkbox" id="talent_blademaster"/> Blademaster</label>
-          <label class="talent-toggle" data-needle="whirlwind"><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
-          <label class="talent-toggle" data-needle="berserk charge"><input type="checkbox" id="talent_berserk"/> Berserk Charge</label>
-          <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (melee)"><input type="checkbox" id="talent_twm_melee" disabled/> Two-Weapon Wielder (Melee) (auto)</label>
-          <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (ranged)"><input type="checkbox" id="talent_twm_ranged" disabled/> Two-Weapon Wielder (Ranged) (auto)</label>
-          <label class="talent-toggle talent-auto" data-needle="ambidextrous"><input type="checkbox" id="talent_ambi" disabled/> Ambidextrous (auto)</label>
-          <label class="talent-toggle talent-auto" data-needle="two weapon master"><input type="checkbox" id="talent_master" disabled/> Two Weapon Master (auto)</label>
-          <label class="talent-toggle talent-auto" data-needle="mighty shot"><input type="checkbox" id="talent_mighty" disabled/> Mighty Shot (auto)</label>
-          <label class="talent-toggle talent-auto" data-needle="crushing blow"><input type="checkbox" id="talent_crushing" disabled/> Crushing Blow (auto)</label>
-          <label class="talent-toggle talent-auto" data-needle="hammer blow"><input type="checkbox" id="talent_hammer" disabled/> Hammer Blow (auto)</label>
-          <label class="talent-toggle talent-auto" data-needle="flesh render"><input type="checkbox" id="talent_flesh" disabled/> Flesh Render (auto)</label>
-          <label class="talent-toggle talent-auto" data-needle="raptor"><input type="checkbox" id="talent_raptor" disabled/> Raptor (auto)</label>
+          <div class="attack-talents-col">
+            <label class="talent-toggle" data-needle="double tap"><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
+            <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
+            <label class="talent-toggle" data-needle="whirlwind"><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
+            <label class="talent-toggle talent-auto" data-needle="marksman"><input type="checkbox" id="talent_marksman" disabled/> Marksman (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="deadeye"><input type="checkbox" id="talent_deadeye" disabled/> Deadeye Shot (auto)</label>
+            <label class="talent-toggle" data-needle="target selection"><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
+            <label class="talent-toggle" data-needle="blademaster"><input type="checkbox" id="talent_blademaster"/> Blademaster</label>
+            <label class="talent-toggle" data-needle="berserk charge"><input type="checkbox" id="talent_berserk"/> Berserk Charge</label>
+            <label class="talent-toggle talent-auto" data-needle="flesh render"><input type="checkbox" id="talent_flesh" disabled/> Flesh Render (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="raptor"><input type="checkbox" id="talent_raptor" disabled/> Raptor (auto)</label>
+          </div>
+          <div class="attack-talents-col">
+            <label class="talent-toggle talent-auto" data-needle="crushing blow"><input type="checkbox" id="talent_crushing" disabled/> Crushing Blow (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="mighty shot"><input type="checkbox" id="talent_mighty" disabled/> Mighty Shot (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="hammer blow"><input type="checkbox" id="talent_hammer" disabled/> Hammer Blow (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (melee)"><input type="checkbox" id="talent_twm_melee" disabled/> Two-Weapon Wielder (Melee) (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="ambidextrous"><input type="checkbox" id="talent_ambi" disabled/> Ambidextrous (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (ranged)"><input type="checkbox" id="talent_twm_ranged" disabled/> Two-Weapon Wielder (Ranged) (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="two weapon master"><input type="checkbox" id="talent_master" disabled/> Two Weapon Master (auto)</label>
+          </div>
         </div>
-        <hr><h3>Weapon Modifications (auto-detected on selected weapon)</h3>
-        <div id="detectedItems" style="padding:6px;border:1px solid #555;border-radius:6px;">—</div>
         <hr><h3>Targets</h3>
         <table style="width:100%;"><thead><tr><th>Target</th><th>Distance</th><th>Range</th></tr></thead><tbody id="targetsBody"></tbody></table>
       </form>`,
