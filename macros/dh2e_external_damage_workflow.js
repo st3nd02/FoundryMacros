@@ -243,7 +243,11 @@ new Dialog({
 
         const diceCount = Number(html.find("#diceCount").val());
         const dieType = html.find('input[name="dieType"]:checked').val();
+        let properties = [];
         let flat = Number(html.find("#flat").val());
+        const craftsmanship = String(weapon.system.craftsmanship ?? "").toLowerCase();
+        const meleeBestCraft = craftsmanship === "best" && String(weapon.system.class || "").toLowerCase() === "melee";
+        if (meleeBestCraft) { flat += 1; properties.push("Best Craftsmanship +1"); }
         let pen = Number(html.find("#pen").val());
         const dos = Number(html.find("#dos").val());
         const tearing = html.find("#tearing")[0].checked;
@@ -264,9 +268,7 @@ new Dialog({
         const primitiveVal = Number(html.find("#primitiveVal").val());
         const aim = html.find("#aim").val();
 
-        let properties = [];
-
-        if (hasMighty && isRanged) {
+        if (hasMighty && isRanged && !special.includes("grenade")) {
           const bsb = actor.system.characteristics.ballisticSkill.bonus;
           const bonus = Math.ceil(bsb / 2);
           flat += bonus;
