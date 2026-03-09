@@ -380,10 +380,12 @@ new Dialog({
         }
 
         const hits = attackData.hits;
-        const hitLocations = buildHitLocations(attackData.location || "Body", hits);
+        const firstLocation = spray ? "Body" : (attackData.location || "Body");
+        const hitLocations = buildHitLocations(firstLocation, hits);
         const hitsData = [];
         const damageResults = [];
         const furyQueue = [];
+        let sprayJam = false;
 
         for (let h = 1; h <= hits; h++) {
           const roll = new Roll(formula);
@@ -393,7 +395,7 @@ new Dialog({
           const flatBonus = roll.total - dice.reduce((a, b) => a + b, 0);
           const lowestIndex = dice.indexOf(Math.min(...dice));
           const modDice = [...dice];
-          modDice[lowestIndex] = Math.max(modDice[lowestIndex], dos);
+          if (!spray) modDice[lowestIndex] = Math.max(modDice[lowestIndex], dos);
           if (proven) modDice[lowestIndex] = Math.max(modDice[lowestIndex], provenVal);
           if (primitive) modDice[lowestIndex] = Math.min(modDice[lowestIndex], primitiveVal);
           const total = modDice.reduce((a, b) => a + b, 0) + flatBonus;
@@ -402,7 +404,8 @@ new Dialog({
           hitsData.push({ hit: h, location: hitLocations[h - 1], damage: total, fury: null });
 
           const dieMax = Number(dieType);
-          const furyNumbers = gauss && dieMax === 10 ? [9, 10] : [dieMax];
+          const furyNumbers = spray ? [dieMax] : (gauss && dieMax === 10 ? [9, 10] : [dieMax]);
+          if (spray && dice.some(d => d === 9)) sprayJam = true;
           if (dice.some(d => furyNumbers.includes(d))) {
             furyQueue.push(h);
           }
@@ -495,6 +498,10 @@ new Dialog({
           ? `<div><b>Force Opposed WP</b> Attacker ${traitTests.force.attackerRoll}/${traitTests.force.attackerWP} (DoS ${traitTests.force.attackerDoS}) vs Target ${traitTests.force.targetRoll}/${traitTests.force.targetWP} (DoS ${traitTests.force.targetDoS}) → <b>${traitTests.force.won ? `Attacker Wins (${traitTests.force.dos}d10 = ${traitTests.force.result})` : "Target Resists"}</b></div>`
           : "";
 
+        const sprayJamHtml = sprayJam
+          ? `<hr><div style="color:#b267ff;font-weight:bold;">Spray Jam triggered (damage die result of 9).</div>`
+          : "";
+
         const furyHtml = furyResults.length
           ? `<hr><div style="color:gold;font-size:1.1em;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">✦ RIGHTEOUS FURY ✦</div>${furyResults.map((f, i) => `<div>${i + 1}. <b>Location:</b> <i>${f.location}</i> — Righteous Fury: <b>${f.result}</b></div>`).join("")}`
           : "";
@@ -505,7 +512,7 @@ new Dialog({
 <div><b>Penetration:</b> ${pen}</div>
 ${damageResults.map((d, i) => `<div><b>Hit ${i + 1}</b> (${hitLocations[i]}): <b>${d}</b></div>`).join("")}
 <div style="margin-top:6px;"><b>Properties:</b> ${properties.join(", ") || "None"}</div>
-${testSummary}${forceSummary}
+${testSummary}${forceSummary}${sprayJamHtml}
 ${furyHtml}
 </div>`;
 
@@ -533,6 +540,7 @@ ${furyHtml}
               toxic: traitTests.toxic,
               flame: traitTests.flame,
               spray: traitTests.spray,
+              sprayJam,
               force: traitTests.force
             };
           }
@@ -557,6 +565,7 @@ ${furyHtml}
           toxic: traitTests.toxic,
           flame: traitTests.flame,
           spray: traitTests.spray,
+          sprayJam,
           force: traitTests.force,
           chatMessageId: entry.msg.id
         };
