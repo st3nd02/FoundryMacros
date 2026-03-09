@@ -231,7 +231,6 @@ const allocateHits = ({ totalHits, modeKey, targets, rof }) => {
   const byTarget = new Map(targets.map(t => [t.tokenUuid, 0]));
   if (totalHits <= 0 || !targets.length) return byTarget;
   let remaining = totalHits;
-  if (modeKey === "full" || modeKey === "suppressFull") remaining = Math.min(remaining, rof.full ?? remaining);
   let idx = 0;
   while (remaining > 0) {
     const t = targets[idx % targets.length];
@@ -733,11 +732,11 @@ const runAttackWorkflow = async setup => {
     return { cappedHits: Math.min(rawHits, used), spent: used, outOfAmmo: newClip <= 0 };
   };
 
-  // immediate attack roll
-  let result = (await animatedRoll("1d100", chatMessage.speaker)).total;
+  // immediate attack roll (Spray auto-hits as if attack roll were 1)
+  let result = isSpray ? 1 : (await animatedRoll("1d100", chatMessage.speaker)).total;
   let { success, dos, jam, bestTN } = evaluateAttackResult({ result, targets: state.targets, weapon, traits });
 
-  if (!success) {
+  if (!isSpray && !success) {
     const useFate = await promptAttackFateReroll({ actorDoc: attacker, rollValue: result, bestTN });
     if (useFate) {
       await attacker.update({ "system.fate.value": Math.max(0, (attacker.system.fate?.value ?? 0) - 1) });
