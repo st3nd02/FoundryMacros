@@ -651,6 +651,12 @@ const runAttackWorkflow = async setup => {
   if ((t.reddot || t.omni) && !isMelee && ["single", "called"].includes(setup.modeKey)) { sharedMod += 10; selectedTalents.push("Red-Dot +10"); }
   if (t.berserk && isMelee && setup.modeKey === "charge") { sharedMod += 10; selectedTalents.push("Berserk Charge +10"); }
   if (t.marksman && !isMelee) selectedTalents.push("Marksman (ignore Long/Extreme penalties)");
+  if (t.mighty) selectedTalents.push("Mighty Shot");
+  if (t.crushing) selectedTalents.push("Crushing Blow");
+  if (t.hammer) selectedTalents.push("Hammer Blow");
+  if (t.flesh) selectedTalents.push("Flesh Render");
+  if (t.raptor) selectedTalents.push("Raptor");
+  if (t.forceChannel) selectedTalents.push("Force Channeling");
 
   const targets = setup.targetConfigs.map(conf => {
     const effectiveRangeMod = (!isMelee && t.marksman && conf.rangeMod < 0) ? 0 : conf.rangeMod;
@@ -698,6 +704,8 @@ const runAttackWorkflow = async setup => {
     craftName: (weapon.system.craftsmanship ?? "Common"),
     modifierNotes,
     selectedTalents,
+    attackTalentsUsed: selectedTalents,
+    forceChanneling: !!setup.toggles?.forceChannel,
     attackRoll: null,
     dos: 0,
     totalHits: 0,
@@ -964,6 +972,7 @@ const showAttackDialog = async () => {
         <div class="form-group"><label><input type="checkbox" id="shootMelee"/> Shooting into Melee?</label></div>
         <div class="form-group"><label><input type="checkbox" id="twoWeaponAttack"/> Two-Weapon Attack?</label></div>
         <div class="form-group" id="powerModeGroup"><label><b>Power Mode</b></label><select id="powerMode"><option value="1">Normal</option><option value="2">Overcharge (×2)</option><option value="4">Overload (×4)</option><option value="3">Maximal (×3)</option></select></div>
+        <div class="form-group" id="forceChannelGroup" style="display:none;"><label><input type="checkbox" id="talent_force_channel"/> Force Channeling</label></div>
         <div class="form-group"><label><b>Weapon Range:</b> <span id="weaponRangeDisplay">—</span></label></div>
         <hr><h3>Talents</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;">
@@ -979,6 +988,11 @@ const showAttackDialog = async () => {
           <label><input type="checkbox" id="talent_twm_ranged"/> Two-Weapon Wielder (Ranged)</label>
           <label><input type="checkbox" id="talent_ambi"/> Ambidextrous</label>
           <label><input type="checkbox" id="talent_master"/> Two Weapon Master</label>
+          <label><input type="checkbox" id="talent_mighty"/> Mighty Shot</label>
+          <label><input type="checkbox" id="talent_crushing"/> Crushing Blow</label>
+          <label><input type="checkbox" id="talent_hammer"/> Hammer Blow</label>
+          <label><input type="checkbox" id="talent_flesh"/> Flesh Render</label>
+          <label><input type="checkbox" id="talent_raptor"/> Raptor</label>
         </div>
         <hr><h3>Weapon Modifications (auto-detected on selected weapon)</h3>
         <div id="detectedItems" style="padding:6px;border:1px solid #555;border-radius:6px;">—</div>
@@ -1015,6 +1029,11 @@ const showAttackDialog = async () => {
           const showPower = ["las", "plasma"].includes(wType);
           html.find("#powerModeGroup").toggle(showPower);
           if (!showPower) html.find("#powerMode").val("1");
+
+          const traits = parseWeaponTraits(weaponDoc ?? { system: { special: "" } });
+          const forceWeapon = hasTrait(traits, "force");
+          html.find("#forceChannelGroup").toggle(!!forceWeapon);
+          if (!forceWeapon) html.find("#talent_force_channel").prop("checked", false);
           syncHordeBonus();
         };
 
@@ -1030,6 +1049,11 @@ const showAttackDialog = async () => {
         html.find("#talent_twm_ranged").prop("checked", hasTalent(attacker, "two-weapon wielder (ranged)"));
         html.find("#talent_ambi").prop("checked", hasTalent(attacker, "ambidextrous"));
         html.find("#talent_master").prop("checked", hasTalent(attacker, "two weapon master"));
+        html.find("#talent_mighty").prop("checked", hasTalent(attacker, "mighty shot"));
+        html.find("#talent_crushing").prop("checked", hasTalent(attacker, "crushing blow"));
+        html.find("#talent_hammer").prop("checked", hasTalent(attacker, "hammer blow"));
+        html.find("#talent_flesh").prop("checked", hasTalent(attacker, "flesh render"));
+        html.find("#talent_raptor").prop("checked", hasTalent(attacker, "raptor"));
 
         if (pendingMirrorSetup) {
           html.find("#weaponId").val(pendingMirrorSetup.weaponId ?? html.find("#weaponId").val());
@@ -1053,6 +1077,12 @@ const showAttackDialog = async () => {
           html.find("#talent_twm_ranged").prop("checked", !!pt.twmRanged);
           html.find("#talent_ambi").prop("checked", !!pt.ambi);
           html.find("#talent_master").prop("checked", !!pt.master);
+          html.find("#talent_mighty").prop("checked", !!pt.mighty);
+          html.find("#talent_crushing").prop("checked", !!pt.crushing);
+          html.find("#talent_hammer").prop("checked", !!pt.hammer);
+          html.find("#talent_flesh").prop("checked", !!pt.flesh);
+          html.find("#talent_raptor").prop("checked", !!pt.raptor);
+          html.find("#talent_force_channel").prop("checked", !!pt.forceChannel);
         }
 
         html.find("#weaponId").on("change", refresh);
@@ -1107,7 +1137,13 @@ const showAttackDialog = async () => {
                 twmMelee: html.find("#talent_twm_melee")[0].checked,
                 twmRanged: html.find("#talent_twm_ranged")[0].checked,
                 ambi: html.find("#talent_ambi")[0].checked,
-                master: html.find("#talent_master")[0].checked
+                master: html.find("#talent_master")[0].checked,
+                mighty: html.find("#talent_mighty")[0].checked,
+                crushing: html.find("#talent_crushing")[0].checked,
+                hammer: html.find("#talent_hammer")[0].checked,
+                flesh: html.find("#talent_flesh")[0].checked,
+                raptor: html.find("#talent_raptor")[0].checked,
+                forceChannel: html.find("#talent_force_channel")[0].checked
               },
               detectedItems: detectWeaponItems(attacker, attacker.items.get(html.find("#weaponId").val()))
             });

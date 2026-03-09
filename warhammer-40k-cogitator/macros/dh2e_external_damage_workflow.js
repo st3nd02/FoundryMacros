@@ -97,10 +97,6 @@ for (const msg of game.messages.contents) {
 
 if (!pending.length) return ui.notifications.warn("No pending damage found in workflows for this attacker.");
 
-const hasTalent = name => actor.items.some(i => i.type === "talent" && i.name.toLowerCase().includes(name.toLowerCase()));
-const hasMighty = hasTalent("mighty shot");
-const hasCrushing = hasTalent("crushing blow");
-
 const optionHtml = pending.map((p, i) => {
   const selected = pendingDamageContext?.chatMessageId === p.msg.id && pendingDamageContext?.targetTokenUuid === p.targetUuid ? "selected" : "";
   return `<option value="${i}" ${selected}>${p.state.attackerName} -> ${p.target.name} (${p.target.allocatedHits} hits) [${p.state.weaponName}]</option>`;
@@ -127,7 +123,7 @@ const attackData = {
   target: entry.target.name,
   targetTokenUuid: entry.targetUuid,
   weapon: entry.state.weaponName,
-  hits: entry.target.allocatedHits,
+  hits: entry.state?.horde?.active ? 1 : entry.target.allocatedHits,
   dos: entry.state.dos ?? 0,
   location: getHitLocation(entry.state.attackRoll ?? 50)
 };
@@ -186,52 +182,16 @@ new Dialog({
 <input type="number" id="dos" value="${attackData.dos}"><br></label><br>
 </div>
 <hr>
-<h3>Weapon Traits</h3>
-<div style="columns:2; column-gap:25px;">
-<label><input type="checkbox" id="tearing" ${special.includes("tearing") ? "checked" : ""}> Tearing</label><br>
-<label><input type="checkbox" id="proven" ${special.includes("proven") ? "checked" : ""}> Proven</label>
-<input type="number" id="provenVal" value="${parseVal(special, "proven", 3)}" style="width:45px"><br>
-<label><input type="checkbox" id="primitive" ${special.includes("primitive") ? "checked" : ""}> Primitive</label>
-<input type="number" id="primitiveVal" value="${parseVal(special, "primitive", 8)}" style="width:45px"><br>
-<label><input type="checkbox" id="accurate" ${special.includes("accurate") ? "checked" : ""}> Accurate</label>
-<select id="aim"><option value="no">No Aim</option><option value="yes">Aim</option></select><br>
-<label><input type="checkbox" id="gauss" ${special.includes("gauss") ? "checked" : ""}> Gauss</label><br>
-<label><input type="checkbox" id="razor" ${special.includes("razor") ? "checked" : ""}> Razor Sharp</label><br>
-<label><input type="checkbox" id="flame" ${special.includes("flame") ? "checked" : ""}> Flame</label><br>
-<label><input type="checkbox" id="spray" ${special.includes("spray") ? "checked" : ""}> Spray</label><br>
-<label><input type="checkbox" id="toxic" ${special.includes("toxic") ? "checked" : ""}> Toxic</label>
-<input type="number" id="toxicVal" value="${parseVal(special, "toxic", 1)}" style="width:45px"><br>
-<label><input type="checkbox" id="melta" ${special.includes("melta") ? "checked" : ""}> Melta</label>
-<select id="meltaRange"><option>Normal</option><option>Short</option><option>Point Blank</option><option>Long</option></select><br>
-<label><input type="checkbox" id="scatter" ${special.includes("scatter") ? "checked" : ""}> Scatter</label>
-<select id="scatterRange"><option>Normal</option><option>Short</option><option>Point Blank</option><option>Long</option></select><br>
-<label><input type="checkbox" id="felling" ${special.includes("felling") ? "checked" : ""}> Felling</label>
-<input type="number" id="fellingVal" value="${parseVal(special, "felling", 0)}" style="width:45px"><br>
-<label><input type="checkbox" id="devastating" ${special.includes("devastating") ? "checked" : ""}> Devastating</label>
-<input type="number" id="devastatingVal" value="${parseVal(special, "devastating", 0)}" style="width:45px"><br>
-<label><input type="checkbox" id="blast" ${special.includes("blast") ? "checked" : ""}> Blast</label>
-<input type="number" id="blastVal" value="${parseVal(special, "blast", 0)}" style="width:45px"><br>
-<label><input type="checkbox" id="concussive" ${special.includes("concussive") ? "checked" : ""}> Concussive</label>
-<input type="number" id="concussiveVal" value="${parseVal(special, "concussive", 0)}" style="width:45px"><br>
-<label><input type="checkbox" id="crippling" ${special.includes("crippling") ? "checked" : ""}> Crippling</label>
-<input type="number" id="cripplingVal" value="${parseVal(special, "crippling", 0)}" style="width:45px"><br>
-<label><input type="checkbox" id="force" ${special.includes("force") ? "checked" : ""}> Force</label>
-<select id="forceChannel"><option value="no">No Channel</option><option value="yes">Channel</option></select><br>
-<label><input type="checkbox" id="power" ${special.includes("power field") ? "checked" : ""}> Power</label><br>
-<label><input type="checkbox" id="hallucinogenic" ${special.includes("hallucinogenic") ? "checked" : ""}> Hallucinogenic</label>
-<input type="number" id="hallucinogenicVal" value="${parseVal(special, "hallucinogenic", 0)}" style="width:45px"><br>
-<label><input type="checkbox" id="haywire" ${special.includes("haywire") ? "checked" : ""}> Haywire</label>
-<input type="number" id="haywireVal" value="${parseVal(special, "haywire", 0)}" style="width:45px"><br>
-</div>
-<hr>
-<h3>Damage Talents / Gear</h3>
-<div style="columns:2; column-gap:25px;">
-<label><input type="checkbox" id="talent_mighty" ${hasMighty ? "checked" : ""}> Mighty Shot</label><br>
-<label><input type="checkbox" id="talent_crushing" ${hasCrushing ? "checked" : ""}> Crushing Blow</label><br>
-<label><input type="checkbox" id="talent_hammer"> Hammer Blow</label><br>
-<label><input type="checkbox" id="talent_flesh" ${hasTalent("flesh render") ? "checked" : ""}> Flesh Render</label><br>
-<label><input type="checkbox" id="talent_raptor"> Raptor</label><br>
-</div>
+<h3>Attack Context (read-only)</h3>
+<textarea id="attackContext" style="width:100%;height:140px;" readonly>${[
+  `Talents/Items: ${(entry.state.selectedTalents ?? []).join(", ") || "None"}`,
+  `Weapon Traits: ${special || "None"}`,
+  `Power Mode: ${entry.state.powerModeLabel ?? "Normal"}`,
+  `Mode of Fire/Attack: ${entry.state.modeLabel ?? "—"}`,
+  `Hits: ${attackData.hits}`,
+  `DoS: ${attackData.dos}`,
+  `Modifiers: ${(entry.state.modifierNotes ?? []).join(", ") || "None"}`
+].join("\n")}</textarea>
 </form>
 `,
   buttons: {
@@ -251,37 +211,46 @@ new Dialog({
         if (meleeBestCraft) { flat += 1; properties.push("Best Craftsmanship +1"); }
         let pen = Number(html.find("#pen").val());
         const dos = Number(html.find("#dos").val());
-        const tearing = html.find("#tearing")[0].checked;
-        const proven = html.find("#proven")[0].checked;
-        const primitive = html.find("#primitive")[0].checked;
-        const accurate = html.find("#accurate")[0].checked;
-        const gauss = html.find("#gauss")[0].checked;
-        const force = html.find("#force")[0].checked;
-        const razor = html.find("#razor")[0].checked;
-        const melta = html.find("#melta")[0].checked;
-        const scatter = html.find("#scatter")[0].checked;
-        const hammer = html.find("#talent_hammer")[0]?.checked;
-        const flesh = html.find("#talent_flesh")[0]?.checked;
-        const raptor = html.find("#talent_raptor")[0]?.checked;
-        const meltaRange = html.find("#meltaRange").val();
-        const scatterRange = html.find("#scatterRange").val();
-        const provenVal = Number(html.find("#provenVal").val());
-        const primitiveVal = Number(html.find("#primitiveVal").val());
-        const aim = html.find("#aim").val();
-        const spray = html.find("#spray")[0]?.checked;
-        const flame = html.find("#flame")[0]?.checked;
-        const toxic = html.find("#toxic")[0]?.checked;
+        const traitsText = String(weapon.system.special ?? "").toLowerCase();
+        const hasTrait = (name) => traitsText.includes(name);
+        const tearing = hasTrait("tearing");
+        const proven = hasTrait("proven");
+        const primitive = hasTrait("primitive");
+        const accurate = hasTrait("accurate");
+        const gauss = hasTrait("gauss");
+        const force = hasTrait("force");
+        const razor = hasTrait("razor");
+        const melta = hasTrait("melta");
+        const scatter = hasTrait("scatter");
+        const spray = hasTrait("spray");
+        const flame = hasTrait("flame");
+        const toxic = hasTrait("toxic");
+        const parseTraitVal = (name, d=0) => {
+          const mm = traitsText.match(new RegExp(name + "\\s*\\((\\d+)\\)"));
+          return mm ? Number(mm[1]) : d;
+        };
+        const hammer = !!entry.state?.toggles?.hammer;
+        const flesh = !!entry.state?.toggles?.flesh;
+        const raptor = !!entry.state?.toggles?.raptor;
+        const mighty = !!entry.state?.toggles?.mighty;
+        const crushing = !!entry.state?.toggles?.crushing;
+        const forceChannel = !!entry.state?.forceChanneling;
+        const meltaRange = "Short";
+        const scatterRange = "Short";
+        const provenVal = parseTraitVal("proven", 3);
+        const primitiveVal = parseTraitVal("primitive", 8);
+        const aim = Number(entry.state?.aimMod ?? 0) > 0 ? "yes" : "no";
 
         const calcDoS = (target, roll) => roll <= target ? (1 + Math.floor((target - roll) / 10)) : 0;
 
-        if (hasMighty && isRanged && !special.includes("grenade")) {
+        if (mighty && isRanged && !special.includes("grenade")) {
           const bsb = actor.system.characteristics.ballisticSkill.bonus;
           const bonus = Math.ceil(bsb / 2);
           flat += bonus;
           properties.push(`Mighty Shot +${bonus}`);
         }
 
-        if (hasCrushing && isMelee) {
+        if (crushing && isMelee) {
           const wsb = actor.system.characteristics.weaponSkill.bonus;
           const bonus = Math.ceil(wsb / 2);
           flat += bonus;
@@ -293,12 +262,6 @@ new Dialog({
           const bonus = Math.ceil(sb / 2);
           pen += bonus;
           properties.push(`Hammer Blow Pen +${bonus}`);
-          const concBox = html.find("#concussive")[0];
-          const concValField = html.find("#concussiveVal");
-          let current = 0;
-          if (concBox?.checked) current = Number(concValField.val() || 0);
-          concBox.checked = true;
-          concValField.val(current + 2);
         }
 
         if (scatter && (scatterRange === "Short" || scatterRange === "Point Blank")) {
@@ -319,7 +282,7 @@ new Dialog({
           properties.push(`SB (${strBonus}+${strUnnatural})`);
         }
 
-        if (force) {
+        if (force && forceChannel) {
           const psyRating = actor.system.psy?.rating || 0;
           flat += psyRating;
           pen += psyRating;
@@ -393,11 +356,18 @@ new Dialog({
           if (game.dice3d) await game.dice3d.showForRoll(roll, game.user, true);
           const dice = roll.dice[0]?.results.map(r => r.result) ?? [];
           const flatBonus = roll.total - dice.reduce((a, b) => a + b, 0);
-          const lowestIndex = dice.indexOf(Math.min(...dice));
+          const allResults = roll.dice[0]?.results ?? [];
+          const activeIndexes = allResults
+            .map((r, idx) => ({ idx, v: Number(r.result ?? 0), active: r.active !== false && !r.discarded }))
+            .filter(r => r.active)
+            .map(r => r.idx);
           const modDice = [...dice];
-          if (!spray) modDice[lowestIndex] = Math.max(modDice[lowestIndex], dos);
-          if (proven) modDice[lowestIndex] = Math.max(modDice[lowestIndex], provenVal);
-          if (primitive) modDice[lowestIndex] = Math.min(modDice[lowestIndex], primitiveVal);
+          if (!spray && activeIndexes.length) {
+            const minActive = activeIndexes.reduce((best, idx) => (modDice[idx] < modDice[best] ? idx : best), activeIndexes[0]);
+            modDice[minActive] = Math.max(modDice[minActive], dos);
+            if (proven) modDice[minActive] = Math.max(modDice[minActive], provenVal);
+            if (primitive) modDice[minActive] = Math.min(modDice[minActive], primitiveVal);
+          }
           const total = modDice.reduce((a, b) => a + b, 0) + flatBonus;
 
           damageResults.push(total);
@@ -436,7 +406,7 @@ new Dialog({
         };
 
         if (toxic) {
-          const toxicValue = Number(html.find("#toxicVal").val() || 0);
+          const toxicValue = parseTraitVal("toxic", 1);
           const test = await rollCharacteristicTest({
             total: targetActor?.system?.characteristics?.toughness?.total ?? 0,
             label: "Toughness",
@@ -468,7 +438,7 @@ new Dialog({
           properties.push("Spray");
         }
 
-        if (force) {
+        if (force && forceChannel) {
           const attackerWP = Number(actor.system?.characteristics?.willpower?.total ?? 0);
           const targetWP = Number(targetActor?.system?.characteristics?.willpower?.total ?? 0);
           const attackerRoll = await new Roll("1d100").evaluate();

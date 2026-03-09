@@ -856,20 +856,9 @@ if (selectedEntry.msg && selectedEntry.state) {
       .every(t => t.damageApplied);
 
     if (allApplied && latest.devastatingFollowUp?.available && !latest.devastatingFollowUp?.prompted) {
-      const attackerActor = game.actors.get(latest.attackerActorId);
-      const ownerLevel = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
-      const ownerIds = game.users
-        .filter(u => u.active && attackerActor?.testUserPermission(u, ownerLevel))
-        .map(u => u.id);
-
-      const setup = foundry.utils.deepClone(latest.setupSnapshot ?? {});
-      setup.modeKey = "allout";
-      setup.skipAllOutReactionConsume = true;
-
-      game.warhammer40kCogitator?.emitSocket?.("mirrorAttackReady", {
-        ownerIds,
-        attackerName: latest.attackerName,
-        setup
+      ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor: game.actors.get(latest.attackerActorId) ?? actor }),
+        content: "<b>Devastating Assault hit, Make a second All-Out Attack against the same target</b>"
       });
 
       latest.devastatingFollowUp.prompted = true;
