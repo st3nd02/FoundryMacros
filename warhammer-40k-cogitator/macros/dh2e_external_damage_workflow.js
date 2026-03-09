@@ -196,6 +196,8 @@ new Dialog({
 <label><input type="checkbox" id="accurate" ${special.includes("accurate") ? "checked" : ""}> Accurate</label>
 <select id="aim"><option value="no">No Aim</option><option value="yes">Aim</option></select><br>
 <label><input type="checkbox" id="gauss" ${special.includes("gauss") ? "checked" : ""}> Gauss</label><br>
+<label><input type="checkbox" id="vengeful" ${special.includes("vengeful") ? "checked" : ""}> Vengeful</label>
+<input type="number" id="vengefulVal" value="${parseVal(special, "vengeful", 10)}" style="width:45px"><br>
 <label><input type="checkbox" id="razor" ${special.includes("razor") ? "checked" : ""}> Razor Sharp</label><br>
 <label><input type="checkbox" id="flame" ${special.includes("flame") ? "checked" : ""}> Flame</label><br>
 <label><input type="checkbox" id="toxic" ${special.includes("toxic") ? "checked" : ""}> Toxic</label>
@@ -255,6 +257,8 @@ new Dialog({
         const primitive = html.find("#primitive")[0].checked;
         const accurate = html.find("#accurate")[0].checked;
         const gauss = html.find("#gauss")[0].checked;
+        const vengeful = html.find("#vengeful")[0]?.checked;
+        const vengefulVal = Number(html.find("#vengefulVal").val() || 10);
         const force = html.find("#force")[0].checked;
         const razor = html.find("#razor")[0].checked;
         const melta = html.find("#melta")[0].checked;
@@ -332,10 +336,10 @@ new Dialog({
           properties.push("Tearing");
         }
 
-        if (accurate && aim === "yes") {
-          const extra = Math.min(Math.floor(dos / 2), 2);
+        if (accurate && aim === "yes" && isRanged && (entry.state?.modeKey === "single" || entry.state?.modeKey === "called") && wClass === "basic") {
+          const extra = Math.min(Math.floor(Math.max(0, dos - 1) / 2), 2);
           if (extra > 0) formula += ` + ${extra}d${dieType}`;
-          properties.push("Accurate");
+          properties.push(`Accurate${extra > 0 ? ` +${extra}d${dieType}` : ""}`);
         }
 
         if (raptor && isMelee) {
@@ -396,7 +400,8 @@ new Dialog({
           hitsData.push({ hit: h, location: hitLocations[h - 1], damage: total, fury: null });
 
           const dieMax = Number(dieType);
-          const furyNumbers = gauss && dieMax === 10 ? [9, 10] : [dieMax];
+          const furyThreshold = vengeful && dieMax === 10 ? Math.max(2, Math.min(10, vengefulVal)) : dieMax;
+          const furyNumbers = gauss && dieMax === 10 ? [9, 10] : Array.from({length: (11 - furyThreshold)}, (_,i)=>furyThreshold+i);
           if (dice.some(d => furyNumbers.includes(d))) {
             furyQueue.push(h);
           }
@@ -450,6 +455,9 @@ ${furyHtml}
               fury: furyResults,
               properties
             };
+            if (html.find("#toxic")[0]?.checked) {
+              tgt.damageApplicationData.toxic = { value: Number(html.find("#toxicVal").val() || 0) };
+            }
           }
           await entry.msg.update({
             content: buildWorkflowHtml(latest),
