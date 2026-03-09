@@ -122,6 +122,12 @@ const presentWeaponItems = detected => {
 const parseWeaponTraits = weapon =>
   (weapon.system.special ?? "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
 const hasTrait = (traits, key) => traits.some(t => t.includes(key));
+const parseTraitValue = (traits, key, fallback = 0) => {
+  const entry = traits.find(t => t.includes(key));
+  if (!entry) return fallback;
+  const match = entry.match(/\(([-+]?\d+)\)/);
+  return match ? Number(match[1]) : fallback;
+};
 
 const animatedRoll = async formula => {
   const roll = await new Roll(formula).evaluate();
@@ -222,7 +228,12 @@ const computeJam = ({ result, targetNumber, weapon, traits }) => {
     if (!reliable) reliable = true;
   }
 
-  let jamLow = 95;
+  const hasSpray = hasTrait(traits, "spray");
+  const hasOverheats = hasTrait(traits, "overheats");
+
+  if (hasSpray) return false;
+
+  let jamLow = hasOverheats ? 91 : 95;
   if (reliable) jamLow = 100;
   if (unreliable) jamLow = 91;
 
@@ -508,9 +519,41 @@ const runAttackWorkflow = async setup => {
 
   const modifierNotes = [mode.label];
   const selectedTalents = [];
-  let sharedMod = mode.mod + setup.manualMod + setup.aimMod;
+  const isInaccurate = hasTrait(traits, "inaccurate");
+  const isAccurate = hasTrait(traits, "accurate");
+  const isDefensive = hasTrait(traits, "defensive");
+  const isUnbalanced = hasTrait(traits, "unbalanced");
+  const isSpray = hasTrait(traits, "spray");
+  const isTwinLinked = hasTrait(traits, "twin-linked") || hasTrait(traits, "twin linked");
+
+  let effectiveAimMod = setup.aimMod;
+  if (isInaccurate && effectiveAimMod > 0) {
+    effectiveAimMod = 0;
+    modifierNotes.push("Inaccurate (ignores Aim)");
+  }
+
+  let sharedMod = mode.mod + setup.manualMod + effectiveAimMod;
   if (setup.manualMod) modifierNotes.push(`Manual ${setup.manualMod >= 0 ? "+" : ""}${setup.manualMod}`);
-  if (setup.aimMod) modifierNotes.push(setup.aimLabel);
+  if (effectiveAimMod) modifierNotes.push(setup.aimLabel);
+
+  if (isAccurate && effectiveAimMod > 0) {
+    sharedMod += 10;
+    modifierNotes.push("Accurate +10");
+  }
+  if (isDefensive && !isMelee) {
+    sharedMod -= 10;
+    modifierNotes.push("Defensive -10");
+  }
+  if (isUnbalanced && isMelee && setup.modeKey === "lightning") {
+    return ui.notifications.warn("Unbalanced weapons cannot make Lightning Attack actions.");
+  }
+  if (isSpray && setup.modeKey === "called") {
+    return ui.notifications.warn("Spray weapons cannot make Called Shots.");
+  }
+  if (isTwinLinked && !isMelee) {
+    sharedMod += 20;
+    modifierNotes.push("Twin-Linked +20");
+  }
 
   if (setup.isHorde && setup.hordeBonus) {
     sharedMod += setup.hordeBonus;
@@ -562,7 +605,7 @@ const runAttackWorkflow = async setup => {
   if (t.marksman && !isMelee) selectedTalents.push("Marksman (ignore Long/Extreme penalties)");
 
   const targets = setup.targetConfigs.map(conf => {
-    const effectiveRangeMod = (!isMelee && t.marksman && conf.rangeMod < 0) ? 0 : conf.rangeMod;
+    const effectiveRangeMod = isSpray ? 0 : ((!isMelee && t.marksman && conf.rangeMod < 0) ? 0 : conf.rangeMod);
     return ({
     tokenUuid: conf.tokenUuid,
     targetTokenUuid: conf.tokenUuid,
@@ -603,7 +646,7 @@ const runAttackWorkflow = async setup => {
     modeLabel: mode.label,
     powerModeLabel: powerMode.label,
     powerMultiplier: powerMode.multiplier,
-    aimLabel: setup.aimLabel,
+    aimLabel: effectiveAimMod > 0 ? setup.aimLabel : "No Aim",
     craftName: (weapon.system.craftsmanship ?? "Common"),
     modifierNotes,
     selectedTalents,
@@ -618,6 +661,14 @@ const runAttackWorkflow = async setup => {
     setupSnapshot: foundry.utils.deepClone(setup),
     targets,
     flags: { immediate: true }
+  };
+
+  state.qualityData = {
+    spray: isSpray,
+    twinLinked: isTwinLinked,
+    lancePenBonus: hasTrait(traits, "lance") ? Number(weapon.system.penetration || 0) : 0,
+    scatter: hasTrait(traits, "scatter"),
+    melta: hasTrait(traits, "melta")
   };
 
   const chatMessage = await ChatMessage.create({
@@ -642,8 +693,13 @@ const runAttackWorkflow = async setup => {
   };
 
   // immediate attack roll
-  let result = (await animatedRoll("1d100", chatMessage.speaker)).total;
+  let result = isSpray ? 1 : (await animatedRoll("1d100", chatMessage.speaker)).total;
   let { success, dos, jam, bestTN } = evaluateAttackResult({ result, targets: state.targets, weapon, traits });
+  if (isSpray) {
+    success = true;
+    dos = 1;
+    jam = false;
+  }
 
   if (!success) {
     const useFate = await promptAttackFateReroll({ actorDoc: attacker, rollValue: result, bestTN });
@@ -659,6 +715,12 @@ const runAttackWorkflow = async setup => {
   if (success && !isMelee) {
     if (["semi", "suppressSemi"].includes(state.modeKey)) hits = Math.min(1 + Math.floor((dos - 1) / 2), rof.burst ?? 1);
     else if (["full", "suppressFull"].includes(state.modeKey)) hits = Math.min(dos, rof.full ?? 1);
+  }
+  if (success && !isMelee && isTwinLinked && dos >= 2) {
+    hits += 1;
+  }
+  if (success && hasTrait(traits, "storm")) {
+    hits *= 2;
   }
   if (success && isMelee) {
     const wsb = attacker.system.characteristics.weaponSkill?.bonus ?? 1;
@@ -715,6 +777,14 @@ const runAttackWorkflow = async setup => {
   state.attackDegrees = success ? dos : -Math.max(1, 1 + Math.floor((result - bestTN) / 10));
   state.totalHits = state.targets.reduce((sum, tg) => sum + Number(tg.allocatedHits ?? 0), 0);
   state.statusText = jam ? "JAM" : (success ? (outOfAmmoAfter ? "HIT (OUT OF AMMO)" : "HIT") : "MISS");
+  if (hasTrait(traits, "overheats") && result >= 91) {
+    state.statusText = success ? "OVERHEAT" : "MISS / OVERHEAT";
+  }
+  if (hasTrait(traits, "lance") && dos > 0) {
+    const basePen = Number(weapon.system.penetration || 0);
+    state.weaponPen = basePen + (basePen * dos);
+    state.extraText = [state.extraText, `Lance: Pen ${basePen} + ${basePen}x${dos} = ${state.weaponPen}`].filter(Boolean).join(" | ");
+  }
   state.devastatingFollowUp = {
     available: !!(setup.toggles?.devastating && setup.modeKey === "allout" && state.totalHits > 0),
     prompted: false

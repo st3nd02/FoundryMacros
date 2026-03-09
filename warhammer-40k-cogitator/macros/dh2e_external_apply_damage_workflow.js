@@ -611,12 +611,28 @@ if (hit.fury){
   coverRemaining--;
 }
 
+
+const propHas = key => (dmg.properties ?? []).some(p => String(p).toLowerCase().includes(key));
+const propVal = key => {
+  const p = (dmg.properties ?? []).find(v => String(v).toLowerCase().includes(key));
+  const m = String(p ?? "").match(/\(([-+]?\d+)\)/);
+  return m ? Number(m[1]) : 0;
+};
+if (propHas("corrosive")) {
+  const cor = await new Roll("1d10").roll({async:true});
+  await cor.toMessage({speaker: ChatMessage.getSpeaker({actor})});
+  report += `<hr><b>Corrosive ${cor.total}</b>`;
+}
+for (const label of ["crippling", "haywire", "indirect", "sanctified", "smoke"]) {
+  if (propHas(label)) report += `<hr><b>${label.charAt(0).toUpperCase()+label.slice(1)}</b> effect noted.`;
+}
+
 // ===============================
 // TOXIC
 // ===============================
 const toxicProp = dmg.properties?.find(p => p.toLowerCase().startsWith("toxic"));
 
-if (toxicProp && dmg.toxic?.result && totalInflicted > 0){
+if (toxicProp && totalInflicted > 0){
 
   const match = toxicProp.match(/\((\d+)\)/);
   const toxicValue = match ? Number(match[1]) : 0;
@@ -646,7 +662,9 @@ if (toxicProp && dmg.toxic?.result && totalInflicted > 0){
 
   if (!success){
 
-    const toxicDamage = dmg.toxic.result;
+    const toxicRoll = await new Roll("1d10").roll({async:true});
+    await toxicRoll.toMessage({speaker: ChatMessage.getSpeaker({actor})});
+    const toxicDamage = toxicRoll.total;
 
     const woundsBefore = woundsCurrent;
 
