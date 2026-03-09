@@ -85,6 +85,11 @@ const POWER_MODES = {
   4: { label: "Overload", multiplier: 4 }
 };
 
+const POWER_MODE_OPTIONS_BY_TYPE = {
+  las: [1, 2, 4],
+  plasma: [1, 3]
+};
+
 const hasTalent = (actorDoc, needle) =>
   actorDoc.items.some(i => i.type === "talent" && i.name.toLowerCase().includes(needle.toLowerCase()));
 
@@ -987,36 +992,46 @@ const showAttackDialog = async () => {
     const d = new Dialog({
       title: "External Attack Workflow",
       content: `<form>
+        <style>
+          .attack-specifics-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; align-items:center; }
+          .attack-talents-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 8px; }
+          .talent-unavailable { color:#8a8a8a; }
+          .talent-auto input { opacity:0.65; }
+        </style>
         <div class="form-group"><label><b>Weapon</b></label><select id="weaponId">${weaponOptions}</select></div>
         <div class="form-group"><label><b>Attack Type</b></label><select id="modeKey"></select></div>
         <div class="form-group"><label><b>Modifier</b></label><input id="manualMod" type="number" value="0"/></div>
         <div class="form-group"><label><b>Aim</b></label><select id="aimMod"><option value="0">No Aim</option><option value="10">Half Aim (+10)</option><option value="20">Full Aim (+20)</option></select></div>
-        <div class="form-group"><label><input type="checkbox" id="horde"/> Horde?</label></div>
-        <div class="form-group"><label><b>Horde Bonus</b></label><input id="hordeBonus" type="number" value="0"/></div>
-        <div class="form-group"><label><input type="checkbox" id="shootMelee"/> Shooting into Melee?</label></div>
-        <div class="form-group"><label><input type="checkbox" id="twoWeaponAttack"/> Two-Weapon Attack?</label></div>
+        <div class="form-group"><label><b>Weapon Range:</b> <span id="weaponRangeDisplay">—</span></label></div>
+        <div class="form-group"><label><b>Craftsmanship:</b> <span id="weaponCraftDisplay">—</span></label></div>
+        <div class="form-group"><label><b>Weapon Traits:</b> <span id="weaponTraitsDisplay">—</span></label></div>
+        <div class="attack-specifics-grid">
+          <div class="form-group"><label><input type="checkbox" id="horde"/> Horde?</label></div>
+          <div class="form-group"><label><b>Horde Size Modifier</b></label><input id="hordeBonus" type="number" value="0"/></div>
+          <div class="form-group"><label><input type="checkbox" id="shootMelee"/> Attacking into Melee?</label></div>
+          <div class="form-group"><label><input type="checkbox" id="twoWeaponAttack"/> Two-Weapon Attack?</label></div>
+        </div>
         <div class="form-group" id="powerModeGroup"><label><b>Power Mode</b></label><select id="powerMode"><option value="1">Normal</option><option value="2">Overcharge (×2)</option><option value="4">Overload (×4)</option><option value="3">Maximal (×3)</option></select></div>
         <div class="form-group" id="forceChannelGroup" style="display:none;"><label><input type="checkbox" id="talent_force_channel"/> Force Channeling</label></div>
-        <div class="form-group"><label><b>Weapon Range:</b> <span id="weaponRangeDisplay">—</span></label></div>
         <hr><h3>Talents</h3>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;">
-          <label><input type="checkbox" id="talent_deadeye"/> Deadeye Shot</label>
-          <label><input type="checkbox" id="talent_marksman" disabled/> Marksman (auto)</label>
-          <label><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
-          <label><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
-          <label><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
-          <label><input type="checkbox" id="talent_blademaster"/> Blademaster</label>
-          <label><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
-          <label><input type="checkbox" id="talent_berserk"/> Berserk Charge</label>
-          <label><input type="checkbox" id="talent_twm_melee"/> Two-Weapon Wielder (Melee)</label>
-          <label><input type="checkbox" id="talent_twm_ranged"/> Two-Weapon Wielder (Ranged)</label>
-          <label><input type="checkbox" id="talent_ambi"/> Ambidextrous</label>
-          <label><input type="checkbox" id="talent_master"/> Two Weapon Master</label>
-          <label><input type="checkbox" id="talent_mighty"/> Mighty Shot</label>
-          <label><input type="checkbox" id="talent_crushing"/> Crushing Blow</label>
-          <label><input type="checkbox" id="talent_hammer"/> Hammer Blow</label>
-          <label><input type="checkbox" id="talent_flesh"/> Flesh Render</label>
-          <label><input type="checkbox" id="talent_raptor"/> Raptor</label>
+        <div class="attack-talents-grid">
+          <label class="talent-toggle" data-needle="deadeye"><input type="checkbox" id="talent_deadeye"/> Deadeye Shot</label>
+          <label class="talent-toggle talent-auto" data-needle="marksman"><input type="checkbox" id="talent_marksman" disabled/> Marksman (auto)</label>
+          <label class="talent-toggle" data-needle="double tap"><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
+          <label class="talent-toggle" data-needle="target selection"><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
+          <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
+          <label class="talent-toggle" data-needle="blademaster"><input type="checkbox" id="talent_blademaster"/> Blademaster</label>
+          <label class="talent-toggle" data-needle="whirlwind"><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
+          <label class="talent-toggle" data-needle="berserk charge"><input type="checkbox" id="talent_berserk"/> Berserk Charge</label>
+          <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (melee)"><input type="checkbox" id="talent_twm_melee" disabled/> Two-Weapon Wielder (Melee) (auto)</label>
+          <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (ranged)"><input type="checkbox" id="talent_twm_ranged" disabled/> Two-Weapon Wielder (Ranged) (auto)</label>
+          <label class="talent-toggle talent-auto" data-needle="ambidextrous"><input type="checkbox" id="talent_ambi" disabled/> Ambidextrous (auto)</label>
+          <label class="talent-toggle talent-auto" data-needle="two weapon master"><input type="checkbox" id="talent_master" disabled/> Two Weapon Master (auto)</label>
+          <label class="talent-toggle talent-auto" data-needle="mighty shot"><input type="checkbox" id="talent_mighty" disabled/> Mighty Shot (auto)</label>
+          <label class="talent-toggle talent-auto" data-needle="crushing blow"><input type="checkbox" id="talent_crushing" disabled/> Crushing Blow (auto)</label>
+          <label class="talent-toggle talent-auto" data-needle="hammer blow"><input type="checkbox" id="talent_hammer" disabled/> Hammer Blow (auto)</label>
+          <label class="talent-toggle talent-auto" data-needle="flesh render"><input type="checkbox" id="talent_flesh" disabled/> Flesh Render (auto)</label>
+          <label class="talent-toggle talent-auto" data-needle="raptor"><input type="checkbox" id="talent_raptor" disabled/> Raptor (auto)</label>
         </div>
         <hr><h3>Weapon Modifications (auto-detected on selected weapon)</h3>
         <div id="detectedItems" style="padding:6px;border:1px solid #555;border-radius:6px;">—</div>
@@ -1050,8 +1065,18 @@ const showAttackDialog = async () => {
           const normalRange = getNormalRangeForWeapon(weaponDoc);
           const isMeleeW = (weaponDoc?.system?.class ?? "").toLowerCase() === "melee";
           html.find("#weaponRangeDisplay").text(isMeleeW ? "Melee" : `${normalRange}m`);
+          html.find("#weaponCraftDisplay").text(getCraftData(weaponDoc).label);
+          html.find("#weaponTraitsDisplay").text(weaponDoc?.system?.special?.trim() || "None");
 
           const wType = (weaponDoc?.system?.type ?? "").toLowerCase();
+          const availablePowerModes = POWER_MODE_OPTIONS_BY_TYPE[wType] ?? [1];
+          const currentPowerMode = Number(html.find("#powerMode").val() || 1);
+          html.find("#powerMode").html(
+            availablePowerModes
+              .map(modeKey => `<option value="${modeKey}">${POWER_MODES[modeKey].label} (×${POWER_MODES[modeKey].multiplier})</option>`)
+              .join("")
+          );
+          html.find("#powerMode").val(availablePowerModes.includes(currentPowerMode) ? String(currentPowerMode) : "1");
           const showPower = ["las", "plasma"].includes(wType);
           html.find("#powerModeGroup").toggle(showPower);
           if (!showPower) html.find("#powerMode").val("1");
@@ -1063,23 +1088,21 @@ const showAttackDialog = async () => {
           syncHordeBonus();
         };
 
-        html.find("#talent_deadeye").prop("checked", hasTalent(attacker, "deadeye"));
-        html.find("#talent_marksman").prop("checked", hasTalent(attacker, "marksman"));
-        html.find("#talent_doubletap").prop("checked", hasTalent(attacker, "double tap"));
-        html.find("#talent_targetsel").prop("checked", hasTalent(attacker, "target selection"));
-        html.find("#talent_devastating").prop("checked", hasTalent(attacker, "devastating assault"));
-        html.find("#talent_blademaster").prop("checked", hasTalent(attacker, "blademaster"));
-        html.find("#talent_whirlwind").prop("checked", hasTalent(attacker, "whirlwind"));
-        html.find("#talent_berserk").prop("checked", hasTalent(attacker, "berserk charge"));
-        html.find("#talent_twm_melee").prop("checked", hasTalent(attacker, "two-weapon wielder (melee)"));
-        html.find("#talent_twm_ranged").prop("checked", hasTalent(attacker, "two-weapon wielder (ranged)"));
-        html.find("#talent_ambi").prop("checked", hasTalent(attacker, "ambidextrous"));
-        html.find("#talent_master").prop("checked", hasTalent(attacker, "two weapon master"));
-        html.find("#talent_mighty").prop("checked", hasTalent(attacker, "mighty shot"));
-        html.find("#talent_crushing").prop("checked", hasTalent(attacker, "crushing blow"));
-        html.find("#talent_hammer").prop("checked", hasTalent(attacker, "hammer blow"));
-        html.find("#talent_flesh").prop("checked", hasTalent(attacker, "flesh render"));
-        html.find("#talent_raptor").prop("checked", hasTalent(attacker, "raptor"));
+        html.find(".talent-toggle").each((_, el) => {
+          const $label = $(el);
+          const needle = String($label.data("needle") ?? "");
+          const input = $label.find("input");
+          const available = hasTalent(attacker, needle);
+          $label.toggleClass("talent-unavailable", !available);
+          if ($label.hasClass("talent-auto")) {
+            input.prop("checked", available);
+            return;
+          }
+          input.prop("disabled", !available);
+          input.prop("checked", available);
+        });
+        html.find("#talent_doubletap").prop("checked", false);
+        html.find("#talent_devastating").prop("checked", false);
 
         if (pendingMirrorSetup) {
           html.find("#weaponId").val(pendingMirrorSetup.weaponId ?? html.find("#weaponId").val());
