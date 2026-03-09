@@ -1,6 +1,6 @@
 /**
  * DH2e External Attack Workflow (Foundry V13)
- * Version: 1.0
+ * Version: 1.1
  * V13-safe flow:
  * 1) Attacker dialog (Attack) -> immediately rolls attack and creates workflow chat card.
  * 2) Defense dialogs per target with allocated hits.
@@ -19,7 +19,12 @@ const attackerToken = controlled[0];
 const attacker = attackerToken.actor;
 if (!attacker) return ui.notifications.warn("Attacker token has no actor.");
 
-const targetTokens = Array.from(game.user.targets ?? []);
+const pendingMirrorSetup = game.warhammer40kCogitator?.consumePendingAttackContext?.() ?? null;
+
+if (pendingMirrorSetup?.targetTokenIds?.length) {
+  game.user.updateTokenTargets(pendingMirrorSetup.targetTokenIds);
+}
+let targetTokens = Array.from(game.user.targets ?? []);
 if (!targetTokens.length) return ui.notifications.warn("Select at least one target token.");
 
 const weapons = attacker.items.filter(i => i.type === "weapon");
@@ -362,6 +367,10 @@ const getHordeMagnitudeHits = ({ state, rolls }) => {
   const explosive = hasTrait(traits, "explosive") || String(state.weaponType ?? "").toLowerCase().includes("explosive");
   const forceOrPower = hasTrait(traits, "force") || hasTrait(traits, "power");
   let bonus = (explosive || forceOrPower) ? 1 : 0;
+  if (state.whirlwind?.active) {
+    const wsb = Number(state.whirlwind.wsBonus ?? 0);
+    bonus += Math.floor(wsb / 2);
+  }
   return Math.max(0, rolls.length + bonus);
 };
 
@@ -541,7 +550,6 @@ const runAttackWorkflow = async setup => {
   }
 
   if (t.deadeye && !isMelee && setup.modeKey === "called") { sharedMod += 10; selectedTalents.push("Deadeye +10"); }
-  if (t.doubletap && !isMelee) { sharedMod += 20; selectedTalents.push("Double Tap +20"); }
   if (t.grip) { sharedMod += 5; selectedTalents.push("Custom Grip +5"); }
   if (t.stock && !isMelee && setup.aimMod > 0) {
     const b = setup.aimMod === 20 ? 4 : 2;
@@ -551,24 +559,28 @@ const runAttackWorkflow = async setup => {
   if (t.motion && !isMelee && ["semi", "full", "suppressSemi", "suppressFull"].includes(setup.modeKey)) { sharedMod += 10; selectedTalents.push("Motion Predictor +10"); }
   if ((t.reddot || t.omni) && !isMelee && ["single", "called"].includes(setup.modeKey)) { sharedMod += 10; selectedTalents.push("Red-Dot +10"); }
   if (t.berserk && isMelee && setup.modeKey === "charge") { sharedMod += 10; selectedTalents.push("Berserk Charge +10"); }
+  if (t.marksman && !isMelee) selectedTalents.push("Marksman (ignore Long/Extreme penalties)");
 
-  const targets = setup.targetConfigs.map(conf => ({
+  const targets = setup.targetConfigs.map(conf => {
+    const effectiveRangeMod = (!isMelee && t.marksman && conf.rangeMod < 0) ? 0 : conf.rangeMod;
+    return ({
     tokenUuid: conf.tokenUuid,
     targetTokenUuid: conf.tokenUuid,
     name: conf.targetName,
     distanceMeters: conf.distanceMeters,
     rangeLabel: conf.rangeLabel,
-    rangeMod: conf.rangeMod,
+    rangeMod: effectiveRangeMod,
     sizeLabel: conf.sizeLabel,
     sizeMod: conf.sizeMod,
     sizeIgnored: conf.sizeIgnored,
-    targetNumber: Math.max(1, Math.min(100, baseSkill + sharedMod + conf.rangeMod + conf.sizeMod)),
+    targetNumber: Math.max(1, Math.min(100, baseSkill + sharedMod + effectiveRangeMod + conf.sizeMod)),
     allocatedHits: 0,
     defenseRoll: null,
     defenseOutcome: null,
     damageRolls: [],
     damageResolved: false
-  }));
+  });
+  });
 
   const powerMode = POWER_MODES[setup.powerModeKey] ?? POWER_MODES[1];
   if (!isMelee && (craftData.rangedGood || craftData.rangedBest)) {
@@ -602,6 +614,8 @@ const runAttackWorkflow = async setup => {
     extraText: "",
     grenade: { isGrenade, scatter: null, damage: null },
     horde: { active: !!setup.isHorde },
+    whirlwind: { active: !!setup.toggles?.whirlwind, wsBonus: attacker.system.characteristics.weaponSkill?.bonus ?? 0 },
+    setupSnapshot: foundry.utils.deepClone(setup),
     targets,
     flags: { immediate: true }
   };
@@ -611,6 +625,21 @@ const runAttackWorkflow = async setup => {
     content: buildWorkflowHtml(state),
     flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
   });
+
+  const spendAmmoForAttack = async rawHits => {
+    if (isMelee || infiniteAmmo || isGrenade || weapon.system.clip?.value == null) return { cappedHits: rawHits, spent: 0, outOfAmmo: false };
+    let shotsRequired = 1;
+    if (["semi", "suppressSemi"].includes(state.modeKey)) shotsRequired = rof.burst ?? 1;
+    else if (["full", "suppressFull"].includes(state.modeKey)) shotsRequired = rof.full ?? 1;
+    if (hasTrait(traits, "storm")) shotsRequired *= 2;
+    shotsRequired *= state.powerMultiplier;
+
+    const currentClip = weapon.system.clip.value;
+    const used = Math.min(shotsRequired, currentClip);
+    const newClip = Math.max(0, currentClip - used);
+    await weapon.update({ "system.clip.value": newClip });
+    return { cappedHits: Math.min(rawHits, used), spent: used, outOfAmmo: newClip <= 0 };
+  };
 
   // immediate attack roll
   let result = (await animatedRoll("1d100", chatMessage.speaker)).total;
@@ -637,39 +666,59 @@ const runAttackWorkflow = async setup => {
     else if (state.modeKey === "lightning") hits = Math.min(Math.max(1, dos), wsb);
   }
 
-  // Ammo consumption (legacy behavior): spent by firing mode, not by number of hits.
-  // Includes Storm quality and power mode multiplier (Las/Plasma modes can increase this).
   let ammoSpent = 0;
   let outOfAmmoAfter = false;
-  if (!isMelee && !infiniteAmmo && !isGrenade && weapon.system.clip?.value != null) {
-    let shotsRequired = 1;
-    if (["semi", "suppressSemi"].includes(state.modeKey)) shotsRequired = rof.burst ?? 1;
-    else if (["full", "suppressFull"].includes(state.modeKey)) shotsRequired = rof.full ?? 1;
-
-    if (hasTrait(traits, "storm")) shotsRequired *= 2;
-    shotsRequired *= state.powerMultiplier;
-
-    const currentClip = weapon.system.clip.value;
-    const used = Math.min(shotsRequired, currentClip);
-    ammoSpent = used;
-
-    const newClip = Math.max(0, currentClip - used);
-    outOfAmmoAfter = newClip <= 0;
-    await weapon.update({ "system.clip.value": newClip });
-
-    // Cap generated hits by available spent shots.
-    hits = Math.min(hits, used);
-  }
+  const firstAmmo = await spendAmmoForAttack(hits);
+  hits = firstAmmo.cappedHits;
+  ammoSpent += firstAmmo.spent;
+  outOfAmmoAfter = firstAmmo.outOfAmmo;
 
   const eligible = state.targets.filter(tg => result <= tg.targetNumber);
   const alloc = allocateHits({ totalHits: hits, modeKey: state.modeKey, targets: eligible, rof });
 
   state.targets = state.targets.map(tg => ({ ...tg, allocatedHits: alloc.get(tg.tokenUuid) || 0 }));
+
+  if (t.whirlwind && isMelee) {
+    state.targets = state.targets.map(tg => ({ ...tg, allocatedHits: 0 }));
+    const notes = [];
+    for (const tg of state.targets) {
+      const wr = (await animatedRoll("1d100", chatMessage.speaker)).total;
+      const hit = wr <= tg.targetNumber;
+      tg.allocatedHits = hit ? 1 : 0;
+      notes.push(`${tg.name}: ${wr} ${hit ? "HIT" : "MISS"}`);
+    }
+    state.extraText = [state.extraText, `Whirlwind attacks: ${notes.join(", ")}`].filter(Boolean).join(" | ");
+  }
+
+  if (t.doubletap && !isMelee && hits > 0 && !jam) {
+    const boostedTargets = state.targets.map(tg => ({ ...tg, targetNumber: Math.max(1, Math.min(100, tg.targetNumber + 20)) }));
+    let secondRoll = (await animatedRoll("1d100", chatMessage.speaker)).total;
+    let secondEval = evaluateAttackResult({ result: secondRoll, targets: boostedTargets, weapon, traits });
+    let secondHits = (secondEval.success && !secondEval.jam) ? 1 : 0;
+    if (secondEval.success) {
+      if (["semi", "suppressSemi"].includes(state.modeKey)) secondHits = Math.min(1 + Math.floor((secondEval.dos - 1) / 2), rof.burst ?? 1);
+      else if (["full", "suppressFull"].includes(state.modeKey)) secondHits = Math.min(secondEval.dos, rof.full ?? 1);
+    }
+    const secondAmmo = await spendAmmoForAttack(secondHits);
+    secondHits = secondAmmo.cappedHits;
+    ammoSpent += secondAmmo.spent;
+    outOfAmmoAfter = outOfAmmoAfter || secondAmmo.outOfAmmo;
+
+    const secondEligible = boostedTargets.filter(tg => secondRoll <= tg.targetNumber);
+    const secondAlloc = allocateHits({ totalHits: secondHits, modeKey: state.modeKey, targets: secondEligible, rof });
+    state.targets = state.targets.map(tg => ({ ...tg, allocatedHits: (tg.allocatedHits ?? 0) + (secondAlloc.get(tg.tokenUuid) || 0) }));
+    state.extraText = [state.extraText, `Double Tap second attack: ${secondRoll} (${secondHits} hit${secondHits === 1 ? "" : "s"})`].filter(Boolean).join(" | ");
+    selectedTalents.push("Double Tap: second attack at +20");
+  }
   state.attackRoll = result;
   state.dos = dos;
   state.attackDegrees = success ? dos : -Math.max(1, 1 + Math.floor((result - bestTN) / 10));
-  state.totalHits = Array.from(alloc.values()).reduce((a, b) => a + b, 0);
+  state.totalHits = state.targets.reduce((sum, tg) => sum + Number(tg.allocatedHits ?? 0), 0);
   state.statusText = jam ? "JAM" : (success ? (outOfAmmoAfter ? "HIT (OUT OF AMMO)" : "HIT") : "MISS");
+  state.devastatingFollowUp = {
+    available: !!(setup.toggles?.devastating && setup.modeKey === "allout" && state.totalHits > 0),
+    prompted: false
+  };
 
   if (!success && isMelee && setup.toggles?.blademaster && !attacker.effects.some(e => String(e.name ?? "").toLowerCase().includes("blademaster used"))) {
     const reroll = (await animatedRoll("1d100", chatMessage.speaker)).total;
@@ -679,7 +728,7 @@ const runAttackWorkflow = async setup => {
     await attacker.createEmbeddedDocuments("ActiveEffect", [{ name: "Blademaster Used", img: "icons/svg/sword.svg", origin: attacker.uuid }]);
   }
 
-  if (success && state.modeKey === "allout" && game.warhammer40kCogitator?.consumeDefenseReaction) {
+  if (success && state.modeKey === "allout" && !setup.skipAllOutReactionConsume && game.warhammer40kCogitator?.consumeDefenseReaction) {
     await game.warhammer40kCogitator.consumeDefenseReaction(attacker);
   }
   if (ammoSpent > 0) {
@@ -807,7 +856,7 @@ const showAttackDialog = async () => {
         <hr><h3>Talents</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;">
           <label><input type="checkbox" id="talent_deadeye"/> Deadeye Shot</label>
-          <label><input type="checkbox" id="talent_marksman"/> Marksman</label>
+          <label><input type="checkbox" id="talent_marksman" disabled/> Marksman (auto)</label>
           <label><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
           <label><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
           <label><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
@@ -859,8 +908,35 @@ const showAttackDialog = async () => {
         html.find("#talent_ambi").prop("checked", hasTalent(attacker, "ambidextrous"));
         html.find("#talent_master").prop("checked", hasTalent(attacker, "two weapon master"));
 
+        if (pendingMirrorSetup) {
+          html.find("#weaponId").val(pendingMirrorSetup.weaponId ?? html.find("#weaponId").val());
+          html.find("#modeKey").val(pendingMirrorSetup.modeKey ?? html.find("#modeKey").val());
+          html.find("#manualMod").val(Number(pendingMirrorSetup.manualMod ?? 0));
+          html.find("#aimMod").val(Number(pendingMirrorSetup.aimMod ?? 0));
+          html.find("#horde").prop("checked", !!pendingMirrorSetup.isHorde);
+          html.find("#hordeBonus").val(Number(pendingMirrorSetup.hordeBonus ?? 0));
+          html.find("#shootMelee").prop("checked", !!pendingMirrorSetup.shootingMelee);
+          html.find("#twoWeaponAttack").prop("checked", !!pendingMirrorSetup.twoWeaponAttack);
+          html.find("#powerMode").val(Number(pendingMirrorSetup.powerModeKey ?? 1));
+          const pt = pendingMirrorSetup.toggles ?? {};
+          html.find("#talent_deadeye").prop("checked", !!pt.deadeye);
+          html.find("#talent_doubletap").prop("checked", !!pt.doubletap);
+          html.find("#talent_targetsel").prop("checked", !!pt.targetsel);
+          html.find("#talent_devastating").prop("checked", !!pt.devastating);
+          html.find("#talent_blademaster").prop("checked", !!pt.blademaster);
+          html.find("#talent_whirlwind").prop("checked", !!pt.whirlwind);
+          html.find("#talent_berserk").prop("checked", !!pt.berserk);
+          html.find("#talent_twm_melee").prop("checked", !!pt.twmMelee);
+          html.find("#talent_twm_ranged").prop("checked", !!pt.twmRanged);
+          html.find("#talent_ambi").prop("checked", !!pt.ambi);
+          html.find("#talent_master").prop("checked", !!pt.master);
+        }
+
         html.find("#weaponId").on("change", refresh);
         refresh();
+        if (pendingMirrorSetup) {
+          html.find("#modeKey").val(pendingMirrorSetup.modeKey ?? html.find("#modeKey").val());
+        }
       },
       buttons: {
         attack: {
@@ -893,10 +969,11 @@ const showAttackDialog = async () => {
               hordeBonus: Number(html.find("#hordeBonus").val() || 0),
               shootingMelee: html.find("#shootMelee")[0].checked,
               twoWeaponAttack: html.find("#twoWeaponAttack")[0].checked,
+              targetTokenIds: targetTokens.map(t => t.id),
               targetConfigs,
               toggles: {
                 deadeye: html.find("#talent_deadeye")[0].checked,
-                marksman: html.find("#talent_marksman")[0].checked,
+                marksman: hasTalent(attacker, "marksman"),
                 doubletap: html.find("#talent_doubletap")[0].checked,
                 targetsel: html.find("#talent_targetsel")[0].checked,
                 devastating: html.find("#talent_devastating")[0].checked,
@@ -923,8 +1000,16 @@ const showAttackDialog = async () => {
 
 const setup = await showAttackDialog();
 if (!setup) return;
+if (setup.toggles?.whirlwind) {
+  const wsb = attacker.system.characteristics.weaponSkill?.bonus ?? 1;
+  setup.modeKey = "standard";
+  if (setup.targetConfigs.length > wsb) {
+    ui.notifications.warn(`Whirlwind of Death limit exceeded: max ${wsb} targets. Extra targets ignored.`);
+    setup.targetConfigs = setup.targetConfigs.slice(0, wsb);
+  }
+}
 const singleTargetModes = ["single","called","standard"];
-if (singleTargetModes.includes(setup.modeKey) && setup.targetConfigs.length > 1) {
+if (!setup.toggles?.whirlwind && singleTargetModes.includes(setup.modeKey) && setup.targetConfigs.length > 1) {
   ui.notifications.warn("Selected attack type can only target one opponent.");
   return;
 }

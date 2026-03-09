@@ -1,6 +1,6 @@
 /**
  * DH2e External Apply Damage Workflow (Foundry V13)
- * Version: 1.2
+ * Version: 1.3
  * GM-only damage application from `game.dh2eLastDamage`.
  */
 
@@ -844,6 +844,34 @@ if (selectedEntry.msg && selectedEntry.state) {
       content: buildWorkflowHtml(latest),
       flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: latest } }
     });
+
+    const allApplied = latest.targets
+      .filter(t => (t.allocatedHits ?? 0) > 0)
+      .every(t => t.damageApplied);
+
+    if (allApplied && latest.devastatingFollowUp?.available && !latest.devastatingFollowUp?.prompted) {
+      const attackerActor = game.actors.get(latest.attackerActorId);
+      const ownerLevel = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
+      const ownerIds = game.users
+        .filter(u => u.active && attackerActor?.testUserPermission(u, ownerLevel))
+        .map(u => u.id);
+
+      const setup = foundry.utils.deepClone(latest.setupSnapshot ?? {});
+      setup.modeKey = "allout";
+      setup.skipAllOutReactionConsume = true;
+
+      game.warhammer40kCogitator?.emitSocket?.("mirrorAttackReady", {
+        ownerIds,
+        attackerName: latest.attackerName,
+        setup
+      });
+
+      latest.devastatingFollowUp.prompted = true;
+      await selectedEntry.msg.update({
+        content: buildWorkflowHtml(latest),
+        flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: latest } }
+      });
+    }
   }
 } else {
   ChatMessage.create({
