@@ -156,7 +156,7 @@ const getHordeBonusFromMagnitude = magnitude => {
   if (value >= 60) return 40;
   if (value >= 30) return 30;
   if (value >= 20) return 20;
-  if (value >= 1) return 10;
+  if (value >= 10) return 10;
   return 0;
 };
 
@@ -417,7 +417,7 @@ const estimateMinimumDamage = formula => {
   return dice + flat;
 };
 
-const getHordeSoakThreshold = targetActor => {
+const getHordeSoakThreshold = (targetActor, penetration = 0) => {
   if (!targetActor) return 0;
   const tTotal = Number(targetActor.system?.characteristics?.toughness?.total ?? 0);
   const tUnnat = Number(targetActor.system?.characteristics?.toughness?.unnatural ?? 0);
@@ -431,7 +431,8 @@ const getHordeSoakThreshold = targetActor => {
     Number(armour.leftLeg?.value ?? 0),
     Number(armour.rightLeg?.value ?? 0)
   );
-  return maxArmour + tb;
+  const effectiveArmour = Math.max(0, maxArmour - Math.max(0, Number(penetration ?? 0)));
+  return effectiveArmour + tb;
 };
 const getHordeMagnitudeHits = ({ state, target }) => {
   const traits = parseWeaponTraits({ system: { special: state.weaponSpecial ?? "" } });
@@ -473,8 +474,8 @@ const promptDamageDialog = async (state, chatMessage) => {
               if (t.allocatedHits <= 0) continue;
               const damageRolls = [];
               const rollCount = state.horde?.active ? 1 : t.allocatedHits;
+              const bonusFormula = Number(state.meleeBestDamageBonus ?? 0) > 0 ? `(${state.weaponDamage}) + ${Number(state.meleeBestDamageBonus)}` : state.weaponDamage;
               for (let i = 0; i < rollCount; i += 1) {
-                const bonusFormula = Number(state.meleeBestDamageBonus ?? 0) > 0 ? `(${state.weaponDamage}) + ${Number(state.meleeBestDamageBonus)}` : state.weaponDamage;
                 const r = await animatedRoll(bonusFormula, chatMessage.speaker);
                 damageRolls.push({ total: r.total, loc: getHitLocation(state.attackRoll || r.total) });
               }
@@ -485,15 +486,20 @@ const promptDamageDialog = async (state, chatMessage) => {
               t.damageApplicationData = buildDamageApplicationData({ state, target: t, rolls: damageRolls, hitLoc: getHitLocation(state.attackRoll || 50) });
               if (state.horde?.active) {
                 const targetDoc = await fromUuid(t.tokenUuid ?? t.targetTokenUuid);
-                const soakThreshold = getHordeSoakThreshold(targetDoc?.actor);
+                const soakThreshold = getHordeSoakThreshold(targetDoc?.actor, state.weaponPen);
                 const minDamage = estimateMinimumDamage(bonusFormula);
                 const canSkipRoll = Number.isFinite(minDamage) && minDamage > soakThreshold;
-                const magHits = getHordeMagnitudeHits({ state, target: t });
+                const rolledDamage = Number(damageRolls[0]?.total ?? 0);
+                const penetrationSucceeded = canSkipRoll || rolledDamage > soakThreshold;
+                const magHits = penetrationSucceeded ? getHordeMagnitudeHits({ state, target: t }) : 0;
                 const rollNote = canSkipRoll
                   ? `No damage roll required (minimum damage ${minDamage} exceeds soak ${soakThreshold}).`
-                  : `Rolled once for penetration (${damageRolls[0]?.total ?? 0}).`;
-                t.damageSummary = `<div><b>Horde Damage:</b> ${rollNote} <b>Magnitude Hits:</b> ${magHits}</div>`;
-                t.damageApplicationData.horde = { active: true, magnitudeHits: magHits, canSkipRoll, soakThreshold, minimumDamage: minDamage };
+                  : `Rolled once for penetration (${rolledDamage} vs soak ${soakThreshold}).`;
+                const resultNote = penetrationSucceeded
+                  ? `Horde takes <b>${magHits}</b> magnitude damage from hits.`
+                  : `Damage did not beat soak; magnitude damage is <b>0</b>.`;
+                t.damageSummary = `<div><b>Horde Damage:</b> ${rollNote} ${resultNote}</div>`;
+                t.damageApplicationData.horde = { active: true, magnitudeHits: magHits, canSkipRoll, soakThreshold, minimumDamage: minDamage, penetrationSucceeded };
               }
             }
             resolve();
@@ -705,7 +711,7 @@ const runAttackWorkflow = async setup => {
     modifierNotes,
     selectedTalents,
     attackTalentsUsed: selectedTalents,
-    forceChanneling: !!setup.toggles?.forceChannel,
+    forceChanneling: !!setup.toggles?.forceChannel && !setup.isHorde,
     attackRoll: null,
     dos: 0,
     totalHits: 0,
@@ -762,7 +768,7 @@ const runAttackWorkflow = async setup => {
   if (success && isMelee) {
     const wsb = attacker.system.characteristics.weaponSkill?.bonus ?? 1;
     if (state.horde?.active && state.modeKey !== "lightning") {
-      hits = Math.min(1 + Math.floor(Math.max(0, dos - 1) / 2), wsb);
+      hits = Math.min(Math.floor(Math.max(0, dos) / 2), wsb);
     } else if (state.modeKey === "swift") hits = Math.min(1 + Math.floor(Math.max(0, dos - 1) / 2), wsb);
     else if (state.modeKey === "lightning") hits = Math.min(Math.max(1, dos), wsb);
   }
@@ -1004,10 +1010,12 @@ const showAttackDialog = async () => {
           const isHorde = html.find("#horde")[0]?.checked;
           const hordeInput = html.find("#hordeBonus");
           hordeInput.prop("readonly", !!isHorde);
+          html.find("#talent_force_channel").prop("disabled", !!isHorde);
           if (!isHorde) return;
           const firstTarget = targetTokens[0]?.actor;
           const magnitude = Number(firstTarget?.system?.wounds?.value ?? 0);
           hordeInput.val(getHordeBonusFromMagnitude(magnitude));
+          html.find("#talent_force_channel").prop("checked", false);
         };
 
         const refresh = () => {
