@@ -196,10 +196,9 @@ new Dialog({
 <label><input type="checkbox" id="accurate" ${special.includes("accurate") ? "checked" : ""}> Accurate</label>
 <select id="aim"><option value="no">No Aim</option><option value="yes">Aim</option></select><br>
 <label><input type="checkbox" id="gauss" ${special.includes("gauss") ? "checked" : ""}> Gauss</label><br>
-<label><input type="checkbox" id="vengeful" ${special.includes("vengeful") ? "checked" : ""}> Vengeful</label>
-<input type="number" id="vengefulVal" value="${parseVal(special, "vengeful", 10)}" style="width:45px"><br>
 <label><input type="checkbox" id="razor" ${special.includes("razor") ? "checked" : ""}> Razor Sharp</label><br>
 <label><input type="checkbox" id="flame" ${special.includes("flame") ? "checked" : ""}> Flame</label><br>
+<label><input type="checkbox" id="spray" ${special.includes("spray") ? "checked" : ""}> Spray</label><br>
 <label><input type="checkbox" id="toxic" ${special.includes("toxic") ? "checked" : ""}> Toxic</label>
 <input type="number" id="toxicVal" value="${parseVal(special, "toxic", 1)}" style="width:45px"><br>
 <label><input type="checkbox" id="melta" ${special.includes("melta") ? "checked" : ""}> Melta</label>
@@ -257,8 +256,6 @@ new Dialog({
         const primitive = html.find("#primitive")[0].checked;
         const accurate = html.find("#accurate")[0].checked;
         const gauss = html.find("#gauss")[0].checked;
-        const vengeful = html.find("#vengeful")[0]?.checked;
-        const vengefulVal = Number(html.find("#vengefulVal").val() || 10);
         const force = html.find("#force")[0].checked;
         const razor = html.find("#razor")[0].checked;
         const melta = html.find("#melta")[0].checked;
@@ -271,6 +268,11 @@ new Dialog({
         const provenVal = Number(html.find("#provenVal").val());
         const primitiveVal = Number(html.find("#primitiveVal").val());
         const aim = html.find("#aim").val();
+        const spray = html.find("#spray")[0]?.checked;
+        const flame = html.find("#flame")[0]?.checked;
+        const toxic = html.find("#toxic")[0]?.checked;
+
+        const calcDoS = (target, roll) => roll <= target ? (1 + Math.floor((target - roll) / 10)) : 0;
 
         if (hasMighty && isRanged && !special.includes("grenade")) {
           const bsb = actor.system.characteristics.ballisticSkill.bonus;
@@ -336,10 +338,10 @@ new Dialog({
           properties.push("Tearing");
         }
 
-        if (accurate && aim === "yes" && isRanged && (entry.state?.modeKey === "single" || entry.state?.modeKey === "called") && wClass === "basic") {
-          const extra = Math.min(Math.floor(Math.max(0, dos - 1) / 2), 2);
+        if (accurate && aim === "yes") {
+          const extra = Math.min(Math.floor(dos / 2), 2);
           if (extra > 0) formula += ` + ${extra}d${dieType}`;
-          properties.push(`Accurate${extra > 0 ? ` +${extra}d${dieType}` : ""}`);
+          properties.push("Accurate");
         }
 
         if (raptor && isMelee) {
@@ -400,8 +402,7 @@ new Dialog({
           hitsData.push({ hit: h, location: hitLocations[h - 1], damage: total, fury: null });
 
           const dieMax = Number(dieType);
-          const furyThreshold = vengeful && dieMax === 10 ? Math.max(2, Math.min(10, vengefulVal)) : dieMax;
-          const furyNumbers = gauss && dieMax === 10 ? [9, 10] : Array.from({length: (11 - furyThreshold)}, (_,i)=>furyThreshold+i);
+          const furyNumbers = gauss && dieMax === 10 ? [9, 10] : [dieMax];
           if (dice.some(d => furyNumbers.includes(d))) {
             furyQueue.push(h);
           }
@@ -420,6 +421,80 @@ new Dialog({
           hitsData[hitIndex - 1].fury = { result: furyRoll.total };
         }
 
+        const targetDoc = await fromUuid(attackData.targetTokenUuid);
+        const targetActor = targetDoc?.actor;
+        const traitTests = { toxic: null, flame: null, spray: null, force: null };
+
+        const rollCharacteristicTest = async ({ total, label, modifier = 0 }) => {
+          const target = Math.max(1, Math.min(100, Number(total || 0) + Number(modifier || 0)));
+          const roll = await new Roll("1d100").evaluate();
+          if (game.dice3d) await game.dice3d.showForRoll(roll, game.user, true);
+          return { label, target, roll: roll.total, success: roll.total <= target, dos: calcDoS(target, roll.total) };
+        };
+
+        if (toxic) {
+          const toxicValue = Number(html.find("#toxicVal").val() || 0);
+          const test = await rollCharacteristicTest({
+            total: targetActor?.system?.characteristics?.toughness?.total ?? 0,
+            label: "Toughness",
+            modifier: -10 * toxicValue
+          });
+          let toxicDamage = 0;
+          if (!test.success) {
+            const toxicRoll = await new Roll("1d10").evaluate();
+            if (game.dice3d) await game.dice3d.showForRoll(toxicRoll, game.user, true);
+            toxicDamage = toxicRoll.total;
+          }
+          traitTests.toxic = { value: toxicValue, ...test, damage: toxicDamage, resolved: true };
+          properties.push(`Toxic (${toxicValue})`);
+        }
+
+        if (flame) {
+          traitTests.flame = {
+            ...(await rollCharacteristicTest({ total: targetActor?.system?.characteristics?.agility?.total ?? 0, label: "Agility" })),
+            resolved: true
+          };
+          properties.push("Flame");
+        }
+
+        if (spray) {
+          traitTests.spray = {
+            ...(await rollCharacteristicTest({ total: targetActor?.system?.characteristics?.agility?.total ?? 0, label: "Agility" })),
+            resolved: true
+          };
+          properties.push("Spray");
+        }
+
+        if (force) {
+          const attackerWP = Number(actor.system?.characteristics?.willpower?.total ?? 0);
+          const targetWP = Number(targetActor?.system?.characteristics?.willpower?.total ?? 0);
+          const attackerRoll = await new Roll("1d100").evaluate();
+          if (game.dice3d) await game.dice3d.showForRoll(attackerRoll, game.user, true);
+          const targetRoll = await new Roll("1d100").evaluate();
+          if (game.dice3d) await game.dice3d.showForRoll(targetRoll, game.user, true);
+          const attackerDoS = calcDoS(attackerWP, attackerRoll.total);
+          const targetDoS = calcDoS(targetWP, targetRoll.total);
+          const won = attackerDoS > targetDoS;
+          let forceDamage = 0;
+          if (won) {
+            const forceDice = Math.max(1, attackerDoS - targetDoS);
+            const forceRoll = await new Roll(`${forceDice}d10`).evaluate();
+            if (game.dice3d) await game.dice3d.showForRoll(forceRoll, game.user, true);
+            forceDamage = forceRoll.total;
+            traitTests.force = { resolved: true, attackerWP, targetWP, attackerRoll: attackerRoll.total, targetRoll: targetRoll.total, attackerDoS, targetDoS, won, dos: forceDice, result: forceDamage, ignoresSoak: true };
+          } else {
+            traitTests.force = { resolved: true, attackerWP, targetWP, attackerRoll: attackerRoll.total, targetRoll: targetRoll.total, attackerDoS, targetDoS, won, dos: 0, result: 0, ignoresSoak: true };
+          }
+          properties.push("Force");
+        }
+
+        const testSummary = [traitTests.flame, traitTests.spray, traitTests.toxic].filter(Boolean)
+          .map(t => `<div><b>${t.label} Test</b> (${t.target}) Roll ${t.roll}: <b>${t.success ? "Success" : "Failure"}</b>${typeof t.damage === "number" ? ` | Extra Damage: <b>${t.damage}</b>` : ""}</div>`)
+          .join("");
+        const forceSummary = traitTests.force
+          ? `<div><b>Force Opposed WP</b> Attacker ${traitTests.force.attackerRoll}/${traitTests.force.attackerWP} (DoS ${traitTests.force.attackerDoS}) vs Target ${traitTests.force.targetRoll}/${traitTests.force.targetWP} (DoS ${traitTests.force.targetDoS}) → <b>${traitTests.force.won ? `Attacker Wins (${traitTests.force.dos}d10 = ${traitTests.force.result})` : "Target Resists"}</b></div>`
+          : "";
+
         const furyHtml = furyResults.length
           ? `<hr><div style="color:gold;font-size:1.1em;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">✦ RIGHTEOUS FURY ✦</div>${furyResults.map((f, i) => `<div>${i + 1}. <b>Location:</b> <i>${f.location}</i> — Righteous Fury: <b>${f.result}</b></div>`).join("")}`
           : "";
@@ -430,6 +505,7 @@ new Dialog({
 <div><b>Penetration:</b> ${pen}</div>
 ${damageResults.map((d, i) => `<div><b>Hit ${i + 1}</b> (${hitLocations[i]}): <b>${d}</b></div>`).join("")}
 <div style="margin-top:6px;"><b>Properties:</b> ${properties.join(", ") || "None"}</div>
+${testSummary}${forceSummary}
 ${furyHtml}
 </div>`;
 
@@ -453,11 +529,12 @@ ${furyHtml}
               hitsData,
               dos,
               fury: furyResults,
-              properties
+              properties,
+              toxic: traitTests.toxic,
+              flame: traitTests.flame,
+              spray: traitTests.spray,
+              force: traitTests.force
             };
-            if (html.find("#toxic")[0]?.checked) {
-              tgt.damageApplicationData.toxic = { value: Number(html.find("#toxicVal").val() || 0) };
-            }
           }
           await entry.msg.update({
             content: buildWorkflowHtml(latest),
@@ -477,6 +554,10 @@ ${furyHtml}
           dos,
           fury: furyResults,
           properties,
+          toxic: traitTests.toxic,
+          flame: traitTests.flame,
+          spray: traitTests.spray,
+          force: traitTests.force,
           chatMessageId: entry.msg.id
         };
       }

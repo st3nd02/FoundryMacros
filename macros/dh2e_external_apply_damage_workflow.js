@@ -496,6 +496,48 @@ label:"Apply",
 callback: async (html)=>{
 
 const coverStart = Number(html.find("#cover").val()) || 0;
+
+if (dmg.horde?.active) {
+  const currentMagnitude = Number(actor.system?.wounds?.value ?? 0);
+  const inflicted = Math.max(0, Number(dmg.horde.magnitudeHits ?? 0));
+  const newMagnitude = Math.max(0, currentMagnitude - inflicted);
+  await actor.update({
+    "system.wounds.value": newMagnitude,
+    "system.wounds.critical": 0
+  });
+
+  const hordeSummary = `
+<div style="text-align:center;">
+<div style="font-style:italic;font-size:1.1em;">
+<b>${dmg.target}</b> (Horde) takes magnitude damage by <b>${dmg.attacker}'s</b> attack
+</div>
+<hr>
+<b>Magnitude Before:</b> ${currentMagnitude}<br>
+<b>Magnitude Damage:</b> ${inflicted}<br>
+<b>Magnitude After:</b> ${newMagnitude}<br>
+<b>Properties:</b> ${(dmg.properties ?? []).join(", ") || "None"}<br>
+<i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i>
+</div>`;
+
+  if (selectedEntry.msg && selectedEntry.state) {
+    const latest = selectedEntry.msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
+    if (latest?.targets?.length) {
+      const tgt = latest.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === dmg.targetTokenUuid);
+      if (tgt) {
+        tgt.damageApplied = true;
+        tgt.applySummary = hordeSummary;
+      }
+      await selectedEntry.msg.update({
+        content: buildWorkflowHtml(latest),
+        flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: latest } }
+      });
+    }
+  } else {
+    ChatMessage.create({ speaker: ChatMessage.getSpeaker({actor}), content: hordeSummary });
+  }
+  return;
+}
+
 const extra = Number(html.find("#extra").val()) || 0;
 const ignoreArmour = html.find("#ignoreArmour")[0].checked;
 const trueGrit = html.find("#trueGrit")[0].checked;
@@ -612,44 +654,42 @@ if (hit.fury){
 }
 
 // ===============================
-// TOXIC
+// TRAIT TEST RESULTS (resolved in damage workflow)
 // ===============================
-const toxicProp = dmg.properties?.find(p => p.toLowerCase().startsWith("toxic"));
+if (dmg.flame?.resolved) {
+  report += `
+  <hr>
+  <b>🔥 FLAME AGILITY TEST</b><br>
+  Target: <b>${dmg.flame.target}</b><br>
+  Roll: <b>${dmg.flame.roll}</b><br>
+  Result: ${dmg.flame.success ? "<span style='color:#6EC1FF;font-weight:900;'>SUCCESS</span>" : "<span style='color:#ff9f1a;font-weight:900;'>FAILED</span>"}
+  `;
+}
 
-if (toxicProp && dmg.toxic?.result && totalInflicted > 0){
+if (dmg.spray?.resolved) {
+  report += `
+  <hr>
+  <b>💨 SPRAY AGILITY TEST</b><br>
+  Target: <b>${dmg.spray.target}</b><br>
+  Roll: <b>${dmg.spray.roll}</b><br>
+  Result: ${dmg.spray.success ? "<span style='color:#6EC1FF;font-weight:900;'>SUCCESS</span>" : "<span style='color:#ff9f1a;font-weight:900;'>FAILED</span>"}
+  `;
+}
 
-  const match = toxicProp.match(/\((\d+)\)/);
-  const toxicValue = match ? Number(match[1]) : 0;
-
-  const toxicPenalty = toxicValue * 10;
-
-  // Toughness test
-  const baseTarget = TBtotal;
-  const toxicTarget = baseTarget - toxicPenalty;
-
-  const roll = await new Roll("1d100").roll({async:true});
-  await roll.toMessage({speaker: ChatMessage.getSpeaker({actor})});
-
-  const success = roll.total <= toxicTarget;
-
+if (dmg.toxic?.resolved) {
   report += `
   <hr>
   <b>☣ TOXIC TEST</b><br>
-  Target: ${baseTarget} – ${toxicPenalty} = 
-  <b>${toxicTarget}</b><br>
-  Roll: <b>${roll.total}</b><br>
-  Result: ${success ? 
-    "<span style='color:#6EC1FF;font-weight:900;'>RESISTED</span>" :
-    "<span style='color:#66cc66;font-weight:900;'>FAILED</span>"
-  }
+  Target: <b>${dmg.toxic.target}</b><br>
+  Roll: <b>${dmg.toxic.roll}</b><br>
+  Result: ${dmg.toxic.success
+    ? "<span style='color:#6EC1FF;font-weight:900;'>RESISTED</span>"
+    : "<span style='color:#66cc66;font-weight:900;'>FAILED</span>"}
   `;
 
-  if (!success){
-
-    const toxicDamage = dmg.toxic.result;
-
+  if (!dmg.toxic.success && Number(dmg.toxic.damage ?? 0) > 0){
+    const toxicDamage = Number(dmg.toxic.damage);
     const woundsBefore = woundsCurrent;
-
     woundsCurrent += toxicDamage;
 
     report += `
@@ -658,97 +698,63 @@ if (toxicProp && dmg.toxic?.result && totalInflicted > 0){
       0 0 4px #000,
       0 0 6px #000;"><b>☣ TOXIC DAMAGE ☣</b><br>
     Damage: ${toxicDamage}<br>
-    <span style="font-weight:900;">
-    Inflicted: ${toxicDamage} (ignores armour & TB)
-    </span></div><br>
+    <span style="font-weight:900;">Inflicted: ${toxicDamage} (ignores armour & TB)</span></div><br>
     Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}
     `;
   }
-
+} else if (dmg.toxic?.result && totalInflicted > 0) {
+  // Backward compatibility for old payloads
+  const toxicDamage = Number(dmg.toxic.result);
+  const woundsBefore = woundsCurrent;
+  woundsCurrent += toxicDamage;
+  report += `<hr><b>☣ TOXIC DAMAGE ☣</b><br>Damage: ${toxicDamage}<br>Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}`;
 }
-// ===============================
-// FORCE (Opposed DoS)
-// ===============================
-if (dmg.force?.used && dmg.force.result){
 
-  const forceDoS = dmg.force.dos || 0;
-
-  const WP = actor.system.characteristics.willpower.total || 0;
-
-  const roll = await new Roll("1d100").roll({async:true});
-  await roll.toMessage({speaker: ChatMessage.getSpeaker({actor})});
-
-  let targetDoS = 0;
-  let success = roll.total <= WP;
-
-  if (success){
-    targetDoS = Math.floor((WP - roll.total) / 10) + 1;
-  }
-
+if (dmg.force?.resolved) {
   report += `
   <hr>
-  <div style="color:#cc3333; text-shadow:
-      0 0 2px #000,
-      0 0 4px #000,
-      0 0 6px #000; font-weight:900;"><b>✦ FORCE TEST ✦</b></div><br>
-  WP: ${WP}<br>
-  Roll: <b>${roll.total}</b><br>
-  Target DoS: <b>${targetDoS}</b><br>
-  Force DoS: <b>${forceDoS}</b><br>
+  <div style="color:#cc3333; text-shadow:0 0 2px #000,0 0 4px #000,0 0 6px #000; font-weight:900;"><b>✦ FORCE OPPOSED TEST ✦</b></div><br>
+  Attacker WP: ${dmg.force.attackerWP} Roll <b>${dmg.force.attackerRoll}</b> (DoS ${dmg.force.attackerDoS})<br>
+  Target WP: ${dmg.force.targetWP} Roll <b>${dmg.force.targetRoll}</b> (DoS ${dmg.force.targetDoS})<br>
   `;
 
-  if (targetDoS >= forceDoS){
+  if (dmg.force.won && Number(dmg.force.result ?? 0) > 0) {
+    const forceDamage = Number(dmg.force.result);
+    const woundsBefore = woundsCurrent;
+    let newWounds = woundsCurrent + forceDamage;
+    let critDamage = 0;
+
+    if (newWounds > woundsMax){
+      critDamage = newWounds - woundsMax;
+      newWounds = woundsMax;
+    }
+    if (trueGrit && critDamage > 0){
+      critDamage = Math.max(critDamage - TB, 1);
+    }
+
+    woundsCurrent = newWounds;
+    critCurrent += critDamage;
+    if (critDamage > 0 && lastCritLocation){
+      realCritToApply = critCurrent;
+    }
 
     report += `
-    <span style="color:#cc3333; text-shadow:
-      0 0 2px #000,
-      0 0 4px #000,
-      0 0 6px #000; font-weight:900;">RESISTED</span>
+    <span style="color:#66cc66;font-weight:900;">ATTACKER WINS</span><br>
+    <b>✦ FORCE DAMAGE ✦</b><br>
+    Damage: ${forceDamage} (${dmg.force.dos}d10)<br>
+    <span style="color:#cc3333;font-weight:900;">Inflicted: ${forceDamage} (ignores armour & TB)</span><br>
+    Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}<br>
+    Crit Added: ${critDamage} (${critCurrent} total)
     `;
-
   } else {
-
-    const forceDamage = dmg.force.result;
-
-const woundsBefore = woundsCurrent;
-
-let newWounds = woundsCurrent + forceDamage;
-let critDamage = 0;
-
-if (newWounds > woundsMax){
-  critDamage = newWounds - woundsMax;
-  newWounds = woundsMax;
-}
-
-if (trueGrit && critDamage > 0){
-  critDamage = Math.max(critDamage - TB, 1);
-}
-
-woundsCurrent = newWounds;
-critCurrent += critDamage;
-
-// 👇 THIS IS THE IMPORTANT PART
-if (critDamage > 0 && lastCritLocation){
-  realCritToApply = critCurrent;
-}
-
-report += `
-<span style="color:#cc3333; text-shadow:
-      0 0 2px #000,
-      0 0 4px #000,
-      0 0 6px #000; font-weight:900;">FAILED</span><br>
-<b>✦ FORCE DAMAGE ✦</b><br>
-Damage: ${forceDamage}<br>
-<span style="color:#cc3333; text-shadow:
-      0 0 2px #000,
-      0 0 4px #000,
-      0 0 6px #000;font-weight:900;">
-Inflicted: ${forceDamage} (ignores armour & TB)
-</span><br>
-Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}<br>
-Crit Added: ${critDamage} (${critCurrent} total)
-`;
+    report += `<span style="color:#6EC1FF;font-weight:900;">TARGET RESISTS FORCE</span>`;
   }
+} else if (dmg.force?.used && dmg.force.result) {
+  // Backward compatibility for old payloads
+  const forceDamage = Number(dmg.force.result);
+  const woundsBefore = woundsCurrent;
+  woundsCurrent = Math.min(woundsCurrent + forceDamage, woundsMax);
+  report += `<hr><b>✦ FORCE DAMAGE ✦</b><br>Damage: ${forceDamage}<br>Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}`;
 }
 
 // ===== UPDATE ACTOR (same as original logic) =====
