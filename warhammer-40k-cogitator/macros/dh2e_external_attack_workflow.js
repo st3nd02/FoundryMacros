@@ -162,8 +162,8 @@ const getHordeBonusFromMagnitude = magnitude => {
 
 const getHordeMagnitudeValue = actorDoc => {
   if (!actorDoc) return 0;
-  const candidateValues = [actorDoc.system?.wounds?.value, actorDoc.system?.wounds?.max].map(v => Number(v));
-  return candidateValues.find(v => Number.isFinite(v) && v >= 0) ?? 0;
+  const value = Number(actorDoc.system?.wounds?.value ?? 0);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
 };
 
 const animatedRoll = async formula => {
@@ -504,8 +504,8 @@ const promptDamageDialog = async (state, chatMessage) => {
                   ? `No damage roll required (minimum damage ${minDamage} exceeds soak ${soakThreshold}).`
                   : `Rolled once for penetration (${rolledDamage} vs soak ${soakThreshold}).`;
                 const resultNote = penetrationSucceeded
-                  ? `Horde takes <b>${magHits}</b> magnitude damage from hits.`
-                  : `Damage did not beat soak; magnitude damage is <b>0</b>.`;
+                  ? `Horde takes <b>${magHits}</b> wound damage from hits.`
+                  : `Damage did not beat soak; wound damage is <b>0</b>.`;
                 t.damageSummary = `<div><b>Horde Damage:</b> ${rollNote} ${resultNote}</div>`;
                 t.damageApplicationData.horde = { active: true, magnitudeHits: magHits, canSkipRoll, soakThreshold, minimumDamage: minDamage, penetrationSucceeded };
               }
@@ -777,7 +777,7 @@ const runAttackWorkflow = async setup => {
   if (success && isMelee) {
     const wsb = attacker.system.characteristics.weaponSkill?.bonus ?? 1;
     if (state.horde?.active && state.modeKey !== "lightning") {
-      hits = Math.min(Math.floor(Math.max(0, dos) / 2), wsb);
+      hits = Math.min(1 + Math.floor(Math.max(0, dos - 1) / 2), wsb);
     } else if (state.modeKey === "swift") hits = Math.min(1 + Math.floor(Math.max(0, dos - 1) / 2), wsb);
     else if (state.modeKey === "lightning") hits = Math.min(Math.max(1, dos), wsb);
   }
@@ -1020,17 +1020,17 @@ const showAttackDialog = async () => {
         <div class="attack-talents-grid">
           <div class="attack-talents-col">
             <label class="talent-toggle" data-needle="double tap"><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
-            <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
-            <label class="talent-toggle" data-needle="whirlwind"><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
-            <label class="talent-toggle talent-auto" data-needle="marksman"><input type="checkbox" id="talent_marksman" disabled/> Marksman (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="deadeye"><input type="checkbox" id="talent_deadeye" disabled/> Deadeye Shot (auto)</label>
             <label class="talent-toggle" data-needle="target selection"><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
             <label class="talent-toggle" data-needle="blademaster"><input type="checkbox" id="talent_blademaster"/> Blademaster</label>
             <label class="talent-toggle" data-needle="berserk charge"><input type="checkbox" id="talent_berserk"/> Berserk Charge</label>
+            <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
             <label class="talent-toggle talent-auto" data-needle="flesh render"><input type="checkbox" id="talent_flesh" disabled/> Flesh Render (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="raptor"><input type="checkbox" id="talent_raptor" disabled/> Raptor (auto)</label>
+            <label class="talent-toggle" data-needle="whirlwind"><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
           </div>
           <div class="attack-talents-col">
+            <label class="talent-toggle talent-auto" data-needle="deadeye"><input type="checkbox" id="talent_deadeye" disabled/> Deadeye Shot (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="marksman"><input type="checkbox" id="talent_marksman" disabled/> Marksman (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="crushing blow"><input type="checkbox" id="talent_crushing" disabled/> Crushing Blow (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="mighty shot"><input type="checkbox" id="talent_mighty" disabled/> Mighty Shot (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="hammer blow"><input type="checkbox" id="talent_hammer" disabled/> Hammer Blow (auto)</label>

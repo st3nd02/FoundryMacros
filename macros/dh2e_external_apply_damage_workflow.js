@@ -498,23 +498,26 @@ callback: async (html)=>{
 const coverStart = Number(html.find("#cover").val()) || 0;
 
 if (dmg.horde?.active) {
-  const currentMagnitude = Number(actor.system?.wounds?.value ?? 0);
+  const currentWounds = Number(actor.system?.wounds?.value ?? 0);
+  const maxWounds = Number(actor.system?.wounds?.max ?? currentWounds);
   const inflicted = Math.max(0, Number(dmg.horde.magnitudeHits ?? 0));
-  const newMagnitude = Math.max(0, currentMagnitude - inflicted);
+  const newWounds = Number.isFinite(maxWounds) && maxWounds >= 0
+    ? Math.min(maxWounds, currentWounds + inflicted)
+    : (currentWounds + inflicted);
   await actor.update({
-    "system.wounds.value": newMagnitude,
+    "system.wounds.value": newWounds,
     "system.wounds.critical": 0
   });
 
   const hordeSummary = `
 <div style="text-align:center;">
 <div style="font-style:italic;font-size:1.1em;">
-<b>${dmg.target}</b> (Horde) takes magnitude damage by <b>${dmg.attacker}'s</b> attack
+<b>${dmg.target}</b> (Horde) takes wound damage by <b>${dmg.attacker}'s</b> attack
 </div>
 <hr>
-<b>Magnitude Before:</b> ${currentMagnitude}<br>
-<b>Magnitude Damage:</b> ${inflicted}<br>
-<b>Magnitude After:</b> ${newMagnitude}<br>
+<b>Wounds Before:</b> ${currentWounds}<br>
+<b>Wounds Added:</b> ${inflicted}<br>
+<b>Wounds After:</b> ${newWounds}${Number.isFinite(maxWounds) && maxWounds >= 0 ? ` / ${maxWounds}` : ""}<br>
 <b>Properties:</b> ${(dmg.properties ?? []).join(", ") || "None"}<br>
 <i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i>
 </div>`;
