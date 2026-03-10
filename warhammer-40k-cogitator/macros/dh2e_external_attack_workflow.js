@@ -21,8 +21,25 @@ if (!attacker) return ui.notifications.warn("Attacker token has no actor.");
 
 const pendingMirrorSetup = game.warhammer40kCogitator?.consumePendingAttackContext?.() ?? null;
 
+const updateUserTokenTargets = tokenIds => {
+  if (typeof game.user?.updateTokenTargets === "function") {
+    game.user.updateTokenTargets(tokenIds);
+    return;
+  }
+
+  for (const existing of Array.from(game.user?.targets ?? [])) {
+    existing.setTarget(false, { user: game.user, releaseOthers: false, groupSelection: true });
+  }
+
+  for (const tokenId of tokenIds) {
+    const token = canvas.tokens?.get(tokenId);
+    if (!token) continue;
+    token.setTarget(true, { user: game.user, releaseOthers: false, groupSelection: true });
+  }
+};
+
 if (pendingMirrorSetup?.targetTokenIds?.length) {
-  game.user.updateTokenTargets(pendingMirrorSetup.targetTokenIds);
+  updateUserTokenTargets(pendingMirrorSetup.targetTokenIds);
 }
 let targetTokens = Array.from(game.user.targets ?? []);
 if (!targetTokens.length) return ui.notifications.warn("Select at least one target token.");

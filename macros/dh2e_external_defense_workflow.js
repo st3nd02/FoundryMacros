@@ -19,6 +19,39 @@ const rollWithDiceSoNice = async formula => {
 
 const requestedDefense = game.warhammer40kCogitator?.consumePendingDefenseContext?.() ?? null;
 
+const updateUserTokenTargets = tokenIds => {
+  if (typeof game.user?.updateTokenTargets === "function") {
+    game.user.updateTokenTargets(tokenIds);
+    return;
+  }
+
+  for (const existing of Array.from(game.user?.targets ?? [])) {
+    existing.setTarget(false, { user: game.user, releaseOthers: false, groupSelection: true });
+  }
+
+  for (const tokenId of tokenIds) {
+    const token = canvas.tokens?.get(tokenId);
+    if (!token) continue;
+    token.setTarget(true, { user: game.user, releaseOthers: false, groupSelection: true });
+  }
+};
+
+const getActorFateValue = actorDoc => {
+  const fate = actorDoc?.system?.fate;
+  if (typeof fate === "number") return fate;
+  return Number(fate?.value ?? 0);
+};
+
+const spendActorFate = async actorDoc => {
+  const current = getActorFateValue(actorDoc);
+  const next = Math.max(0, current - 1);
+  if (typeof actorDoc?.system?.fate === "number") {
+    await actorDoc.update({ "system.fate": next });
+  } else {
+    await actorDoc.update({ "system.fate.value": next });
+  }
+};
+
 const resolveTokenFromRequest = async () => {
   if (!requestedDefense?.targetTokenUuid) return null;
   const tokenDoc = await fromUuid(requestedDefense.targetTokenUuid);
@@ -26,7 +59,7 @@ const resolveTokenFromRequest = async () => {
   if (!tokenObject) return null;
   tokenObject.control({ releaseOthers: true });
   if (tokenDoc.id) {
-    game.user.updateTokenTargets([tokenDoc.id]);
+    updateUserTokenTargets([tokenDoc.id]);
   }
   return tokenObject;
 };
@@ -120,7 +153,7 @@ const pick = await new Promise(resolve => {
       <label><b>Modifier</b></label>
       <input id="mod" type="number" value="0"/>
       <hr>
-      <div style="opacity:.7;">Fate Remaining: <b>${actor.system.fate?.value ?? 0}</b></div>
+      <div style="opacity:.7;">Fate Remaining: <b>${getActorFateValue(actor)}</b></div>
     </form>`,
     render: html => {
       html.find('input[name="defence"]').on("change", function () {
@@ -219,11 +252,11 @@ const postResult = ({ usedFate }) => {
 
 let defenseResult = postResult({ usedFate: false });
 let dos = defenseResult.success ? defenseResult.degrees : 0;
-if (dos <= 0 && (actor.system.fate?.value ?? 0) > 0) {
+if (dos <= 0 && getActorFateValue(actor) > 0) {
   const useFate = await new Promise(resolve => {
     new Dialog({
       title: "Spend Fate?",
-      content: `<p><b>Test Failed!</b><br>Spend 1 Fate Point to reroll?<br>Remaining: <b>${actor.system.fate?.value ?? 0}</b></p>`,
+      content: `<p><b>Test Failed!</b><br>Spend 1 Fate Point to reroll?<br>Remaining: <b>${getActorFateValue(actor)}</b></p>`,
       buttons: {
         yes: { label: "Reroll (-1 Fate)", callback: () => resolve(true) },
         no: { label: "Keep Result", callback: () => resolve(false) }
@@ -233,7 +266,7 @@ if (dos <= 0 && (actor.system.fate?.value ?? 0) > 0) {
   });
 
   if (useFate) {
-    await actor.update({ "system.fate.value": Math.max(0, (actor.system.fate?.value ?? 0) - 1) });
+    await spendActorFate(actor);
     roll = await rollWithDiceSoNice("1d100");
     defenseResult = postResult({ usedFate: true });
     dos = defenseResult.success ? defenseResult.degrees : 0;
