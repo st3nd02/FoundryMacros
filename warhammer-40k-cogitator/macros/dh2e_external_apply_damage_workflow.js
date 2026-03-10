@@ -515,10 +515,10 @@ if (dmg.horde?.active) {
 <b>${dmg.target}</b> (Horde) takes wound damage by <b>${dmg.attacker}'s</b> attack
 </div>
 <hr>
-<b>Magnitude Before:</b> ${currentWounds}<br>
-<b>Damage done:</b> ${inflicted}<br>
-<b>Horde Magnitude Damage:</b> ${newWounds}${Number.isFinite(maxWounds) && maxWounds >= 0 ? ` / ${maxWounds}` : ""}<br>
-${(dmg.properties ?? []).length ? `<b>Notes:</b> ${(dmg.properties ?? []).map(p => p === "Horde Target" ? `<b>${p}</b>` : p).join(", ")}<br>` : ""}
+<b>Wounds Before:</b> ${currentWounds}<br>
+<b>Wounds Added:</b> ${inflicted}<br>
+<b>Wounds After:</b> ${newWounds}${Number.isFinite(maxWounds) && maxWounds >= 0 ? ` / ${maxWounds}` : ""}<br>
+<b>Properties:</b> ${(dmg.properties ?? []).join(", ") || "None"}<br>
 <i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i>
 </div>`;
 
@@ -859,18 +859,10 @@ if (selectedEntry.msg && selectedEntry.state) {
       .every(t => t.damageApplied);
 
     if (allApplied && latest.devastatingFollowUp?.available && !latest.devastatingFollowUp?.prompted) {
-      const attackerActor = game.actors.get(latest.attackerActorId);
-      const hasDevastatingEffect = attackerActor?.effects?.some(effect => String(effect.name ?? "").toLowerCase() === "devastating assault");
-
-      if (!hasDevastatingEffect) {
-        ChatMessage.create({
-          speaker: ChatMessage.getSpeaker({ actor: attackerActor ?? actor }),
-          content: "<b>Devastating Assault hit, make a second all out attack against the same target</b>"
-        });
-        if (attackerActor) {
-          await attackerActor.createEmbeddedDocuments("ActiveEffect", [{ name: "Devastating Assault", img: "icons/svg/sword.svg", origin: attackerActor.uuid }]);
-        }
-      }
+      ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor: game.actors.get(latest.attackerActorId) ?? actor }),
+        content: "<b>Devastating Assault hit, Make a second All-Out Attack against the same target</b>"
+      });
 
       latest.devastatingFollowUp.prompted = true;
       await selectedEntry.msg.update({
