@@ -233,17 +233,22 @@ const getAutoRangeBand = (distanceMeters, normalRange, isMelee) => {
   return -999;
 };
 
-const allocateHits = ({ totalHits, modeKey, targets, rof }) => {
+const allocateHits = ({ totalHits, modeKey, targets, rof, storm }) => {
   const byTarget = new Map(targets.map(t => [t.tokenUuid, 0]));
   if (totalHits <= 0 || !targets.length) return byTarget;
+
+  const hitStep = storm ? 2 : 1;
   let remaining = totalHits;
   let idx = 0;
+
   while (remaining > 0) {
     const t = targets[idx % targets.length];
-    byTarget.set(t.tokenUuid, (byTarget.get(t.tokenUuid) ?? 0) + 1);
+    const assign = Math.min(hitStep, remaining);
+    byTarget.set(t.tokenUuid, (byTarget.get(t.tokenUuid) ?? 0) + assign);
     idx += 1;
-    remaining -= 1;
+    remaining -= assign;
   }
+
   return byTarget;
 };
 
@@ -564,8 +569,12 @@ const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
     // Fallback for local self-defense when the Foundry socket implementation
     // does not loop module events back to the emitting client.
     if (payload.ownerIds.includes(game.user.id)) {
-      game.warhammer40kCogitator.setPendingDefenseContext?.(payload);
-      await game.warhammer40kCogitator.runStep?.("defense");
+      if (game.warhammer40kCogitator?.promptDefenseRequest) {
+        game.warhammer40kCogitator.promptDefenseRequest(payload);
+      } else {
+        game.warhammer40kCogitator.setPendingDefenseContext?.(payload);
+        await game.warhammer40kCogitator.runStep?.("defense");
+      }
     }
 
     return true;
@@ -799,7 +808,7 @@ const runAttackWorkflow = async setup => {
   const sprayAlloc = isSpray && success && !jam
     ? new Map(eligible.map(tg => [tg.tokenUuid, 1]))
     : null;
-  const alloc = sprayAlloc ?? allocateHits({ totalHits: hits, modeKey: state.modeKey, targets: eligible, rof });
+  const alloc = sprayAlloc ?? allocateHits({ totalHits: hits, modeKey: state.modeKey, targets: eligible, rof, storm: hasTrait(traits, "storm") });
 
   state.targets = state.targets.map(tg => ({ ...tg, allocatedHits: alloc.get(tg.tokenUuid) || 0 }));
 
@@ -830,7 +839,7 @@ const runAttackWorkflow = async setup => {
     outOfAmmoAfter = outOfAmmoAfter || secondAmmo.outOfAmmo;
 
     const secondEligible = boostedTargets.filter(tg => secondRoll <= tg.targetNumber);
-    const secondAlloc = allocateHits({ totalHits: secondHits, modeKey: state.modeKey, targets: secondEligible, rof });
+    const secondAlloc = allocateHits({ totalHits: secondHits, modeKey: state.modeKey, targets: secondEligible, rof, storm: hasTrait(traits, "storm") });
     state.targets = state.targets.map(tg => ({ ...tg, allocatedHits: (tg.allocatedHits ?? 0) + (secondAlloc.get(tg.tokenUuid) || 0) }));
     state.extraText = [state.extraText, `Double Tap second attack: ${secondRoll} (${secondHits} hit${secondHits === 1 ? "" : "s"})`].filter(Boolean).join(" | ");
     selectedTalents.push("Double Tap: second attack at +20");

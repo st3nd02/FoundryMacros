@@ -12,6 +12,8 @@ const SOCKET_EVENTS = {
   requestDefense: "requestDefense",
   defenseResolved: "defenseResolved",
   damageReady: "damageReady",
+  damageResolved: "damageResolved",
+  clearWorkflowContexts: "clearWorkflowContexts",
   mirrorAttackReady: "mirrorAttackReady"
 };
 
@@ -129,8 +131,10 @@ Hooks.once("ready", async () => {
     clearDefenseReaction,
     setPendingDefenseContext,
     consumePendingDefenseContext,
+    promptDefenseRequest,
     setPendingDamageContext,
     consumePendingDamageContext,
+    submitDamageResult,
     setPendingAttackContext,
     consumePendingAttackContext
   };
@@ -159,6 +163,9 @@ function registerCombatHooks() {
 
 async function clearResidualWorkflowsOnRoundChange(combat) {
   if (!combat?.started) return;
+
+  clearLocalWorkflowContexts();
+  emitSocket(SOCKET_EVENTS.clearWorkflowContexts, {});
 
   for (const message of game.messages.contents) {
     const state = message.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
@@ -189,6 +196,10 @@ async function clearResidualWorkflowsOnRoundChange(combat) {
         target.damageSummary = "<div><b>Damage:</b> Expired (round advanced)</div>";
         target.damageRolls = [];
       }
+
+      target.damageApplied = true;
+      target.applySummary = "<div><b>Application:</b> Expired (round advanced)</div>";
+      target.damageApplicationData = null;
 
       target.allocatedHits = 0;
     }
@@ -391,10 +402,27 @@ function registerSocketHandlers() {
       return;
     }
 
+    if (packet.event === SOCKET_EVENTS.damageResolved) {
+      void handleDamageResolved(packet.payload);
+      return;
+    }
+
+    if (packet.event === SOCKET_EVENTS.clearWorkflowContexts) {
+      clearLocalWorkflowContexts();
+      return;
+    }
+
     if (packet.event === SOCKET_EVENTS.mirrorAttackReady) {
       handleMirrorAttackReady(packet.payload);
     }
   });
+}
+
+function clearLocalWorkflowContexts() {
+  pendingDefenseContext = null;
+  pendingDamageContext = null;
+  pendingAttackContext = null;
+  recentDefensePromptKeys.clear();
 }
 
 function emitSocket(event, payload) {
@@ -493,6 +521,10 @@ async function handleDefenseRequest(payload) {
   }).render(true);
 }
 
+function promptDefenseRequest(payload) {
+  void handleDefenseRequest(payload);
+}
+
 function setPendingDefenseContext(payload) {
   pendingDefenseContext = payload ?? null;
 }
@@ -575,6 +607,99 @@ async function handleDefenseResolved(payload) {
     console.error("Warhammer 40k Cogitator | Failed to apply defense result", err, payload);
     ui.notifications.error(`Warhammer 40k Cogitator: Failed to apply defense result (${err.message ?? err}).`);
   }
+}
+
+async function submitDamageResult({ chatMessageId, targetTokenUuid, attackerActorId, damageResult }) {
+  const message = game.messages.get(chatMessageId);
+  const canDirectUpdate = !!game.user.isGM || !!message?.canUserModify?.(game.user, "update");
+
+  if (canDirectUpdate) {
+    await applyDamageResult({ chatMessageId, targetTokenUuid, damageResult });
+    return { ok: true, mode: game.user.isGM ? "gm-direct" : "owner-direct" };
+  }
+
+  const activeGMs = game.users.filter(u => u.active && u.isGM);
+  if (!activeGMs.length) {
+    throw new Error("No active GM is connected. Damage result cannot be applied right now.");
+  }
+
+  emitSocket(SOCKET_EVENTS.damageResolved, {
+    chatMessageId,
+    targetTokenUuid,
+    attackerActorId,
+    damageResult,
+    resolverUserId: game.user.id
+  });
+
+  return { ok: true, mode: "socket" };
+}
+
+function assertDamageResolverAuthorized({ resolverUserId, attackerActorId }) {
+  if (!resolverUserId) throw new Error("Damage payload missing resolver user.");
+  if (!attackerActorId) throw new Error("Damage payload missing attacker actor.");
+
+  const resolverUser = game.users.get(resolverUserId);
+  if (!resolverUser) throw new Error("Damage resolver user could not be found.");
+  if (resolverUser.isGM) return;
+
+  const attackerActor = game.actors.get(attackerActorId);
+  if (!attackerActor) throw new Error("Damage attacker actor could not be resolved.");
+  if (!attackerActor.testUserPermission(resolverUser, "OWNER")) {
+    throw new Error("Damage resolver is not an owner of the attacker actor.");
+  }
+}
+
+async function handleDamageResolved(payload) {
+  if (!game.user.isGM) return;
+  try {
+    assertDamageResolverAuthorized(payload);
+    await applyDamageResult(payload);
+  } catch (err) {
+    console.error("Warhammer 40k Cogitator | Failed to apply damage result", err, payload);
+    ui.notifications.error(`Warhammer 40k Cogitator: Failed to apply damage result (${err.message ?? err}).`);
+  }
+}
+
+async function applyDamageResult({ chatMessageId, targetTokenUuid, damageResult }) {
+  const message = game.messages.get(chatMessageId);
+  if (!message || !damageResult) return;
+
+  const state = foundry.utils.deepClone(message.getFlag(WORKFLOW_NS, WORKFLOW_KEY));
+  if (!state?.targets?.length) return;
+
+  const target = state.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === targetTokenUuid);
+  if (!target) return;
+
+  target.damageRolls = Array.isArray(damageResult.hitsData)
+    ? damageResult.hitsData.map(hd => ({ total: hd.damage, loc: hd.location }))
+    : [];
+  target.damageSummary = damageResult.damageSummary ?? target.damageSummary ?? "<div><b>Damage:</b> Resolved</div>";
+  target.damageResolved = true;
+  target.damageApplied = false;
+  target.applySummary = null;
+  target.damageApplicationData = {
+    attacker: damageResult.attacker,
+    target: damageResult.target,
+    targetTokenUuid,
+    weapon: damageResult.weapon,
+    damageType: damageResult.damageType,
+    penetration: damageResult.penetration,
+    hits: damageResult.hits,
+    hitsData: Array.isArray(damageResult.hitsData) ? damageResult.hitsData : [],
+    dos: damageResult.dos,
+    fury: damageResult.fury,
+    properties: damageResult.properties,
+    toxic: damageResult.toxic,
+    flame: damageResult.flame,
+    spray: damageResult.spray,
+    sprayJam: damageResult.sprayJam,
+    force: damageResult.force
+  };
+
+  await message.update({
+    content: buildWorkflowHtml(state),
+    flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
+  });
 }
 
 function assertDefenseResolverAuthorized({ resolverUserId, targetTokenUuid }) {
