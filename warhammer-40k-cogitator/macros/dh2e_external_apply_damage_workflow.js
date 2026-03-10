@@ -859,7 +859,7 @@ if (selectedEntry.msg && selectedEntry.state) {
 
     if (allApplied && latest.devastatingFollowUp?.available && !latest.devastatingFollowUp?.prompted) {
       const attackerActor = game.actors.get(latest.attackerActorId);
-      const hasDevastatingEffect = attackerActor?.effects?.some(effect => String(effect.name ?? "").toLowerCase() === "devastating assault");
+      const hasDevastatingEffect = attackerActor?.effects?.some(effect => String(effect.name ?? "").toLowerCase().includes("devastating assault"));
 
       if (!hasDevastatingEffect) {
         ChatMessage.create({

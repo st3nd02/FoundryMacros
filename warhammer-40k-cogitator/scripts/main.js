@@ -26,7 +26,7 @@ const REACTION_EFFECT_NAME = "Reaction Used";
 const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 const USED_EVASION_EFFECT_ID = "ce-used-evasion";
 const DEVASTATING_ASSAULT_EFFECT_ID = "devastating-assault";
-const DEVASTATING_ASSAULT_EFFECT_NAME = "Devastating Assault";
+const DEVASTATING_ASSAULT_EFFECT_NAME = "Devastating Assault .";
 const WEAPON_RECHARGING_EFFECT_ID = "weapon-recharging";
 const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
 let cogitatorSocket = null;
@@ -366,7 +366,7 @@ async function removeUsedEvasionEffect(actor) {
 
 async function applyDevastatingAssaultEffect(actor) {
   if (!actor) return false;
-  return addConvenientEffectToActor({ actorUuid: actor.uuid, effectId: DEVASTATING_ASSAULT_EFFECT_ID, effectName: DEVASTATING_ASSAULT_EFFECT_NAME });
+  return addConvenientEffectToActor({ actorUuid: actor.uuid, effectName: DEVASTATING_ASSAULT_EFFECT_NAME });
 }
 
 async function applyWeaponRechargingEffect(actor) {
@@ -473,8 +473,7 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
     if (activeEffect) {
       const numericCounter = Number(counter);
       await activeEffect.update({
-        "flags.statuscounter.counter": numericCounter,
-        "flags.statuscounter.counter.value": numericCounter,
+        "flags.statuscounter.counter": { value: numericCounter },
         "flags.statusIconCounters.counter": numericCounter,
         "flags.statusIconCounters.value": numericCounter,
         "flags.status-icon-counters.counter": numericCounter,
