@@ -25,6 +25,11 @@ const REACTION_COUNT_FLAG = "reactionUsedForDefenseCount";
 const REACTION_EFFECT_NAME = "Reaction Used";
 const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 const USED_EVASION_EFFECT_ID = "ce-used-evasion";
+const DEVASTATING_ASSAULT_EFFECT_ID = "ce-devastating-assault";
+const DEVASTATING_ASSAULT_EFFECT_NAME = "Devastating Assault";
+const WEAPON_RECHARGING_EFFECT_ID = "ce-weapon-recharging";
+const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
+let cogitatorSocket = null;
 let pendingDefenseContext = null;
 let pendingDamageContext = null;
 let pendingAttackContext = null;
@@ -136,9 +141,12 @@ Hooks.once("ready", async () => {
     consumePendingDamageContext,
     submitDamageResult,
     setPendingAttackContext,
-    consumePendingAttackContext
+    consumePendingAttackContext,
+    applyDevastatingAssaultEffect,
+    applyWeaponRechargingEffect
   };
 
+  initializeSocketlib();
   registerSocketHandlers();
   registerCombatHooks();
 
@@ -311,7 +319,7 @@ async function consumeDefenseReaction(actor) {
 
   await actor.setFlag(COGITATOR_ID, REACTION_COUNT_FLAG, nextUsed);
   await actor.setFlag(COGITATOR_ID, REACTION_FLAG, true);
-  await applyUsedEvasionEffect(actor);
+  await applyUsedEvasionEffect(actor, nextUsed);
 }
 
 async function clearDefenseReaction(actor) {
@@ -332,25 +340,9 @@ async function clearDefenseReaction(actor) {
   await removeUsedEvasionEffect(actor);
 }
 
-async function applyUsedEvasionEffect(actor) {
-  const effectInterface = game.dfreds?.effectInterface;
-  if (!effectInterface?.addEffect) return;
-
-  const paramsByPriority = [
-    { effectId: USED_EVASION_EFFECT_ID, uuid: actor.uuid },
-    { effectId: USED_EVASION_EFFECT_ID, uuids: [actor.uuid] },
-    { effectName: USED_EVASION_EFFECT_ID, uuid: actor.uuid },
-    { effectName: USED_EVASION_EFFECT_ID, uuids: [actor.uuid] }
-  ];
-
-  for (const params of paramsByPriority) {
-    try {
-      await effectInterface.addEffect(params);
-      return;
-    } catch (_) {
-      // Try next signature to support different CE versions.
-    }
-  }
+async function applyUsedEvasionEffect(actor, counter = null) {
+  if (!actor) return;
+  await addConvenientEffectToActor({ actorUuid: actor.uuid, effectId: USED_EVASION_EFFECT_ID, effectName: "Used Evasion", counter });
 }
 
 async function removeUsedEvasionEffect(actor) {
@@ -369,26 +361,170 @@ async function removeUsedEvasionEffect(actor) {
     await actor.deleteEmbeddedDocuments("ActiveEffect", actorEffectsToDelete);
   }
 
+  await removeConvenientEffectFromActor({ actorUuid: actor.uuid, effectId: USED_EVASION_EFFECT_ID, effectName: "Used Evasion" });
+}
+
+async function applyDevastatingAssaultEffect(actor) {
+  if (!actor) return false;
+  return addConvenientEffectToActor({ actorUuid: actor.uuid, effectId: DEVASTATING_ASSAULT_EFFECT_ID, effectName: DEVASTATING_ASSAULT_EFFECT_NAME });
+}
+
+async function applyWeaponRechargingEffect(actor) {
+  if (!actor) return false;
+  return addConvenientEffectToActor({ actorUuid: actor.uuid, effectId: WEAPON_RECHARGING_EFFECT_ID, effectName: WEAPON_RECHARGING_EFFECT_NAME });
+}
+
+function initializeSocketlib() {
+  if (!globalThis.socketlib?.registerModule) return;
+  cogitatorSocket = globalThis.socketlib.registerModule(COGITATOR_ID);
+  cogitatorSocket.register("socketApplyDefenseResult", socketApplyDefenseResult);
+  cogitatorSocket.register("socketApplyDamageResult", socketApplyDamageResult);
+  cogitatorSocket.register("socketHandleDefenseRequest", socketHandleDefenseRequest);
+  cogitatorSocket.register("socketHandleDamageReady", socketHandleDamageReady);
+  cogitatorSocket.register("socketHandleMirrorAttackReady", socketHandleMirrorAttackReady);
+  cogitatorSocket.register("socketClearWorkflowContexts", socketClearWorkflowContexts);
+  cogitatorSocket.register("socketAddConvenientEffect", socketAddConvenientEffect);
+}
+
+async function socketApplyDefenseResult(payload) {
+  if (!game.user.isGM) throw new Error("Only a GM may apply defense results.");
+  assertDefenseResolverAuthorized(payload);
+  await applyDefenseResult(payload);
+  return { ok: true, mode: "socketlib-gm" };
+}
+
+async function socketApplyDamageResult(payload) {
+  if (!game.user.isGM) throw new Error("Only a GM may apply damage results.");
+  assertDamageResolverAuthorized(payload);
+  await applyDamageResult(payload);
+  return { ok: true, mode: "socketlib-gm" };
+}
+
+async function socketHandleDefenseRequest(payload) {
+  await handleDefenseRequest(payload);
+}
+
+function socketHandleDamageReady(payload) {
+  handleDamageReady(payload);
+}
+
+function socketHandleMirrorAttackReady(payload) {
+  handleMirrorAttackReady(payload);
+}
+
+function socketClearWorkflowContexts() {
+  clearLocalWorkflowContexts();
+}
+
+async function socketAddConvenientEffect(payload) {
+  if (!game.user.isGM) throw new Error("Only a GM may apply effects.");
+  return addConvenientEffectToActorLocal(payload);
+}
+
+async function addConvenientEffectToActor(payload) {
+  if (!payload?.actorUuid) return false;
+  if (game.user.isGM || !cogitatorSocket) {
+    return addConvenientEffectToActorLocal(payload);
+  }
+  return cogitatorSocket.executeAsGM("socketAddConvenientEffect", payload);
+}
+
+async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName, counter = null }) {
+  const actor = await fromUuid(actorUuid);
+  if (!actor) return false;
+
   const effectInterface = game.dfreds?.effectInterface;
-  if (!effectInterface?.removeEffect) return;
+  let applied = false;
+  if (effectInterface?.addEffect) {
+    const paramsByPriority = [
+      { effectId, uuid: actor.uuid },
+      { effectId, uuids: [actor.uuid] },
+      { effectName, uuid: actor.uuid },
+      { effectName, uuids: [actor.uuid] }
+    ].filter(params => params.effectId || params.effectName);
 
-  if (!actorEffectsToDelete.length) return;
-
-  const paramsByPriority = [
-    { effectId: USED_EVASION_EFFECT_ID, uuid: actor.uuid },
-    { effectId: USED_EVASION_EFFECT_ID, uuids: [actor.uuid] },
-    { effectName: USED_EVASION_EFFECT_ID, uuid: actor.uuid },
-    { effectName: USED_EVASION_EFFECT_ID, uuids: [actor.uuid] }
-  ];
-
-  for (const params of paramsByPriority) {
-    try {
-      await effectInterface.removeEffect(params);
-      return;
-    } catch (_) {
-      // Try next signature to support different CE versions.
+    for (const params of paramsByPriority) {
+      try {
+        await effectInterface.addEffect(params);
+        applied = true;
+        break;
+      } catch (_) {
+        // Continue trying signatures for CE compatibility.
+      }
     }
   }
+
+  if (!applied && canModifyActorEffects(actor)) {
+    const existing = findActorEffect(actor, effectId, effectName);
+    if (!existing) {
+      await actor.createEmbeddedDocuments("ActiveEffect", [{
+        name: effectName || effectId || "Status Effect",
+        img: "icons/svg/aura.svg",
+        icon: "icons/svg/aura.svg",
+        transfer: false,
+        disabled: false
+      }]);
+    }
+    applied = true;
+  }
+
+  if (applied && Number.isFinite(Number(counter)) && Number(counter) > 0) {
+    const activeEffect = findActorEffect(actor, effectId, effectName);
+    if (activeEffect) {
+      const numericCounter = Number(counter);
+      await activeEffect.update({
+        "flags.statuscounter.counter": numericCounter,
+        "flags.statuscounter.counter.value": numericCounter,
+        "flags.statusIconCounters.counter": numericCounter,
+        "flags.statusIconCounters.value": numericCounter,
+        "flags.status-icon-counters.counter": numericCounter,
+        "flags.status-icon-counters.value": numericCounter
+      });
+    }
+  }
+
+  return applied;
+}
+
+async function removeConvenientEffectFromActor({ actorUuid, effectId, effectName }) {
+  if (!actorUuid) return;
+  const actor = await fromUuid(actorUuid);
+  if (!actor) return;
+
+  const effectInterface = game.dfreds?.effectInterface;
+  if (effectInterface?.removeEffect) {
+    const paramsByPriority = [
+      { effectId, uuid: actor.uuid },
+      { effectId, uuids: [actor.uuid] },
+      { effectName, uuid: actor.uuid },
+      { effectName, uuids: [actor.uuid] }
+    ].filter(params => params.effectId || params.effectName);
+
+    for (const params of paramsByPriority) {
+      try {
+        await effectInterface.removeEffect(params);
+        break;
+      } catch (_) {
+        // Continue trying signatures for CE compatibility.
+      }
+    }
+  }
+}
+
+function findActorEffect(actor, effectId, effectName) {
+  const effectIdLc = String(effectId ?? "").toLowerCase();
+  const effectNameLc = String(effectName ?? "").toLowerCase();
+  return actor.effects.find(effect => {
+    const statusValues = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+    const statusIds = statusValues.map(status => String(status ?? "").toLowerCase());
+    const coreStatus = String(effect.flags?.core?.statusId ?? "").toLowerCase();
+    const ceId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
+    const name = String(effect.name ?? "").toLowerCase();
+
+    if (effectIdLc && (statusIds.includes(effectIdLc) || coreStatus === effectIdLc || ceId === effectIdLc || name === effectIdLc)) return true;
+    if (effectNameLc && name === effectNameLc) return true;
+    return false;
+  });
 }
 
 function getDefenseRecipients(targetDocumentOrActor) {
@@ -472,6 +608,39 @@ function clearLocalWorkflowContexts() {
 }
 
 function emitSocket(event, payload) {
+  if (cogitatorSocket) {
+    const ownerIds = Array.isArray(payload?.ownerIds) ? payload.ownerIds : [];
+    if (event === SOCKET_EVENTS.requestDefense) {
+      if (ownerIds.includes(game.user.id)) {
+        void handleDefenseRequest(payload);
+      }
+      void cogitatorSocket.executeForUsers("socketHandleDefenseRequest", ownerIds.filter(id => id !== game.user.id), payload);
+      return;
+    }
+
+    if (event === SOCKET_EVENTS.damageReady) {
+      if (ownerIds.includes(game.user.id)) {
+        handleDamageReady(payload);
+      }
+      void cogitatorSocket.executeForUsers("socketHandleDamageReady", ownerIds.filter(id => id !== game.user.id), payload);
+      return;
+    }
+
+    if (event === SOCKET_EVENTS.mirrorAttackReady) {
+      if (ownerIds.includes(game.user.id)) {
+        handleMirrorAttackReady(payload);
+      }
+      void cogitatorSocket.executeForUsers("socketHandleMirrorAttackReady", ownerIds.filter(id => id !== game.user.id), payload);
+      return;
+    }
+
+    if (event === SOCKET_EVENTS.clearWorkflowContexts) {
+      clearLocalWorkflowContexts();
+      void cogitatorSocket.executeForEveryone("socketClearWorkflowContexts");
+      return;
+    }
+  }
+
   game.socket.emit(`module.${COGITATOR_ID}`, {
     event,
     payload,
@@ -627,6 +796,17 @@ async function submitDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll
     return { ok: true, mode: "gm-direct" };
   }
 
+  if (cogitatorSocket) {
+    return cogitatorSocket.executeAsGM("socketApplyDefenseResult", {
+      chatMessageId,
+      targetTokenUuid,
+      defenseRoll,
+      defenseOutcome,
+      allocatedHits,
+      resolverUserId: game.user.id
+    });
+  }
+
   const activeGMs = game.users.filter(u => u.active && u.isGM);
   if (!activeGMs.length) {
     throw new Error("No active GM is connected. Defense result cannot be applied right now.");
@@ -662,6 +842,16 @@ async function submitDamageResult({ chatMessageId, targetTokenUuid, attackerActo
   if (canDirectUpdate) {
     await applyDamageResult({ chatMessageId, targetTokenUuid, damageResult });
     return { ok: true, mode: game.user.isGM ? "gm-direct" : "owner-direct" };
+  }
+
+  if (cogitatorSocket) {
+    return cogitatorSocket.executeAsGM("socketApplyDamageResult", {
+      chatMessageId,
+      targetTokenUuid,
+      attackerActorId,
+      damageResult,
+      resolverUserId: game.user.id
+    });
   }
 
   const activeGMs = game.users.filter(u => u.active && u.isGM);

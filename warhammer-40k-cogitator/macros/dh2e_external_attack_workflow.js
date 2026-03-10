@@ -874,9 +874,18 @@ const runAttackWorkflow = async setup => {
     return sum + hitValue;
   }, 0);
   state.statusText = jam ? "JAM" : (success ? (outOfAmmoAfter ? "HIT (OUT OF AMMO)" : "HIT") : "MISS");
+
+  if (jam && !isMelee && game.warhammer40kCogitator?.applyWeaponRechargingEffect) {
+    await game.warhammer40kCogitator.applyWeaponRechargingEffect(attacker);
+  }
+
   state.devastatingFollowUp = {
     available: !!(setup.toggles?.devastating && setup.modeKey === "allout" && state.totalHits > 0),
-    prompted: false
+    prompted: false,
+    setup: {
+      ...setup,
+      skipAllOutReactionConsume: true
+    }
   };
 
   if (!success && isMelee && setup.toggles?.blademaster && !attacker.effects.some(e => String(e.name ?? "").toLowerCase().includes("blademaster used"))) {
