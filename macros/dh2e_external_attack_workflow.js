@@ -162,7 +162,9 @@ const getHordeBonusFromMagnitude = magnitude => {
 
 const getHordeMagnitudeValue = actorDoc => {
   if (!actorDoc) return 0;
-  const value = Number(actorDoc.system?.wounds?.value ?? 0);
+  const maxWounds = Number(actorDoc.system?.wounds?.max ?? 0);
+  const currentWounds = Number(actorDoc.system?.wounds?.value ?? 0);
+  const value = maxWounds - currentWounds;
   return Number.isFinite(value) && value >= 0 ? value : 0;
 };
 
@@ -487,7 +489,19 @@ const promptDamageDialog = async (state, chatMessage) => {
               if (t.allocatedHits <= 0) continue;
               const damageRolls = [];
               const rollCount = state.horde?.active ? 1 : t.allocatedHits;
-              const bonusFormula = Number(state.meleeBestDamageBonus ?? 0) > 0 ? `(${state.weaponDamage}) + ${Number(state.meleeBestDamageBonus)}` : state.weaponDamage;
+              let bonusFormula = Number(state.meleeBestDamageBonus ?? 0) > 0 ? `(${state.weaponDamage}) + ${Number(state.meleeBestDamageBonus)}` : state.weaponDamage;
+              const weaponTraits = parseWeaponTraits({ system: { special: state.weaponSpecial ?? "" } });
+              const hasTearing = hasTrait(weaponTraits, "tearing");
+              if (hasTearing) {
+                const match = String(bonusFormula).replace(/\s+/g, "").match(/^(\d+)d(5|10)([+-]\d+)?$/i);
+                if (match) {
+                  const keepDice = Number(match[1]);
+                  const dieType = Number(match[2]);
+                  const flatBonus = Number(match[3] ?? 0);
+                  const extraDice = 1 + (state.toggles?.flesh ? 1 : 0);
+                  bonusFormula = `${keepDice + extraDice}d${dieType}kh${keepDice}${flatBonus >= 0 ? `+${flatBonus}` : `${flatBonus}`}`;
+                }
+              }
               for (let i = 0; i < rollCount; i += 1) {
                 const r = await animatedRoll(bonusFormula, chatMessage.speaker);
                 damageRolls.push({ total: r.total, loc: getHitLocation(state.attackRoll || r.total) });
@@ -509,8 +523,8 @@ const promptDamageDialog = async (state, chatMessage) => {
                   ? `No damage roll required (minimum damage ${minDamage} exceeds soak ${soakThreshold}).`
                   : `Rolled once for penetration (${rolledDamage} vs soak ${soakThreshold}).`;
                 const resultNote = penetrationSucceeded
-                  ? `Horde takes <b>${magHits}</b> wound damage from hits.`
-                  : `Damage did not beat soak; wound damage is <b>0</b>.`;
+                  ? `Horde takes <b>${magHits}</b> magnitude damage from hits.`
+                  : `Damage did not beat soak; magnitude damage is <b>0</b>.`;
                 t.damageSummary = `<div><b>Horde Damage:</b> ${rollNote} ${resultNote}</div>`;
                 t.damageApplicationData.horde = { active: true, magnitudeHits: magHits, canSkipRoll, soakThreshold, minimumDamage: minDamage, penetrationSucceeded };
               }
@@ -534,13 +548,15 @@ const getDefenseRecipients = targetDocumentOrActor => {
   const activePlayerOwners = game.users
     .filter(user => user.active && !user.isGM)
     .filter(user => actor?.testUserPermission(user, ownerLevel));
+  const activeGMs = game.users.filter(user => user.active && user.isGM);
 
   if (activePlayerOwners.length) {
     const controllingOwners = activePlayerOwners.filter(user => user.character?.id === actor?.id);
-    return controllingOwners.length ? controllingOwners : activePlayerOwners;
+    const baseRecipients = controllingOwners.length ? controllingOwners : activePlayerOwners;
+    return [...new Map([...baseRecipients, ...activeGMs].map(user => [user.id, user])).values()];
   }
 
-  return game.users.filter(user => user.active && user.isGM);
+  return activeGMs;
 };
 
 const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
