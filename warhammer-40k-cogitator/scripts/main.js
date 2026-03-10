@@ -794,7 +794,26 @@ async function focusDefenseTarget(targetTokenUuid) {
   }
 
   if (tokenDoc.id) {
-    game.user.updateTokenTargets([tokenDoc.id]);
+    updateUserTokenTargets([tokenDoc.id]);
+  }
+}
+
+function updateUserTokenTargets(tokenIds = []) {
+  if (!game.user) return;
+
+  if (typeof game.user.updateTokenTargets === "function") {
+    game.user.updateTokenTargets(tokenIds);
+    return;
+  }
+
+  for (const existing of Array.from(game.user.targets ?? [])) {
+    existing.setTarget(false, { user: game.user, releaseOthers: false, groupSelection: true });
+  }
+
+  for (const tokenId of tokenIds) {
+    const token = canvas.tokens?.get(tokenId);
+    if (!token) continue;
+    token.setTarget(true, { user: game.user, releaseOthers: false, groupSelection: true });
   }
 }
 
