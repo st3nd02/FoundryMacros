@@ -392,7 +392,7 @@ const buildWorkflowHtml = state => {
           <div style="font-style:italic;"><b>${t.name}</b> attempts <b>${t.defenseAction}</b> against <b>${state.attackerName}</b> with <b>${state.weaponName}</b>.</div>
           <div><b>Incoming Hits:</b> ${t.incomingHits ?? t.allocatedHits ?? 0}</div>
           <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
-          <div><b>Target:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} | <b>Roll:</b> ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
+          <div><b>Roll vs Target:</b> ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} vs ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")}</div>
           ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
           <div><b>Result:</b> ${styledDegrees(t)}</div>
         </div>`
@@ -449,22 +449,15 @@ const estimateMinimumDamage = formula => {
   return dice + flat;
 };
 
-const getHordeSoakThreshold = (targetActor, penetration = 0) => {
+const getHordeDefenseThreshold = (targetActor, penetration = 0) => {
   if (!targetActor) return 0;
   const tTotal = Number(targetActor.system?.characteristics?.toughness?.total ?? 0);
   const tUnnat = Number(targetActor.system?.characteristics?.toughness?.unnatural ?? 0);
-  const tb = Math.floor(tTotal / 10) + tUnnat;
+  const tb = Math.floor(tTotal / 10);
   const armour = targetActor.system?.armour ?? {};
-  const maxArmour = Math.max(
-    Number(armour.head?.value ?? 0),
-    Number(armour.body?.value ?? 0),
-    Number(armour.leftArm?.value ?? 0),
-    Number(armour.rightArm?.value ?? 0),
-    Number(armour.leftLeg?.value ?? 0),
-    Number(armour.rightLeg?.value ?? 0)
-  );
-  const effectiveArmour = Math.max(0, maxArmour - Math.max(0, Number(penetration ?? 0)));
-  return effectiveArmour + tb;
+  const bodyArmour = Number(armour.body?.value ?? 0);
+  const remainingArmour = Math.max(0, bodyArmour - Math.max(0, Number(penetration ?? 0)));
+  return remainingArmour + tb + tUnnat;
 };
 const getHordeMagnitudeHits = ({ state, target }) => {
   const traits = parseWeaponTraits({ system: { special: state.weaponSpecial ?? "" } });
@@ -530,20 +523,20 @@ const promptDamageDialog = async (state, chatMessage) => {
               t.damageApplicationData = buildDamageApplicationData({ state, target: t, rolls: damageRolls, hitLoc: getHitLocation(state.attackRoll || 50) });
               if (state.horde?.active) {
                 const targetDoc = await fromUuid(t.tokenUuid ?? t.targetTokenUuid);
-                const soakThreshold = getHordeSoakThreshold(targetDoc?.actor, state.weaponPen);
+                const defenseThreshold = getHordeDefenseThreshold(targetDoc?.actor, state.weaponPen);
                 const minDamage = estimateMinimumDamage(bonusFormula);
-                const canSkipRoll = Number.isFinite(minDamage) && minDamage > soakThreshold;
+                const canSkipRoll = Number.isFinite(minDamage) && minDamage > defenseThreshold;
                 const rolledDamage = Number(damageRolls[0]?.total ?? 0);
-                const penetrationSucceeded = canSkipRoll || rolledDamage > soakThreshold;
+                const penetrationSucceeded = canSkipRoll || rolledDamage > defenseThreshold;
                 const magHits = penetrationSucceeded ? getHordeMagnitudeHits({ state, target: t }) : 0;
                 const rollNote = canSkipRoll
-                  ? `No damage roll required (minimum damage ${minDamage} exceeds soak ${soakThreshold}).`
-                  : `Rolled once for penetration (${rolledDamage} vs soak ${soakThreshold}).`;
+                  ? `No damage roll required (minimum damage ${minDamage} exceeds defense ${defenseThreshold}).`
+                  : `Rolled once for penetration (${rolledDamage} vs defense ${defenseThreshold}).`;
                 const resultNote = penetrationSucceeded
                   ? `Horde takes <b>${magHits}</b> magnitude damage from hits.`
-                  : `Damage did not beat soak; magnitude damage is <b>0</b>.`;
+                  : `Damage did not beat defense; magnitude damage is <b>0</b>.`;
                 t.damageSummary = `<div><b>Horde Damage:</b> ${rollNote} ${resultNote}</div>`;
-                t.damageApplicationData.horde = { active: true, magnitudeHits: magHits, canSkipRoll, soakThreshold, minimumDamage: minDamage, penetrationSucceeded };
+                t.damageApplicationData.horde = { active: true, magnitudeHits: magHits, canSkipRoll, defenseThreshold, minimumDamage: minDamage, penetrationSucceeded };
               }
             }
             resolve();
@@ -891,9 +884,19 @@ const runAttackWorkflow = async setup => {
     return sum + hitValue;
   }, 0);
   state.statusText = jam ? "JAM" : (success ? (outOfAmmoAfter ? "HIT (OUT OF AMMO)" : "HIT") : "MISS");
+
+  const isMaximal = String(state.powerModeLabel ?? "").toLowerCase() === "maximal";
+  if ((jam || isMaximal) && !isMelee && game.warhammer40kCogitator?.applyWeaponRechargingEffect) {
+    await game.warhammer40kCogitator.applyWeaponRechargingEffect(attacker);
+  }
+
   state.devastatingFollowUp = {
     available: !!(setup.toggles?.devastating && setup.modeKey === "allout" && state.totalHits > 0),
-    prompted: false
+    prompted: false,
+    setup: {
+      ...setup,
+      skipAllOutReactionConsume: true
+    }
   };
 
   if (!success && isMelee && setup.toggles?.blademaster && !attacker.effects.some(e => String(e.name ?? "").toLowerCase().includes("blademaster used"))) {
@@ -952,6 +955,9 @@ const runAttackWorkflow = async setup => {
 
     if (game.warhammer40kCogitator?.hasDefenseReaction?.(targetActor)) {
       tg.defenseOutcome = "Failed (Reaction already used)";
+      tg.defenseRoll = "—";
+      tg.damageResolved = false;
+      tg.damageSummary = null;
       continue;
     }
 

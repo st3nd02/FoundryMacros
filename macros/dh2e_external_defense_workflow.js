@@ -9,6 +9,9 @@
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 
+const parseWeaponTraits = weapon => (weapon?.system?.special ?? "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
+const hasTrait = (traits, key) => traits.some(t => t.includes(key));
+
 const rollWithDiceSoNice = async formula => {
   const roll = await new Roll(formula).evaluate();
   if (game.dice3d?.showForRoll) {
@@ -70,9 +73,7 @@ if (!token) return ui.notifications.warn("Select your defender token first.");
 const actor = token.actor;
 if (!actor) return ui.notifications.warn("Selected token has no actor.");
 
-if (game.warhammer40kCogitator?.hasDefenseReaction?.(actor)) {
-  return ui.notifications.warn("No defense reactions remaining this turn for this actor.");
-}
+const reactionAlreadyUsed = !!game.warhammer40kCogitator?.hasDefenseReaction?.(actor);
 
 
 const difficulties = [
@@ -134,6 +135,7 @@ const pick = await new Promise(resolve => {
       .def-wrap select, .def-wrap input { width:100%; }
     </style>
     <form class="def-wrap">
+      ${reactionAlreadyUsed ? `<div style="margin-bottom:8px;padding:6px;border:1px solid #aa4444;border-radius:4px;color:#ffb3b3;"><b>No defense reactions remaining this turn.</b> You can submit this as failed so damage proceeds normally.</div>` : ""}
       <div class="form-group"><label><b>Pending Attack</b></label><select id="workflowPick">${workflowOptions}</select></div>
       <hr>
       <h3>Defence Type</h3>
@@ -230,10 +232,26 @@ if (pick.type === "parry") {
   const w = actor.items.get(pick.weaponId);
   if (!w) return ui.notifications.warn("Invalid parry weapon.");
   actionText = `Parry with <b>${w.name}</b>`;
-  const special = String(w.system.special ?? "").toLowerCase();
-  if (special.includes("balanced")) {
+  const traits = parseWeaponTraits(w);
+  if (hasTrait(traits, "balanced")) {
     base += 10;
     notes.push("Balanced +10");
+  }
+  if (hasTrait(traits, "defensive")) {
+    base += 15;
+    notes.push("Defensive +15");
+  }
+  if (hasTrait(traits, "unbalanced")) {
+    base -= 10;
+    notes.push("Unbalanced -10");
+  }
+  if (hasTrait(traits, "unwieldy")) {
+    return ui.notifications.warn("Unwieldy weapons cannot be used to parry.");
+  }
+
+  const attackTraits = String(entry.state.weaponSpecial ?? "").toLowerCase().split(",").map(t => t.trim());
+  if (attackTraits.some(t => t.includes("flexible"))) {
+    return ui.notifications.warn("Attacker weapon is Flexible; parry is not possible.");
   }
 }
 
@@ -277,6 +295,33 @@ const current = entry.msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
 if (!current) return ui.notifications.warn("Workflow no longer exists.");
 const targetState = current.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === token.document.uuid);
 if (!targetState) return ui.notifications.warn("Token no longer in workflow.");
+
+if (reactionAlreadyUsed && pick.type !== "skip") {
+  try {
+    await game.warhammer40kCogitator.submitDefenseResult({
+      chatMessageId: entry.msg.id,
+      targetTokenUuid: token.document.uuid,
+      defenseRoll: null,
+      defenseOutcome: "Failed (Reaction already used)",
+      allocatedHits: targetState.allocatedHits ?? 0,
+      defenseDetails: {
+        actionText: "Reaction unavailable",
+        incomingHits: targetState.allocatedHits ?? 0,
+        difficultyLabel: "—",
+        targetNumber: null,
+        notes: ["No defense reactions remaining this turn"],
+        degrees: 0,
+        success: false
+      }
+    });
+  } catch (err) {
+    ui.notifications.error(`Defense result could not be applied: ${err.message ?? err}`);
+    return;
+  }
+
+  ui.notifications.info("Defense marked as failed (reaction already used) and workflow updated.");
+  return;
+}
 
 const defenseRoll = roll.total;
 let allocatedHits = targetState.allocatedHits ?? 0;
@@ -322,6 +367,38 @@ if (game.warhammer40kCogitator?.submitDefenseResult) {
   } catch (err) {
     ui.notifications.error(`Direct workflow update failed: ${err.message ?? err}`);
     return;
+  }
+}
+
+if (pick.type === "parry" && defenseResult.success) {
+  const defenderWeapon = actor.items.get(pick.weaponId);
+  const defTraits = parseWeaponTraits(defenderWeapon);
+  const atkTraits = String(entry.state.weaponSpecial ?? "").toLowerCase().split(",").map(t => t.trim());
+  const defenderHasPowerField = defTraits.some(t => t.includes("power field"));
+  const attackerImmune = atkTraits.some(t => t.includes("warp weapon") || t.includes("force") || t.includes("natural weapon"));
+  const attackerHasPowerField = atkTraits.some(t => t.includes("power field"));
+  if (defenderHasPowerField && !attackerHasPowerField && !attackerImmune) {
+    const breakRoll = await rollWithDiceSoNice("1d100");
+    const broken = breakRoll.total >= 26;
+    const extraNote = `Power Field check: ${breakRoll.total} ${broken ? "→ attacker weapon breaks" : "→ no break"}`;
+    try {
+      await game.warhammer40kCogitator.submitDefenseResult({
+        chatMessageId: entry.msg.id,
+        targetTokenUuid: token.document.uuid,
+        defenseRoll,
+        defenseOutcome,
+        allocatedHits,
+        defenseDetails: {
+          actionText,
+          incomingHits: targetState.allocatedHits ?? 0,
+          difficultyLabel: pick.difficultyLabel,
+          targetNumber: target,
+          notes: [...notes, extraNote],
+          degrees: defenseResult.degrees,
+          success: defenseResult.success
+        }
+      });
+    } catch (_) {}
   }
 }
 

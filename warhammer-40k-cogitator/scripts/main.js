@@ -25,9 +25,9 @@ const REACTION_COUNT_FLAG = "reactionUsedForDefenseCount";
 const REACTION_EFFECT_NAME = "Reaction Used";
 const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 const USED_EVASION_EFFECT_ID = "ce-used-evasion";
-const DEVASTATING_ASSAULT_EFFECT_ID = "ce-devastating-assault";
+const DEVASTATING_ASSAULT_EFFECT_ID = "devastating-assault";
 const DEVASTATING_ASSAULT_EFFECT_NAME = "Devastating Assault";
-const WEAPON_RECHARGING_EFFECT_ID = "ce-weapon-recharging";
+const WEAPON_RECHARGING_EFFECT_ID = "weapon-recharging";
 const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
 let cogitatorSocket = null;
 let pendingDefenseContext = null;
@@ -688,7 +688,7 @@ function buildWorkflowHtml(state) {
           <div style="font-style:italic;"><b>${t.name}</b> attempts <b>${t.defenseAction}</b> against <b>${state.attackerName}</b> with <b>${state.weaponName}</b>.</div>
           <div><b>Incoming Hits:</b> ${t.incomingHits ?? t.allocatedHits ?? 0}</div>
           <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
-          <div><b>Target:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} | <b>Roll:</b> ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
+          <div><b>Roll vs Target:</b> ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} vs ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")}</div>
           ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
           <div><b>Result:</b> ${styledDegrees(t)}</div>
         </div>`
