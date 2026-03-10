@@ -868,7 +868,17 @@ if (selectedEntry.msg && selectedEntry.state) {
           content: "<b>Devastating Assault hit, make a second all out attack against the same target</b>"
         });
         if (attackerActor) {
-          await attackerActor.createEmbeddedDocuments("ActiveEffect", [{ name: "Devastating Assault", img: "icons/svg/sword.svg", origin: attackerActor.uuid }]);
+          await game.warhammer40kCogitator?.applyDevastatingAssaultEffect?.(attackerActor);
+
+          const ownerIds = game.warhammer40kCogitator?.getDefenseRecipients?.(attackerActor)?.map(user => user.id) ?? [];
+          const setup = latest.devastatingFollowUp?.setup ?? null;
+          if (ownerIds.length && setup) {
+            game.warhammer40kCogitator?.emitSocket?.("mirrorAttackReady", {
+              ownerIds,
+              attackerName: latest.attackerName,
+              setup
+            });
+          }
         }
       }
 

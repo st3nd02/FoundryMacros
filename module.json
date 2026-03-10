@@ -37,6 +37,10 @@
       {
         "id": "statuscounter",
         "type": "module"
+      },
+      {
+        "id": "socketlib",
+        "type": "module"
       }
     ]
   }
