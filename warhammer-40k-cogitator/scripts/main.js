@@ -242,17 +242,9 @@ function getUsedDefenseReactions(actor) {
   return Number(actor.getFlag(COGITATOR_ID, REACTION_COUNT_FLAG) ?? (actor.getFlag(COGITATOR_ID, REACTION_FLAG) ? 1 : 0));
 }
 
-
-function canModifyActorEffects(actor) {
-  if (!actor) return false;
-  if (game.user.isGM) return true;
-  return actor.isOwner;
-}
-
 async function consumeDefenseReaction(actor) {
   if (!actor) return;
   if (!isCombatTurnTrackingActive(actor)) return;
-  if (!canModifyActorEffects(actor)) return;
   const maxReactions = getDefenseReactionLimit(actor);
   const alreadyUsed = getUsedDefenseReactions(actor);
   if (alreadyUsed >= maxReactions) return;
@@ -281,7 +273,6 @@ async function consumeDefenseReaction(actor) {
 
 async function clearDefenseReaction(actor) {
   if (!actor) return;
-  if (!canModifyActorEffects(actor)) return;
   if (!hasDefenseReaction(actor) && !getUsedDefenseReactions(actor)) return;
 
   const toDelete = actor.effects
@@ -363,15 +354,13 @@ function getDefenseRecipients(targetDocumentOrActor) {
   const activePlayerOwners = game.users
     .filter(user => user.active && !user.isGM)
     .filter(user => actor?.testUserPermission(user, ownerLevel));
-  const activeGMs = game.users.filter(user => user.active && user.isGM);
 
   if (activePlayerOwners.length) {
     const controllingOwners = activePlayerOwners.filter(user => user.character?.id === actor?.id);
-    const baseRecipients = controllingOwners.length ? controllingOwners : activePlayerOwners;
-    return [...new Map([...baseRecipients, ...activeGMs].map(user => [user.id, user])).values()];
+    return controllingOwners.length ? controllingOwners : activePlayerOwners;
   }
 
-  return activeGMs;
+  return game.users.filter(user => user.active && user.isGM);
 }
 
 function resolveActorForOwnership(documentOrActor) {
