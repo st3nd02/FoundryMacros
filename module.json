@@ -35,7 +35,7 @@
         "type": "module"
       },
       {
-        "id": "status-icon-counters",
+        "id": "statuscounter",
         "type": "module"
       }
     ]
