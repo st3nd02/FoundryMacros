@@ -73,9 +73,7 @@ if (!token) return ui.notifications.warn("Select your defender token first.");
 const actor = token.actor;
 if (!actor) return ui.notifications.warn("Selected token has no actor.");
 
-if (game.warhammer40kCogitator?.hasDefenseReaction?.(actor)) {
-  return ui.notifications.warn("No defense reactions remaining this turn for this actor.");
-}
+const reactionAlreadyUsed = !!game.warhammer40kCogitator?.hasDefenseReaction?.(actor);
 
 
 const difficulties = [
@@ -137,6 +135,7 @@ const pick = await new Promise(resolve => {
       .def-wrap select, .def-wrap input { width:100%; }
     </style>
     <form class="def-wrap">
+      ${reactionAlreadyUsed ? `<div style="margin-bottom:8px;padding:6px;border:1px solid #aa4444;border-radius:4px;color:#ffb3b3;"><b>No defense reactions remaining this turn.</b> You can submit this as failed so damage proceeds normally.</div>` : ""}
       <div class="form-group"><label><b>Pending Attack</b></label><select id="workflowPick">${workflowOptions}</select></div>
       <hr>
       <h3>Defence Type</h3>
@@ -296,6 +295,33 @@ const current = entry.msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
 if (!current) return ui.notifications.warn("Workflow no longer exists.");
 const targetState = current.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === token.document.uuid);
 if (!targetState) return ui.notifications.warn("Token no longer in workflow.");
+
+if (reactionAlreadyUsed && pick.type !== "skip") {
+  try {
+    await game.warhammer40kCogitator.submitDefenseResult({
+      chatMessageId: entry.msg.id,
+      targetTokenUuid: token.document.uuid,
+      defenseRoll: null,
+      defenseOutcome: "Failed (Reaction already used)",
+      allocatedHits: targetState.allocatedHits ?? 0,
+      defenseDetails: {
+        actionText: "Reaction unavailable",
+        incomingHits: targetState.allocatedHits ?? 0,
+        difficultyLabel: "—",
+        targetNumber: null,
+        notes: ["No defense reactions remaining this turn"],
+        degrees: 0,
+        success: false
+      }
+    });
+  } catch (err) {
+    ui.notifications.error(`Defense result could not be applied: ${err.message ?? err}`);
+    return;
+  }
+
+  ui.notifications.info("Defense marked as failed (reaction already used) and workflow updated.");
+  return;
+}
 
 const defenseRoll = roll.total;
 let allocatedHits = targetState.allocatedHits ?? 0;

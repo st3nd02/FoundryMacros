@@ -515,10 +515,9 @@ if (dmg.horde?.active) {
 <b>${dmg.target}</b> (Horde) takes wound damage by <b>${dmg.attacker}'s</b> attack
 </div>
 <hr>
-<b>Magnitude Before:</b> ${currentWounds}<br>
 <b>Damage done:</b> ${inflicted}<br>
-<b>Horde Magnitude Damage:</b> ${newWounds}${Number.isFinite(maxWounds) && maxWounds >= 0 ? ` / ${maxWounds}` : ""}<br>
-${(dmg.properties ?? []).length ? `<b>Notes:</b> ${(dmg.properties ?? []).map(p => p === "Horde Target" ? `<b>${p}</b>` : p).join(", ")}<br>` : ""}
+<b>Horde Magnitude Damage:</b> ${currentWounds} -> ${newWounds}${Number.isFinite(maxWounds) && maxWounds >= 0 ? ` / ${maxWounds}` : ""}<br>
+${(dmg.properties ?? []).length ? `${(dmg.properties ?? []).map(p => p === "Horde Target" ? `<b>${p}</b>` : p).join(", ")}<br>` : ""}
 <i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i>
 </div>`;
 
@@ -868,7 +867,17 @@ if (selectedEntry.msg && selectedEntry.state) {
           content: "<b>Devastating Assault hit, make a second all out attack against the same target</b>"
         });
         if (attackerActor) {
-          await attackerActor.createEmbeddedDocuments("ActiveEffect", [{ name: "Devastating Assault", img: "icons/svg/sword.svg", origin: attackerActor.uuid }]);
+          await game.warhammer40kCogitator?.applyDevastatingAssaultEffect?.(attackerActor);
+
+          const ownerIds = game.warhammer40kCogitator?.getDefenseRecipients?.(attackerActor)?.map(user => user.id) ?? [];
+          const setup = latest.devastatingFollowUp?.setup ?? null;
+          if (ownerIds.length && setup) {
+            game.warhammer40kCogitator?.emitSocket?.("mirrorAttackReady", {
+              ownerIds,
+              attackerName: latest.attackerName,
+              setup
+            });
+          }
         }
       }
 

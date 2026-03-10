@@ -515,10 +515,9 @@ if (dmg.horde?.active) {
 <b>${dmg.target}</b> (Horde) takes wound damage by <b>${dmg.attacker}'s</b> attack
 </div>
 <hr>
-<b>Magnitude Before:</b> ${currentWounds}<br>
 <b>Damage done:</b> ${inflicted}<br>
-<b>Horde Magnitude Damage:</b> ${newWounds}${Number.isFinite(maxWounds) && maxWounds >= 0 ? ` / ${maxWounds}` : ""}<br>
-${(dmg.properties ?? []).length ? `<b>Notes:</b> ${(dmg.properties ?? []).map(p => p === "Horde Target" ? `<b>${p}</b>` : p).join(", ")}<br>` : ""}
+<b>Horde Magnitude Damage:</b> ${currentWounds} -> ${newWounds}${Number.isFinite(maxWounds) && maxWounds >= 0 ? ` / ${maxWounds}` : ""}<br>
+${(dmg.properties ?? []).length ? `${(dmg.properties ?? []).map(p => p === "Horde Target" ? `<b>${p}</b>` : p).join(", ")}<br>` : ""}
 <i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i>
 </div>`;
 
