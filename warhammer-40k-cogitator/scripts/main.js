@@ -216,7 +216,7 @@ async function clearResidualWorkflowsOnRoundChange(combat) {
 function hasDefenseReaction(actor) {
   if (!actor) return false;
   if (!isCombatTurnTrackingActive(actor)) return false;
-  const used = Number(actor.getFlag(COGITATOR_ID, REACTION_COUNT_FLAG) ?? (actor.getFlag(COGITATOR_ID, REACTION_FLAG) ? 1 : 0));
+  const used = getUsedDefenseReactions(actor);
   return used >= getDefenseReactionLimit(actor);
 }
 
@@ -239,7 +239,42 @@ function getDefenseReactionLimit(actor) {
 
 function getUsedDefenseReactions(actor) {
   if (!actor) return 0;
-  return Number(actor.getFlag(COGITATOR_ID, REACTION_COUNT_FLAG) ?? (actor.getFlag(COGITATOR_ID, REACTION_FLAG) ? 1 : 0));
+  const fromFlags = Number(actor.getFlag(COGITATOR_ID, REACTION_COUNT_FLAG) ?? (actor.getFlag(COGITATOR_ID, REACTION_FLAG) ? 1 : 0));
+  const fromEffects = getUsedEvasionStackCount(actor);
+  return Math.max(fromFlags, fromEffects);
+}
+
+function getUsedEvasionStackCount(actor) {
+  if (!actor) return 0;
+
+  const usedEvasionEffects = actor.effects.filter(effect => {
+    const statusValues = Array.isArray(effect.statuses)
+      ? effect.statuses
+      : Array.from(effect.statuses ?? []);
+    const statusIds = statusValues.map(status => String(status ?? '').toLowerCase());
+    const coreStatus = String(effect.flags?.core?.statusId ?? '').toLowerCase();
+    const effectName = String(effect.name ?? '').toLowerCase();
+    const effectId = String(effect.flags?.['dfreds-convenient-effects']?.effectId ?? '').toLowerCase();
+    return statusIds.includes(USED_EVASION_EFFECT_ID) || coreStatus === USED_EVASION_EFFECT_ID || effectId === USED_EVASION_EFFECT_ID || effectName.includes('used evasion');
+  });
+
+  if (!usedEvasionEffects.length) return 0;
+
+  return usedEvasionEffects.reduce((total, effect) => {
+    const counter = Number(
+      effect.flags?.statuscounter?.counter?.value
+      ?? effect.flags?.statuscounter?.counter
+      ?? effect.flags?.statusIconCounters?.value
+      ?? effect.flags?.statusIconCounters?.counter
+      ?? effect.flags?.['status-icon-counters']?.value
+      ?? effect.flags?.['status-icon-counters']?.counter
+      ?? effect.flags?.['status-icon-counter']?.value
+      ?? effect.flags?.['status-icon-counter']?.counter
+      ?? effect.flags?.convenientDescription?.counter
+      ?? 0
+    );
+    return total + (Number.isFinite(counter) && counter > 0 ? counter : 1);
+  }, 0);
 }
 
 

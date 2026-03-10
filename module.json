@@ -27,5 +27,17 @@
   "changelog": "https://github.com/st3nd02/FoundryMacros/commits/main",
   "esmodules": [
     "warhammer-40k-cogitator/scripts/main.js"
-  ]
+  ],
+  "relationships": {
+    "requires": [
+      {
+        "id": "dfreds-convenient-effects",
+        "type": "module"
+      },
+      {
+        "id": "status-icon-counters",
+        "type": "module"
+      }
+    ]
+  }
 }

@@ -934,7 +934,7 @@ const runAttackWorkflow = async setup => {
     }
 
     if (game.warhammer40kCogitator?.hasDefenseReaction?.(targetActor)) {
-      tg.defenseOutcome = "Skipped (Reaction already used)";
+      tg.defenseOutcome = "Failed (Reaction already used)";
       continue;
     }
 
