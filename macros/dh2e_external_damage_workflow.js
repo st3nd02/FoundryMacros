@@ -488,41 +488,7 @@ ${testSummary}${forceSummary}${sprayJamHtml}
 ${furyHtml}
 </div>`;
 
-        const latest = entry.msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
-        if (latest) {
-          const tgt = latest.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === entry.targetUuid);
-          if (tgt) {
-            tgt.damageRolls = hitsData.map(hd => ({ total: hd.damage, loc: hd.location }));
-            tgt.damageSummary = damageSummary;
-            tgt.damageResolved = true;
-            tgt.damageApplied = false;
-            tgt.applySummary = null;
-            tgt.damageApplicationData = {
-              attacker: attackData.attacker,
-              target: attackData.target,
-              targetTokenUuid: attackData.targetTokenUuid,
-              weapon: attackData.weapon,
-              damageType,
-              penetration: pen,
-              hits,
-              hitsData,
-              dos,
-              fury: furyResults,
-              properties,
-              toxic: traitTests.toxic,
-              flame: traitTests.flame,
-              spray: traitTests.spray,
-              sprayJam,
-              force: traitTests.force
-            };
-          }
-          await entry.msg.update({
-            content: buildWorkflowHtml(latest),
-            flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: latest } }
-          });
-        }
-
-        game.dh2eLastDamage = {
+        const damageResult = {
           attacker: attackData.attacker,
           target: attackData.target,
           targetTokenUuid: attackData.targetTokenUuid,
@@ -539,6 +505,40 @@ ${furyHtml}
           spray: traitTests.spray,
           sprayJam,
           force: traitTests.force,
+          damageSummary
+        };
+
+        if (game.warhammer40kCogitator?.submitDamageResult) {
+          await game.warhammer40kCogitator.submitDamageResult({
+            chatMessageId: entry.msg.id,
+            targetTokenUuid: entry.targetUuid,
+            attackerActorId: actor.id,
+            damageResult
+          });
+        } else {
+          const latest = entry.msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
+          if (latest) {
+            const tgt = latest.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === entry.targetUuid);
+            if (tgt) {
+              tgt.damageRolls = hitsData.map(hd => ({ total: hd.damage, loc: hd.location }));
+              tgt.damageSummary = damageSummary;
+              tgt.damageResolved = true;
+              tgt.damageApplied = false;
+              tgt.applySummary = null;
+              tgt.damageApplicationData = {
+                ...damageResult,
+                targetTokenUuid: attackData.targetTokenUuid
+              };
+            }
+            await entry.msg.update({
+              content: buildWorkflowHtml(latest),
+              flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: latest } }
+            });
+          }
+        }
+
+        game.dh2eLastDamage = {
+          ...damageResult,
           chatMessageId: entry.msg.id
         };
       }

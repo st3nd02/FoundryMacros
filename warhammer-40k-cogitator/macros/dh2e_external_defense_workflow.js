@@ -34,7 +34,8 @@ const resolveTokenFromRequest = async () => {
   return tokenObject;
 };
 
-const token = canvas.tokens.controlled[0] ?? await resolveTokenFromRequest();
+const requestedToken = await resolveTokenFromRequest();
+const token = requestedToken ?? canvas.tokens.controlled[0];
 if (!token) return ui.notifications.warn("Select your defender token first.");
 const actor = token.actor;
 if (!actor) return ui.notifications.warn("Selected token has no actor.");
