@@ -430,7 +430,7 @@ async function addConvenientEffectToActor(payload) {
 }
 
 async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName, counter = null }) {
-  const actor = await fromUuid(actorUuid);
+  const actor = await resolveActorFromUuid(actorUuid);
   if (!actor) return false;
 
   const effectInterface = game.dfreds?.effectInterface;
@@ -488,7 +488,7 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
 
 async function removeConvenientEffectFromActor({ actorUuid, effectId, effectName }) {
   if (!actorUuid) return;
-  const actor = await fromUuid(actorUuid);
+  const actor = await resolveActorFromUuid(actorUuid);
   if (!actor) return;
 
   const effectInterface = game.dfreds?.effectInterface;
@@ -509,6 +509,16 @@ async function removeConvenientEffectFromActor({ actorUuid, effectId, effectName
       }
     }
   }
+}
+
+async function resolveActorFromUuid(actorUuid) {
+  if (!actorUuid) return null;
+  const resolved = await fromUuid(actorUuid);
+  if (!resolved) return null;
+  if (resolved.documentName === "Actor") return resolved;
+  if (resolved.actor?.documentName === "Actor") return resolved.actor;
+  if (resolved.baseActor?.documentName === "Actor") return resolved.baseActor;
+  return null;
 }
 
 function findActorEffect(actor, effectId, effectName) {
