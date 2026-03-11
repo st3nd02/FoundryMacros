@@ -18,60 +18,55 @@ const buildWorkflowHtml = state => {
     if (normalized.includes("hit") || normalized.includes("ok") || normalized.includes("out of ammo")) return "#1aff1a";
     return "#d9d9d9";
   };
-  const styledAttackDegrees = () => {
-    const value = Number(state.attackDegrees ?? 0);
-    if (!value) return "";
-    if (value > 0) return `<div>${outlined(`${value} Degrees of Success`, "#1aff1a")}</div>`;
-    return `<div>${outlined(`${Math.abs(value)} Degrees of Failure`, "#ff2a2a")}</div>`;
+  const attackOutcomeVerb = () => {
+    const text = String(state.statusText ?? "").toLowerCase();
+    if (text.includes("miss")) return "misses";
+    if (text.includes("hit") || Number(state.totalHits ?? 0) > 0) return "hits";
+    return "attacks";
   };
-  const styledDegrees = target => {
-    const value = Number(target.defenseDegrees ?? 0);
-    if (!value) return "—";
-    if (target.defenseSuccess) return outlined(`${value} Degrees of Success`, "#1aff1a");
-    return outlined(`${value} Degrees of Failure`, "#ff2a2a");
+  const joinedTargets = (predicate = null) => {
+    const targets = (state.targets ?? []).filter(t => !predicate || predicate(t)).map(t => t.name);
+    return targets.length ? targets.join(", ") : "the target";
+  };
+  const buildDescription = () => {
+    const damaged = (state.targets ?? []).some(t => t.damageResolved || t.damageApplied);
+    if (damaged) return `<b>${state.attackerName}</b>'s attack with <b>${state.weaponName}</b> damages <b>${joinedTargets(t => t.damageResolved || t.damageApplied)}</b>`;
+    return `<b>${state.attackerName}</b> ${attackOutcomeVerb()} <b>${joinedTargets()}</b> with <b>${state.weaponName}</b>`;
   };
 
   const cards = (state.targets ?? []).map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
-    const dmgTxt = (t.damageRolls ?? []).map(d => `${d.total} ${d.loc}`).join(", ") || "—";
-    const defenseSummary = t.defenseAction
-      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">
-          <div style="font-style:italic;"><b>${t.name}</b> attempts <b>${t.defenseAction}</b> against <b>${state.attackerName}</b> with <b>${state.weaponName}</b>.</div>
-          <div><b>Incoming Hits:</b> ${t.incomingHits ?? t.allocatedHits ?? 0}</div>
-          <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
-          <div><b>Roll vs Target:</b> ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} vs ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")}</div>
-          ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
-          <div><b>Result:</b> ${styledDegrees(t)}</div>
-        </div>`
-      : `<div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>`;
-
+    const defenseSummary = `<div><b>Defense:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseOutcome ?? "—"})</div>`;
     const shownHits = state.horde?.active ? (t.hordeHitsPreview ?? t.allocatedHits ?? 0) : (t.allocatedHits ?? 0);
     const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
     const damageSummary = t.damageSummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
-      : `<div><b>Damage:</b> ${dmgTxt}</div>`;
+      : `<div style="text-align:center;"><b>Damage</b><div>—</div></div>`;
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
-      <div><b>Dist:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel} | <b>Size:</b> ${sizeTxt}</div>
-      <div><b>TN:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>${hitsLabel}:</b> ${shownHits}</div>
+      <div><b>Distance:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel}</div>
+      <div><b>Size:</b> ${sizeTxt}</div>
+      <div><b>Target:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")}</div>
+      <div><b>${hitsLabel}:</b> ${shownHits}</div>
       ${defenseSummary}
       ${damageSummary}
     </div>`;
   }).join("");
 
   return `<div data-workflow-id="${state.id}">
-    <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;"><b>${state.attackerName}</b> attacks with <b>${state.weaponName}</b></div>
-    <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
+    <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;">${buildDescription()}</div>
+    <div><b>Attack Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel}</div>
+    <div><b>Craftsmanship:</b> ${state.craftName} | <b>Aim:</b> ${state.aimLabel}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes?.join(", ") || "None"}</div>
-    <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
-    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))}</div>
-    <div style="font-size:1.1em;"><b>Total ${state.horde?.active ? "Hits vs Horde" : "Hits"}:</b> ${state.totalHits ?? 0}</div>
-    ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
-    ${styledAttackDegrees()}
+    <div><b>Talents:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
+    <div><b>Items:</b> ${state.weaponItems?.join(", ") || "None"}</div>
+    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Target:</b> ${outlined(state.bestTarget ?? Math.max(...(state.targets ?? []).map(t => Number(t.targetNumber ?? 0))), "#3aa0ff")}</div>
+    <div><b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))} | <b>Total ${state.horde?.active ? "Hits vs Horde" : "Hits"}:</b> ${state.totalHits ?? 0}</div>
     <hr>${cards}
   </div>`;
 };
+
 
 
 const token = canvas.tokens.controlled[0];
@@ -478,11 +473,11 @@ new Dialog({
           ? `<hr><div style="color:gold;font-size:1.1em;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">✦ RIGHTEOUS FURY ✦</div>${furyResults.map((f, i) => `<div>${i + 1}. <b>Location:</b> <i>${f.location}</i> — Righteous Fury: <b>${f.result}</b></div>`).join("")}`
           : "";
 
-        const damageSummary = `<div style="text-align:center; color:#d8e2ff;">
-<div style="font-style:italic;font-size:1.1em;"><b>${attackData.attacker}</b> hits <b>${attackData.target}</b> with <b>${attackData.weapon}</b></div>
-<hr>
+        const damageSummary = `<div style="text-align:center; color:#000;">
+<div><b>Damage</b></div>
+<div>—</div>
 <div><b>Penetration:</b> ${pen}</div>
-${damageResults.map((d, i) => `<div><b>Hit ${i + 1}</b> (${hitLocations[i]}): <b>${d}</b></div>`).join("")}
+${damageResults.map((d, i) => `<div><span style="font-weight:700;color:#000;">Damage done:</span> <span style="font-weight:700;color:#000;">${d}</span> <i style="font-weight:400;">${hitLocations[i]}</i></div>`).join("")}
 <div style="margin-top:6px;"><b>Properties:</b> ${properties.join(", ") || "None"}</div>
 ${testSummary}${forceSummary}${sprayJamHtml}
 ${furyHtml}
