@@ -861,12 +861,21 @@ if (selectedEntry.msg && selectedEntry.state) {
 
     if (allApplied && latest.devastatingFollowUp?.available && !latest.devastatingFollowUp?.prompted) {
       const attackerActor = game.actors.get(latest.attackerActorId);
-      const hasDevastatingEffect = attackerActor?.effects?.some(effect => String(effect.name ?? "").toLowerCase().includes("devastating assault"));
+      const hasDevastatingEffect = attackerActor?.effects?.some(effect => {
+        const statusValues = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+        const statusIds = statusValues.map(status => String(status ?? "").toLowerCase());
+        const effectId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
+        const name = String(effect.name ?? "").toLowerCase();
+        return statusIds.includes("devastating-assault") || effectId === "devastating-assault" || name.includes("devastating assault");
+      });
 
       if (!hasDevastatingEffect) {
+        const ownerIds = game.warhammer40kCogitator?.getDefenseRecipients?.(attackerActor ?? actor)?.map(user => user.id) ?? [];
         ChatMessage.create({
-          speaker: ChatMessage.getSpeaker({ actor: attackerActor ?? actor }),
-          content: "<b>Devastating Assault hit, make a second all out attack against the same target</b>"
+          speaker: { alias: "System" },
+          style: CONST.CHAT_MESSAGE_STYLES.OTHER,
+          whisper: ownerIds,
+          content: "<b>Devastating Assault:</b> You hit. Your next attack against the same target gains the follow-up all out attack setup."
         });
         if (attackerActor) {
           await game.warhammer40kCogitator?.applyDevastatingAssaultEffect?.(attackerActor);

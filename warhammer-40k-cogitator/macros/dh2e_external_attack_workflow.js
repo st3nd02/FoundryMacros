@@ -11,6 +11,7 @@
 
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
+const DOUBLE_TAP_TARGET_FLAG = "doubleTapEligibleTargetUuid";
 
 const controlled = canvas.tokens.controlled;
 if (!controlled.length) return ui.notifications.warn("Select your attacker token first.");
@@ -195,9 +196,9 @@ const animatedRoll = async formula => {
 
 const rollAgilityEvasionTest = async actorDoc => {
   const ag = Number(actorDoc?.system?.characteristics?.agility?.total ?? 0);
-  const target = Math.max(1, Math.min(100, ag));
+  const target = Math.max(1, ag);
   const roll = await animatedRoll("1d100");
-  const success = roll.total <= target;
+  const success = roll.total === 1 ? true : (roll.total === 100 ? false : roll.total <= target);
   const ab = Number(actorDoc?.system?.characteristics?.agility?.bonus ?? 0);
   return { target, roll: roll.total, success, evadeMeters: ab };
 };
@@ -359,6 +360,8 @@ const evaluateAttackResult = ({ result, targets, weapon, traits }) => {
   if (jam) dos = 0;
   return { bestTN, success, dos, jam };
 };
+
+const isD100Success = (roll, target) => roll === 1 ? true : (roll === 100 ? false : roll <= target);
 
 const buildWorkflowHtml = state => {
   const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${text}</span>`;
@@ -730,6 +733,14 @@ const runAttackWorkflow = async setup => {
   if (t.raptor) selectedTalents.push("Raptor");
   if (t.forceChannel) selectedTalents.push("Force Channeling");
 
+
+  const doubleTapEligibleTargetUuid = attacker.getFlag(WORKFLOW_NS, DOUBLE_TAP_TARGET_FLAG) ?? null;
+  const doubleTapCanApply = !!(t.doubletap && doubleTapEligibleTargetUuid && setup.targetConfigs.length === 1 && setup.targetConfigs[0]?.tokenUuid === doubleTapEligibleTargetUuid);
+  if (doubleTapCanApply) {
+    sharedMod += 20;
+    selectedTalents.push("Double Tap +20 (same target follow-up)");
+  }
+
   const targets = setup.targetConfigs.map(conf => {
     const effectiveRangeMod = (!isMelee && t.marksman && conf.rangeMod < 0) ? 0 : conf.rangeMod;
     return ({
@@ -742,7 +753,7 @@ const runAttackWorkflow = async setup => {
     sizeLabel: conf.sizeLabel,
     sizeMod: conf.sizeMod,
     sizeIgnored: conf.sizeIgnored,
-    targetNumber: Math.max(1, Math.min(100, baseSkill + sharedMod + effectiveRangeMod + conf.sizeMod)),
+    targetNumber: Math.max(1, baseSkill + sharedMod + effectiveRangeMod + conf.sizeMod),
     allocatedHits: 0,
     defenseRoll: null,
     defenseOutcome: null,
@@ -855,7 +866,7 @@ const runAttackWorkflow = async setup => {
   ammoSpent += firstAmmo.spent;
   outOfAmmoAfter = firstAmmo.outOfAmmo;
 
-  const eligible = state.targets.filter(tg => result <= tg.targetNumber);
+  const eligible = state.targets.filter(tg => isD100Success(result, tg.targetNumber));
   const sprayAlloc = isSpray && success && !jam
     ? new Map(eligible.map(tg => [tg.tokenUuid, 1]))
     : null;
@@ -868,33 +879,13 @@ const runAttackWorkflow = async setup => {
     const notes = [];
     for (const tg of state.targets) {
       const wr = (await animatedRoll("1d100", chatMessage.speaker)).total;
-      const hit = wr <= tg.targetNumber;
+      const hit = isD100Success(wr, tg.targetNumber);
       tg.allocatedHits = hit ? 1 : 0;
       notes.push(`${tg.name}: ${wr} ${hit ? "HIT" : "MISS"}`);
     }
     state.extraText = [state.extraText, `Whirlwind attacks: ${notes.join(", ")}`].filter(Boolean).join(" | ");
   }
 
-    if (t.doubletap && !isMelee && !isSpray && hits > 0 && !jam) {
-    const boostedTargets = state.targets.map(tg => ({ ...tg, targetNumber: Math.max(1, Math.min(100, tg.targetNumber + 20)) }));
-    let secondRoll = (await animatedRoll("1d100", chatMessage.speaker)).total;
-    let secondEval = evaluateAttackResult({ result: secondRoll, targets: boostedTargets, weapon, traits });
-    let secondHits = (secondEval.success && !secondEval.jam) ? 1 : 0;
-    if (secondEval.success) {
-      if (["semi", "suppressSemi"].includes(state.modeKey)) secondHits = Math.min(1 + Math.floor((secondEval.dos - 1) / 2), rof.burst ?? 1);
-      else if (["full", "suppressFull"].includes(state.modeKey)) secondHits = Math.min(secondEval.dos, rof.full ?? 1);
-    }
-    const secondAmmo = await spendAmmoForAttack(secondHits);
-    secondHits = secondAmmo.cappedHits;
-    ammoSpent += secondAmmo.spent;
-    outOfAmmoAfter = outOfAmmoAfter || secondAmmo.outOfAmmo;
-
-    const secondEligible = boostedTargets.filter(tg => secondRoll <= tg.targetNumber);
-    const secondAlloc = allocateHits({ totalHits: secondHits, modeKey: state.modeKey, targets: secondEligible, rof, storm: hasTrait(traits, "storm") });
-    state.targets = state.targets.map(tg => ({ ...tg, allocatedHits: (tg.allocatedHits ?? 0) + (secondAlloc.get(tg.tokenUuid) || 0) }));
-    state.extraText = [state.extraText, `Double Tap second attack: ${secondRoll} (${secondHits} hit${secondHits === 1 ? "" : "s"})`].filter(Boolean).join(" | ");
-    selectedTalents.push("Double Tap: second attack at +20");
-  }
   state.attackRoll = result;
   state.dos = dos;
   state.attackDegrees = success ? dos : -Math.max(1, 1 + Math.floor((result - bestTN) / 10));
@@ -933,9 +924,16 @@ const runAttackWorkflow = async setup => {
     await attacker.createEmbeddedDocuments("ActiveEffect", [{ name: "Blademaster Used", img: "icons/svg/sword.svg", origin: attacker.uuid }]);
   }
 
-  if (success && state.modeKey === "allout" && !setup.skipAllOutReactionConsume && game.warhammer40kCogitator?.consumeDefenseReaction) {
-    await game.warhammer40kCogitator.consumeDefenseReaction(attacker);
+  const hitTargets = state.targets.filter(tg => (tg.allocatedHits ?? 0) > 0);
+  const consumedDoubleTapTarget = attacker.getFlag(WORKFLOW_NS, DOUBLE_TAP_TARGET_FLAG);
+  if (consumedDoubleTapTarget) {
+    await attacker.unsetFlag(WORKFLOW_NS, DOUBLE_TAP_TARGET_FLAG);
   }
+  if (t.doubletap && hitTargets.length === 1) {
+    await attacker.setFlag(WORKFLOW_NS, DOUBLE_TAP_TARGET_FLAG, hitTargets[0].tokenUuid);
+    selectedTalents.push(`Double Tap primed on ${hitTargets[0].name}`);
+  }
+
   if (ammoSpent > 0) {
     state.extraText = [state.extraText, `Ammo Spent: ${ammoSpent}`].filter(Boolean).join(" | ");
   }
