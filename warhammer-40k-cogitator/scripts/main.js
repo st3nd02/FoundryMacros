@@ -26,7 +26,7 @@ const REACTION_EFFECT_NAME = "Reaction Used";
 const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 const USED_EVASION_EFFECT_ID = "ce-used-evasion";
 const DEVASTATING_ASSAULT_EFFECT_ID = "devastating-assault";
-const DEVASTATING_ASSAULT_EFFECT_NAME = "Devastating Assault .";
+const DEVASTATING_ASSAULT_EFFECT_NAME = "Devastating Assault";
 const WEAPON_RECHARGING_EFFECT_ID = "weapon-recharging";
 const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
 let cogitatorSocket = null;
@@ -172,6 +172,19 @@ function registerCombatHooks() {
 async function clearResidualWorkflowsOnRoundChange(combat) {
   if (!combat?.started) return;
 
+  const clearedBits = [];
+  if (pendingDefenseContext) clearedBits.push("defense pending context");
+  if (pendingDamageContext) clearedBits.push("damage pending context");
+  if (pendingAttackContext) clearedBits.push("apply damage pending context");
+  if (game.dh2eLastDamage?.targetTokenUuid || game.dh2eLastDamage?.hitsData?.length) {
+    clearedBits.push("legacy apply damage payload");
+    game.dh2eLastDamage = null;
+  }
+
+  let expiredDefenseCount = 0;
+  let expiredDamageCount = 0;
+  let expiredApplyCount = 0;
+
   clearLocalWorkflowContexts();
   emitSocket(SOCKET_EVENTS.clearWorkflowContexts, {});
 
@@ -192,6 +205,7 @@ async function clearResidualWorkflowsOnRoundChange(combat) {
       const outcome = String(target.defenseOutcome ?? "").toLowerCase();
       const defensePending = !outcome.includes("success") && !outcome.includes("failed") && !outcome.includes("skipped") && !outcome.includes("expired");
       if (defensePending) {
+        expiredDefenseCount += 1;
         target.defenseOutcome = "Expired (round advanced)";
         target.defenseRoll = null;
         target.defenseAction = null;
@@ -200,11 +214,15 @@ async function clearResidualWorkflowsOnRoundChange(combat) {
       }
 
       if (!target.damageResolved) {
+        expiredDamageCount += 1;
         target.damageResolved = true;
         target.damageSummary = "<div><b>Damage:</b> Expired (round advanced)</div>";
         target.damageRolls = [];
       }
 
+      if (!target.damageApplied) {
+        expiredApplyCount += 1;
+      }
       target.damageApplied = true;
       target.applySummary = "<div><b>Application:</b> Expired (round advanced)</div>";
       target.damageApplicationData = null;
@@ -217,6 +235,19 @@ async function clearResidualWorkflowsOnRoundChange(combat) {
     await message.update({
       content: buildWorkflowHtml(state),
       flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
+    });
+  }
+
+  if (expiredDefenseCount) clearedBits.push(`${expiredDefenseCount} pending defense result(s)`);
+  if (expiredDamageCount) clearedBits.push(`${expiredDamageCount} pending damage result(s)`);
+  if (expiredApplyCount) clearedBits.push(`${expiredApplyCount} pending apply-damage result(s)`);
+
+  if (clearedBits.length) {
+    await ChatMessage.create({
+      speaker: { alias: "System" },
+      style: CONST.CHAT_MESSAGE_STYLES.OTHER,
+      whisper: ChatMessage.getWhisperRecipients("GM").map(user => user.id),
+      content: `<b>Round advanced:</b> cleared ${clearedBits.join(", ")}.`
     });
   }
 }
@@ -366,7 +397,7 @@ async function removeUsedEvasionEffect(actor) {
 
 async function applyDevastatingAssaultEffect(actor) {
   if (!actor) return false;
-  return addConvenientEffectToActor({ actorUuid: actor.uuid, effectName: DEVASTATING_ASSAULT_EFFECT_NAME });
+  return addConvenientEffectToActor({ actorUuid: actor.uuid, effectId: DEVASTATING_ASSAULT_EFFECT_ID, effectName: DEVASTATING_ASSAULT_EFFECT_NAME });
 }
 
 async function applyWeaponRechargingEffect(actor) {

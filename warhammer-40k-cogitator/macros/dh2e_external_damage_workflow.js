@@ -238,7 +238,8 @@ new Dialog({
         const primitiveVal = parseTraitVal("primitive", 8);
         const aim = Number(entry.state?.aimMod ?? 0) > 0 ? "yes" : "no";
 
-        const calcDoS = (target, roll) => roll <= target ? (1 + Math.floor((target - roll) / 10)) : 0;
+        const isD100Success = (roll, target) => roll === 1 ? true : (roll === 100 ? false : roll <= target);
+        const calcDoS = (target, roll) => isD100Success(roll, target) ? (1 + Math.floor((target - roll) / 10)) : 0;
 
         if (mighty && isRanged && !special.includes("grenade")) {
           const bsb = actor.system.characteristics.ballisticSkill.bonus;
@@ -396,10 +397,10 @@ new Dialog({
         const traitTests = { toxic: null, flame: null, spray: null, force: null };
 
         const rollCharacteristicTest = async ({ total, label, modifier = 0 }) => {
-          const target = Math.max(1, Math.min(100, Number(total || 0) + Number(modifier || 0)));
+          const target = Math.max(1, Number(total || 0) + Number(modifier || 0));
           const roll = await new Roll("1d100").evaluate();
           if (game.dice3d) await game.dice3d.showForRoll(roll, game.user, true);
-          return { label, target, roll: roll.total, success: roll.total <= target, dos: calcDoS(target, roll.total) };
+          return { label, target, roll: roll.total, success: isD100Success(roll.total, target), dos: calcDoS(target, roll.total) };
         };
 
         if (toxic) {
