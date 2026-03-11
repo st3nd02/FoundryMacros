@@ -367,30 +367,39 @@ const buildWorkflowHtml = state => {
     if (normalized.includes("hit") || normalized.includes("ok") || normalized.includes("out of ammo")) return "#1aff1a";
     return "#d9d9d9";
   };
+  const joinedTargets = (predicate = null) => {
+    const targets = (state.targets ?? []).filter(t => !predicate || predicate(t)).map(t => t.name);
+    return targets.length ? targets.join(", ") : "the target";
+  };
+  const buildDescription = () => `<b>${state.attackerName}</b>'s attack with <b>${state.weaponName}</b> damages <b>${joinedTargets(t => t.damageApplied || t.damageResolved)}</b>`;
 
   const cards = (state.targets ?? []).map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
     const damageSummary = t.damageSummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}${t.applySummary ? `<hr>${t.applySummary}` : ""}</div>`
-      : `<div><b>Damage:</b> ${(t.damageRolls ?? []).map(d => `${d.total} ${d.loc}`).join(", ") || "—"}</div>`;
+      : `<div style="text-align:center;"><b>Damage</b><div>—</div></div>`;
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
-      <div><b>Dist:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel} | <b>Size:</b> ${sizeTxt}</div>
-      <div><b>TN:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Hits:</b> ${t.allocatedHits}</div>
-      <div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>
+      <div><b>Distance:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel}</div>
+      <div><b>Size:</b> ${sizeTxt}</div>
+      <div><b>Target:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")}</div>
+      <div><b>Hits:</b> ${t.allocatedHits}</div>
+      <div><b>Defense:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseOutcome ?? "—"})</div>
       ${damageSummary}
     </div>`;
   }).join("");
 
   return `<div data-workflow-id="${state.id}">
-    <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;"><b>${state.attackerName}</b> attacks with <b>${state.weaponName}</b></div>
-    <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
-    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))}</div>
-    <div style="font-size:1.1em;"><b>Total Hits:</b> ${state.totalHits ?? 0}</div>
+    <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;">${buildDescription()}</div>
+    <div><b>Attack Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel}</div>
+    <div><b>Craftsmanship:</b> ${state.craftName} | <b>Aim:</b> ${state.aimLabel}</div>
+    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Target:</b> ${outlined(state.bestTarget ?? Math.max(...(state.targets ?? []).map(t => Number(t.targetNumber ?? 0))), "#3aa0ff")}</div>
+    <div><b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))} | <b>Total Hits:</b> ${state.totalHits ?? 0}</div>
     <hr>${cards}
   </div>`;
 };
+
 
 const candidates = [];
 for (const msg of game.messages.contents) {
@@ -511,11 +520,8 @@ if (dmg.horde?.active) {
 
   const hordeSummary = `
 <div style="text-align:center;">
-<div style="font-style:italic;font-size:1.1em;">
-<b>${dmg.target}</b> (Horde) takes wound damage by <b>${dmg.attacker}'s</b> attack
-</div>
-<hr>
-<b>Damage done:</b> ${inflicted}<br>
+
+<span style="font-weight:700;color:#000;">Damage done:</span> <span style="font-weight:700;color:#000;">${inflicted}</span><br>
 <b>Horde Magnitude Damage:</b> ${currentWounds} -> ${newWounds}${Number.isFinite(maxWounds) && maxWounds >= 0 ? ` / ${maxWounds}` : ""}<br>
 ${(dmg.properties ?? []).length ? `${(dmg.properties ?? []).map(p => p === "Horde Target" ? `<b>${p}</b>` : p).join(", ")}<br>` : ""}
 <i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i>
@@ -822,10 +828,6 @@ if (realCritToApply > 0 && lastCritLocation){
 // ===============================
 const applySummary = `
 <div style="text-align:center;">
-<div style="font-style:italic;font-size:1.1em;">
-<b>${dmg.target}</b> takes damage by <b>${dmg.attacker}'s</b> attack
-</div>
-<hr>
 <b>Armour:</b><br>${armourBlock}<br>
 <b>Toughness Bonus:</b> ${Math.floor(TBtotal/10)}<br>
 <b>Unnatural Toughness:</b> ${TBunnat}

@@ -339,7 +339,7 @@ const promptAttackFateReroll = async ({ actorDoc, rollValue, bestTN }) => {
     new Dialog({
       title: "Spend Fate?",
       content: `<p><b>Attack Missed!</b></p>
-                <p>Attack Roll: <b>${rollValue}</b> vs Target Number <b>${bestTN}</b></p>
+                <p>Attack Roll: <b>${rollValue}</b> vs Target <b>${bestTN}</b></p>
                 <p>Spend 1 Fate Point to reroll?</p>
                 <p>Remaining Fate: <b>${fate}</b></p>`,
       buttons: {
@@ -369,6 +369,25 @@ const buildWorkflowHtml = state => {
     if (normalized.includes("hit") || normalized.includes("ok") || normalized.includes("out of ammo")) return "#1aff1a";
     return "#d9d9d9";
   };
+  const attackOutcomeVerb = () => {
+    const text = String(state.statusText ?? "").toLowerCase();
+    if (text.includes("miss")) return "misses";
+    if (text.includes("hit") || Number(state.totalHits ?? 0) > 0) return "hits";
+    return "attacks";
+  };
+  const joinedTargets = (predicate = null) => {
+    const targets = (state.targets ?? []).filter(t => !predicate || predicate(t)).map(t => t.name);
+    return targets.length ? targets.join(", ") : "the target";
+  };
+  const buildDescription = () => {
+    const damaged = (state.targets ?? []).some(t => t.damageApplied);
+    if (damaged) return `<b>${state.attackerName}</b>'s attack with <b>${state.weaponName}</b> damages <b>${joinedTargets(t => t.damageApplied)}</b>`;
+    const resolved = (state.targets ?? []).some(t => t.damageResolved);
+    if (resolved || String(state.statusText ?? "").toLowerCase().includes("hit") || String(state.statusText ?? "").toLowerCase().includes("miss")) {
+      return `<b>${state.attackerName}</b> ${attackOutcomeVerb()} <b>${joinedTargets()}</b> with <b>${state.weaponName}</b>`;
+    }
+    return `<b>${state.attackerName}</b> attacks with <b>${state.weaponName}</b>`;
+  };
   const styledAttackDegrees = () => {
     const value = Number(state.attackDegrees ?? 0);
     if (!value) return "";
@@ -389,40 +408,43 @@ const buildWorkflowHtml = state => {
     const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
     const defenseSummary = t.defenseAction
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#151515;">
-          <div style="font-style:italic;"><b>${t.name}</b> attempts <b>${t.defenseAction}</b> against <b>${state.attackerName}</b> with <b>${state.weaponName}</b>.</div>
-          <div><b>Incoming Hits:</b> ${t.incomingHits ?? t.allocatedHits ?? 0}</div>
+          <div><b>Defense:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseAction} — ${t.defenseOutcome ?? "—"})</div>
           <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
-          <div><b>Roll vs Target:</b> ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} vs ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")}</div>
           ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
           <div><b>Result:</b> ${styledDegrees(t)}</div>
         </div>`
-      : `<div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>`;
+      : `<div><b>Defense:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseOutcome ?? "—"})</div>`;
 
     const damageSummary = t.damageSummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
-      : `<div><b>Damage:</b> ${dmgTxt}</div>`;
+      : `<div style="text-align:center;"><b>Damage</b><div>—</div></div>`;
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
-      <div><b>Dist:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel} | <b>Size:</b> ${sizeTxt}</div>
-      <div><b>TN:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>${hitsLabel}:</b> ${shownHits}</div>
+      <div><b>Distance:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel}</div>
+      <div><b>Size:</b> ${sizeTxt}</div>
+      <div><b>Target:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")}</div>
+      <div><b>${hitsLabel}:</b> ${shownHits}</div>
       ${defenseSummary}
       ${damageSummary}
     </div>`;
   }).join("");
 
   return `<div data-workflow-id="${state.id}">
-    <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;"><b>${state.attackerName}</b> attacks with <b>${state.weaponName}</b></div>
-    <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
+    <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;">${buildDescription()}</div>
+    <div><b>Attack Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel}</div>
+    <div><b>Craftsmanship:</b> ${state.craftName} | <b>Aim:</b> ${state.aimLabel}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes.join(", ") || "None"}</div>
-    <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
-    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))}</div>
-    <div style="font-size:1.1em;"><b>Total ${state.horde?.active ? "Hits vs Horde" : "Hits"}:</b> ${state.totalHits ?? 0}</div>
-    ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
+    <div><b>Talents:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
+    <div><b>Items:</b> ${state.weaponItems?.join(", ") || "None"}</div>
+    <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Target:</b> ${outlined(state.bestTarget ?? Math.max(...(state.targets ?? []).map(t => Number(t.targetNumber ?? 0))), "#3aa0ff")}</div>
+    <div><b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))} | <b>Total ${state.horde?.active ? "Hits vs Horde" : "Hits"}:</b> ${state.totalHits ?? 0}</div>
     ${styledAttackDegrees()}
+    ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
     <hr>${cards}
   </div>`;
 };
+
 
 
 const buildDamageApplicationData = ({ state, target, rolls, hitLoc }) => ({
@@ -646,7 +668,7 @@ const runAttackWorkflow = async setup => {
   const ws = attacker.system.characteristics.weaponSkill?.total ?? 0;
   const baseSkill = isMelee ? ws : bs;
 
-  const modifierNotes = [mode.label];
+  const modifierNotes = [];
   const selectedTalents = [];
   let sharedMod = mode.mod + setup.manualMod + setup.aimMod;
   if (setup.manualMod) modifierNotes.push(`Manual ${setup.manualMod >= 0 ? "+" : ""}${setup.manualMod}`);
@@ -701,10 +723,10 @@ const runAttackWorkflow = async setup => {
   if ((t.reddot || t.omni) && !isMelee && ["single", "called"].includes(setup.modeKey)) { sharedMod += 10; selectedTalents.push("Red-Dot +10"); }
   if (t.berserk && isMelee && setup.modeKey === "charge") { sharedMod += 10; selectedTalents.push("Berserk Charge +10"); }
   if (t.marksman && !isMelee) selectedTalents.push("Marksman (ignore Long/Extreme penalties)");
-  if (t.mighty) selectedTalents.push("Mighty Shot");
-  if (t.crushing) selectedTalents.push("Crushing Blow");
-  if (t.hammer) selectedTalents.push("Hammer Blow");
-  if (t.flesh) selectedTalents.push("Flesh Render");
+  if (t.mighty && !isMelee) selectedTalents.push("Mighty Shot");
+  if (t.crushing && isMelee) selectedTalents.push("Crushing Blow");
+  if (t.hammer && isMelee) selectedTalents.push("Hammer Blow");
+  if (t.flesh && isMelee) selectedTalents.push("Flesh Render");
   if (t.raptor) selectedTalents.push("Raptor");
   if (t.forceChannel) selectedTalents.push("Force Channeling");
 
@@ -755,6 +777,7 @@ const runAttackWorkflow = async setup => {
     modifierNotes,
     selectedTalents,
     attackTalentsUsed: selectedTalents,
+    weaponItems: presentWeaponItems(setup.detectedItems ?? {}),
     forceChanneling: !!setup.toggles?.forceChannel && !setup.isHorde,
     attackRoll: null,
     dos: 0,
@@ -793,6 +816,7 @@ const runAttackWorkflow = async setup => {
   // immediate attack roll (Spray auto-hits as if attack roll were 1)
   let result = isSpray ? 1 : (await animatedRoll("1d100", chatMessage.speaker)).total;
   let { success, dos, jam, bestTN } = evaluateAttackResult({ result, targets: state.targets, weapon, traits });
+  state.bestTarget = bestTN;
 
   if (!isSpray && !success) {
     const useFate = await promptAttackFateReroll({ actorDoc: attacker, rollValue: result, bestTN });
@@ -800,6 +824,7 @@ const runAttackWorkflow = async setup => {
       await attacker.update({ "system.fate.value": Math.max(0, (attacker.system.fate?.value ?? 0) - 1) });
       result = (await animatedRoll("1d100", chatMessage.speaker)).total;
       ({ success, dos, jam, bestTN } = evaluateAttackResult({ result, targets: state.targets, weapon, traits }));
+      state.bestTarget = bestTN;
       state.extraText = [state.extraText, `${attacker.name} spent Fate to reroll attack`].filter(Boolean).join(" | ");
     }
   }
@@ -904,6 +929,7 @@ const runAttackWorkflow = async setup => {
     const evalRe = evaluateAttackResult({ result: reroll, targets: state.targets, weapon, traits });
     state.extraText = [state.extraText, `Blademaster reroll: ${result} → ${reroll}`].filter(Boolean).join(" | ");
     result = reroll; success = evalRe.success; dos = evalRe.dos; jam = evalRe.jam; bestTN = evalRe.bestTN;
+    state.bestTarget = bestTN;
     await attacker.createEmbeddedDocuments("ActiveEffect", [{ name: "Blademaster Used", img: "icons/svg/sword.svg", origin: attacker.uuid }]);
   }
 
