@@ -278,6 +278,7 @@ new Dialog({
           const bonus = Math.ceil(sb / 2);
           pen += bonus;
           properties.push(`Hammer Blow Pen +${bonus}`);
+          properties.push("Concussive (2)");
         }
 
         if (scatter && (scatterRange === "Short" || scatterRange === "Point Blank")) {
