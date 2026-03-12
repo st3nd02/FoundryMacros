@@ -457,6 +457,51 @@ const token = await fromUuid(dmg.targetTokenUuid);
 if (!token) return ui.notifications.warn("Target token not found.");
 const actor = token.actor;
 
+async function applyConvenientEffect(actorDoc, { effectId, effectName, counter = null }) {
+  if (!actorDoc) return false;
+  const effectInterface = game.dfreds?.effectInterface;
+  const paramsByPriority = [
+    { effectId, uuid: actorDoc.uuid },
+    { effectId, uuids: [actorDoc.uuid] },
+    { effectName, uuid: actorDoc.uuid },
+    { effectName, uuids: [actorDoc.uuid] }
+  ].filter(params => params.effectId || params.effectName);
+
+  if (effectInterface?.addEffect) {
+    for (const params of paramsByPriority) {
+      try {
+        await effectInterface.addEffect(params);
+        break;
+      } catch (_) {
+        // Keep trying CE signatures.
+      }
+    }
+  }
+
+  if (Number.isFinite(Number(counter)) && Number(counter) > 0) {
+    const numericCounter = Number(counter);
+    const activeEffect = actorDoc.effects.find(effect => {
+      const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+      const ids = statuses.map(status => String(status ?? "").toLowerCase());
+      const coreStatus = String(effect.flags?.core?.statusId ?? "").toLowerCase();
+      const dfredsId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
+      const name = String(effect.name ?? "").toLowerCase();
+      return ids.includes(String(effectId ?? "").toLowerCase()) || coreStatus === String(effectId ?? "").toLowerCase() || dfredsId === String(effectId ?? "").toLowerCase() || name === String(effectName ?? "").toLowerCase();
+    });
+    if (activeEffect) {
+      await activeEffect.update({
+        "flags.statuscounter.counter": { value: numericCounter },
+        "flags.statusIconCounters.counter": numericCounter,
+        "flags.statusIconCounters.value": numericCounter,
+        "flags.status-icon-counters.counter": numericCounter,
+        "flags.status-icon-counters.value": numericCounter
+      });
+    }
+  }
+
+  return true;
+}
+
 function prettyLoc(loc){
   return loc.replace(/([A-Z])/g," $1").replace(/^./,s=>s.toUpperCase());
 }
@@ -686,6 +731,24 @@ if (dmg.spray?.resolved) {
   `;
 }
 
+if (dmg.concussive?.resolved) {
+  report += `
+  <hr>
+  <b>💥 CONCUSSIVE TOUGHNESS TEST</b><br>
+  Target: <b>${dmg.concussive.target}</b><br>
+  Roll: <b>${dmg.concussive.roll}</b><br>
+  Result: ${dmg.concussive.success ? "<span style='color:#6EC1FF;font-weight:900;'>RESISTED</span>" : `<span style='color:#ff9f1a;font-weight:900;'>FAILED</span> (Stunned ${Number(dmg.concussive.value ?? 1)} round${Number(dmg.concussive.value ?? 1) === 1 ? "" : "s"})`}
+  `;
+
+  if (!dmg.concussive.success) {
+    await applyConvenientEffect(actor, {
+      effectId: "stunned",
+      effectName: "Stunned",
+      counter: Number(dmg.concussive.value ?? 1)
+    });
+  }
+}
+
 if (dmg.toxic?.resolved) {
   report += `
   <hr>
@@ -868,7 +931,7 @@ if (selectedEntry.msg && selectedEntry.state) {
         const statusIds = statusValues.map(status => String(status ?? "").toLowerCase());
         const effectId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
         const name = String(effect.name ?? "").toLowerCase();
-        return statusIds.includes("devastating-assault") || effectId === "devastating-assault" || name.includes("devastating assault");
+        return statusIds.includes("ce-devastating-assault") || effectId === "ce-devastating-assault" || name.includes("devastating assault");
       });
 
       if (!hasDevastatingEffect) {
