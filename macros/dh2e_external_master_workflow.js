@@ -1,7 +1,7 @@
 /**
  * DH2e External Master Workflow (Foundry V13)
- * Version: 1.1
- * Launcher macro: Attack / Defense / Damage
+ * Version: 1.2
+ * Launcher macro: Attack / Defense / Damage / Characteristic Test
  */
 
 (async () => {
@@ -32,6 +32,7 @@
         attack: { label: "Attack", callback: () => resolve("attack") },
         defense: { label: "Defense", callback: () => resolve("defense") },
         damage: { label: "Damage", callback: () => resolve("damage") },
+        characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
       default: "attack"
@@ -39,6 +40,14 @@
   });
 
   if (!choice) return;
+  if (choice === "characteristic") {
+    if (game.warhammer40kCogitator?.openCharacteristicTest) {
+      await game.warhammer40kCogitator.openCharacteristicTest();
+      return;
+    }
+
+    return ui.notifications.warn("Characteristic Test requires the Warhammer 40k Cogitator module API.");
+  }
 
   const macro = findMacro(macroNames[choice]);
   if (!macro) {

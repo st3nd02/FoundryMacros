@@ -128,6 +128,7 @@ Hooks.once("init", () => {
 Hooks.once("ready", async () => {
   game.warhammer40kCogitator = {
     openLauncher,
+    openCharacteristicTest,
     ensureWorkflowMacros,
     runStep,
     emitSocket,
@@ -1127,6 +1128,7 @@ async function openLauncher() {
         attack: { label: "Attack", callback: () => resolve("attack") },
         defense: { label: "Defense", callback: () => resolve("defense") },
         damage: { label: "Damage", callback: () => resolve("damage") },
+        characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
       default: "attack"
@@ -1134,7 +1136,298 @@ async function openLauncher() {
   });
 
   if (!choice) return;
+  if (choice === "characteristic") {
+    await openCharacteristicTest();
+    return;
+  }
   await runStep(choice);
+}
+
+async function askForFateReroll(actor) {
+  const fateCurrent = actor.system.fate?.value ?? 0;
+  if (fateCurrent <= 0) return false;
+
+  return new Promise(resolve => {
+    new Dialog({
+      title: "Spend Fate?",
+      content: `<p><b>Test Failed!</b><br> Spend 1 Fate Point to reroll?<br>Remaining: <b>${fateCurrent}</b></p>`,
+      buttons: {
+        yes: { label: "Spend Fate (-1)", callback: () => resolve(true) },
+        no: { label: "Keep Result", callback: () => resolve(false) }
+      },
+      default: "no"
+    }).render(true);
+  });
+}
+
+async function openCharacteristicTest() {
+  if (!canvas.tokens.controlled.length) {
+    ui.notifications.warn("Select your token first.");
+    return;
+  }
+
+  const actor = canvas.tokens.controlled[0].actor;
+
+  const characteristics = {
+    weaponSkill: "Weapon Skill",
+    ballisticSkill: "Ballistic Skill",
+    strength: "Strength",
+    toughness: "Toughness",
+    agility: "Agility",
+    intelligence: "Intelligence",
+    perception: "Perception",
+    willpower: "Willpower",
+    fellowship: "Fellowship",
+    influence: "Influence"
+  };
+
+  const difficulties = [
+    { value: 60, label: "Trivial (+60)" },
+    { value: 50, label: "Elementary (+50)" },
+    { value: 40, label: "Simple (+40)" },
+    { value: 30, label: "Easy (+30)" },
+    { value: 20, label: "Routine (+20)" },
+    { value: 10, label: "Ordinary (+10)" },
+    { value: 0, label: "Challenging (+0)" },
+    { value: -10, label: "Difficult (-10)" },
+    { value: -20, label: "Hard (-20)" },
+    { value: -30, label: "Very Hard (-30)" },
+    { value: -40, label: "Arduous (-40)" },
+    { value: -50, label: "Punishing (-50)" },
+    { value: -60, label: "Hellish (-60)" }
+  ];
+
+  const options = Object.entries(characteristics)
+    .map(([key, label]) => `<option value="${key}">${label}</option>`)
+    .join("");
+
+  const difficultyOptions = difficulties
+    .map(d => `<option value="${d.value}" ${d.value === 0 ? "selected" : ""}>${d.label}</option>`)
+    .join("");
+
+  new Dialog({
+    title: "Characteristic Test",
+    content: `
+<form>
+<div><b>Which characteristic do you want to test?</b></div>
+<br><div class="form-group">
+<label><b>Characteristic</b></label>
+<select id="char">${options}</select>
+</div>
+<br>
+<div class="form-group">
+<label><b>Difficulty</b></label>
+<select id="difficulty">
+${difficultyOptions}
+</select>
+</div>
+<br>
+<div class="form-group">
+<label><b>Modifier</b><br></label>
+<input id="mod" type="number" value="0"/>
+</div><br>
+
+</form>
+`,
+    buttons: {
+      roll: {
+        label: "Roll Test",
+        callback: async html => {
+          const key = html.find("#char").val();
+          const label = characteristics[key];
+          const mod = Number(html.find("#mod").val());
+          const difficulty = Number(html.find("#difficulty").val());
+          const difficultyLabel = difficulties.find(d => d.value === difficulty)?.label ?? "";
+          const base = actor.system.characteristics[key].total;
+
+          let target = base + difficulty + mod;
+          if (target < 1) target = 1;
+
+          const displayTarget = target;
+          const roll = await new Roll("1d100").roll({ async: true });
+          await roll.toMessage({ speaker: ChatMessage.getSpeaker({ actor }) });
+          const result = roll.total;
+
+          let dos = 0;
+          let dof = 0;
+
+          if (result <= target) dos = 1 + Math.floor((target - result) / 10);
+          else dof = 1 + Math.floor((result - target) / 10);
+
+          const unnatural = actor.system.characteristics[key].unnatural || 0;
+          const unnaturalBonus = dos > 0 ? Math.floor(unnatural / 2) : 0;
+          const finalDoS = dos + unnaturalBonus;
+          const success = dos > 0;
+
+          const modLine = `
+<b>Difficulty:</b><i> ${difficultyLabel}</i><br>
+${mod ? `<b>Modifier:</b><i> ${mod >= 0 ? "+" : ""}${mod}</i><br>` : ""}
+`;
+
+          ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            content: `
+<div style="text-align:center;">
+
+<div style="font-style:italic; font-size:1.1em;">
+<b>${actor.name}</b> performs a <b>${label}</b> Test
+</div>
+
+<hr>
+
+<div style="font-size:1.0em;">${modLine}</div>
+
+<div style="margin-top:6px;font-size:1.3em;">
+Target:
+<span style="
+  color:#ffad55;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${displayTarget}</span>
+</div>
+
+<div style="font-size:1.4em;">
+Roll:
+<span style="
+  color:#bd7548;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${result}</span>
+</div>
+
+${dos ? `<div style="font-weight:bold;font-size:1.3em;">
+DoS:
+<span style="color:#0a8f0a;text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;">
+${finalDoS}
+</span>
+${unnaturalBonus ? `<br><span style="font-size:0.8em;color:#8fe38f; text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;">
+(+${unnaturalBonus} Unnatural)
+</span>` : ""}
+</div>` : ""}
+${dof ? `<div style="font-weight:bold;font-size:1.3em;">
+DoF: <span style="color:#a00000;
+text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;"> ${dof}</span><br>
+</div>` : ""}
+
+</div></div>`
+          });
+
+          if (!success && actor.system.fate?.value > 0) {
+            const useFate = await askForFateReroll(actor);
+
+            if (useFate) {
+              await actor.update({ "system.fate.value": actor.system.fate.value - 1 });
+
+              const roll2 = await new Roll("1d100").roll({ async: true });
+              await roll2.toMessage({ speaker: ChatMessage.getSpeaker({ actor }) });
+              const result2 = roll2.total;
+
+              let dos2 = 0;
+              let dof2 = 0;
+
+              if (result2 <= target) dos2 = 1 + Math.floor((target - result2) / 10);
+              else dof2 = 1 + Math.floor((result2 - target) / 10);
+
+              const unnatural2 = actor.system.characteristics[key].unnatural || 0;
+              const unnaturalBonus2 = dos2 > 0 ? Math.floor(unnatural2 / 2) : 0;
+              const finalDoS2 = dos2 + unnaturalBonus2;
+
+              ChatMessage.create({
+                speaker: ChatMessage.getSpeaker({ actor }),
+                content: `
+<div style="text-align:center;">
+<b style="color:gold;">${actor.name} spends Fate and rerolls!</b>
+<hr>
+<div style="text-align:center;">
+
+<div style="font-style:italic;font-size:1.1em;">
+<b>${actor.name}</b> performs a <b>${label}</b> Test
+</div>
+
+<hr>
+
+<div style="font-size:1.0em;">${modLine}</div>
+
+<div style="margin-top:6px;font-size:1.3em;">
+Target:
+<span style="
+  color:#ffad55;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${displayTarget}</span>
+</div>
+
+<div style="font-size:1.4em;">
+Roll:
+<span style="
+  color:#bd7548;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${result2}</span>
+</div>
+
+${dos2 ? `<div style="font-weight:bold;font-size:1.3em;">
+DoS:
+<span style="color:#0a8f0a;text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;">
+${finalDoS2}
+</span>
+${unnaturalBonus2 ? `<br><span style="font-size:0.8em;color:#8fe38f; text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;">
+(+${unnaturalBonus2} Unnatural)
+</span>` : ""}
+</div>` : ""}
+${dof2 ? `<div style="font-weight:bold;font-size:1.3em;">
+DoF: <span style="color:#a00000;
+text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;"> ${dof2}</span><br>
+</div>` : ""}
+
+</div>`
+              });
+            }
+          }
+        }
+      }
+    }
+  }).render(true);
 }
 
 async function runStep(step) {
