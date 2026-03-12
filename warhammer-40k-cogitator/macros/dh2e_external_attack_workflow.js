@@ -172,6 +172,20 @@ const parseTraitNumber = (traits, key, fallback = 0) => {
   return match ? Number(match[1]) : fallback;
 };
 
+const getWeaponPenetration = weaponDoc => {
+  const penData = weaponDoc?.system?.penetration;
+  if (typeof penData === "number") return penData;
+  if (typeof penData === "string") {
+    const parsed = Number(penData);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (penData && typeof penData === "object") {
+    const parsed = Number(penData.value ?? penData.total ?? penData.base ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
 const getHordeBonusFromMagnitude = magnitude => {
   const value = Number(magnitude ?? 0);
   if (!Number.isFinite(value) || value <= 0) return 0;
@@ -737,7 +751,7 @@ const runAttackWorkflow = async setup => {
     weaponId: weapon.id,
     weaponName: weapon.name,
     weaponDamage: weapon.system.damage || "1d10",
-    weaponPen: weapon.system.penetration || 0,
+    weaponPen: getWeaponPenetration(weapon),
     weaponType: weapon.system.damageType || "impact",
     weaponSpecial: weapon.system.special || "",
     meleeBestDamageBonus: (isMelee && craftData.meleeBestDamageBonus) ? 1 : 0,
@@ -1051,10 +1065,10 @@ const showAttackDialog = async () => {
             <label class="talent-toggle" data-needle="double tap"><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
             <label class="talent-toggle" data-needle="target selection"><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
             <label class="talent-toggle" data-needle="blademaster"><input type="checkbox" id="talent_blademaster"/> Blademaster</label>
-            <label class="talent-toggle" data-needle="berserk charge"><input type="checkbox" id="talent_berserk"/> Berserk Charge</label>
+            <label class="talent-toggle talent-auto" data-needle="berserk charge"><input type="checkbox" id="talent_berserk" disabled/> Berserk Charge (auto)</label>
             <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
             <label class="talent-toggle talent-auto" data-needle="flesh render"><input type="checkbox" id="talent_flesh" disabled/> Flesh Render (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="raptor"><input type="checkbox" id="talent_raptor" disabled/> Raptor (auto)</label>
+            <label class="talent-toggle" data-needle="raptor"><input type="checkbox" id="talent_raptor"/> Raptor</label>
             <label class="talent-toggle" data-needle="whirlwind"><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
           </div>
           <div class="attack-talents-col">
@@ -1083,6 +1097,57 @@ const showAttackDialog = async () => {
           const magnitude = getHordeMagnitudeValue(firstTarget);
           hordeInput.val(getHordeBonusFromMagnitude(magnitude));
           html.find("#talent_force_channel").prop("checked", false);
+        };
+
+        const refreshTalents = () => {
+          const weaponDoc = attacker.items.get(html.find("#weaponId").val());
+          const modeKey = String(html.find("#modeKey").val() ?? "");
+          const isMelee = (weaponDoc?.system?.class ?? "").toLowerCase() === "melee";
+          const twoWeaponAttack = !!html.find("#twoWeaponAttack")[0]?.checked;
+
+          const relevanceById = {
+            talent_berserk: hasTalent(attacker, "berserk charge") && isMelee && modeKey === "charge",
+            talent_deadeye: hasTalent(attacker, "deadeye") && !isMelee && modeKey === "called",
+            talent_marksman: hasTalent(attacker, "marksman") && !isMelee,
+            talent_crushing: hasTalent(attacker, "crushing blow") && isMelee,
+            talent_mighty: hasTalent(attacker, "mighty shot") && !isMelee,
+            talent_hammer: hasTalent(attacker, "hammer blow") && isMelee,
+            talent_twm_melee: hasTalent(attacker, "two-weapon wielder (melee)") && isMelee && twoWeaponAttack,
+            talent_twm_ranged: hasTalent(attacker, "two-weapon wielder (ranged)") && !isMelee && twoWeaponAttack,
+            talent_ambi: hasTalent(attacker, "ambidextrous") && twoWeaponAttack,
+            talent_master: hasTalent(attacker, "two weapon master") && twoWeaponAttack,
+            talent_flesh: hasTalent(attacker, "flesh render") && isMelee,
+            talent_raptor: hasTalent(attacker, "raptor") && isMelee && modeKey === "charge"
+          };
+
+          const showById = {
+            talent_raptor: !!relevanceById.talent_raptor
+          };
+
+          html.find(".talent-toggle").each((_, el) => {
+            const $label = $(el);
+            const needle = String($label.data("needle") ?? "");
+            const input = $label.find("input");
+            const id = String(input.attr("id") ?? "");
+            const hasIt = hasTalent(attacker, needle);
+            const relevant = Object.prototype.hasOwnProperty.call(relevanceById, id) ? !!relevanceById[id] : hasIt;
+            const shown = Object.prototype.hasOwnProperty.call(showById, id) ? !!showById[id] : true;
+
+            $label.toggle(shown);
+            $label.toggleClass("talent-unavailable", !hasIt || !relevant);
+
+            if ($label.hasClass("talent-auto")) {
+              input.prop("disabled", true);
+              input.prop("checked", hasIt && relevant);
+              return;
+            }
+
+            input.prop("disabled", !hasIt || !relevant);
+            if (!relevant || !shown) input.prop("checked", false);
+            else if (!input[0].dataset.userSet) input.prop("checked", hasIt);
+          });
+
+          html.find("#talent_marksman").prop("checked", !!relevanceById.talent_marksman);
         };
 
         const refresh = () => {
@@ -1120,20 +1185,11 @@ const showAttackDialog = async () => {
           html.find("#forceChannelGroup").toggle(!!forceWeapon);
           if (!forceWeapon) html.find("#talent_force_channel").prop("checked", false);
           syncHordeBonus();
+          refreshTalents();
         };
 
-        html.find(".talent-toggle").each((_, el) => {
-          const $label = $(el);
-          const needle = String($label.data("needle") ?? "");
-          const input = $label.find("input");
-          const available = hasTalent(attacker, needle);
-          $label.toggleClass("talent-unavailable", !available);
-          if ($label.hasClass("talent-auto")) {
-            input.prop("checked", available);
-            return;
-          }
-          input.prop("disabled", !available);
-          input.prop("checked", available);
+        html.find(".talent-toggle input").on("change", ev => {
+          ev.currentTarget.dataset.userSet = "1";
         });
         html.find("#talent_doubletap").prop("checked", false);
         html.find("#talent_devastating").prop("checked", false);
@@ -1169,6 +1225,8 @@ const showAttackDialog = async () => {
         }
 
         html.find("#weaponId").on("change", refresh);
+        html.find("#modeKey").on("change", refreshTalents);
+        html.find("#twoWeaponAttack").on("change", refreshTalents);
         html.find("#horde").on("change", syncHordeBonus);
         refresh();
         if (pendingMirrorSetup) {
@@ -1210,7 +1268,7 @@ const showAttackDialog = async () => {
               targetConfigs,
               toggles: {
                 deadeye: html.find("#talent_deadeye")[0].checked,
-                marksman: hasTalent(attacker, "marksman"),
+                marksman: html.find("#talent_marksman")[0].checked,
                 doubletap: html.find("#talent_doubletap")[0].checked,
                 targetsel: html.find("#talent_targetsel")[0].checked,
                 devastating: html.find("#talent_devastating")[0].checked,
