@@ -508,70 +508,32 @@ const getHordeMagnitudeHits = ({ state, target }) => {
   return Math.max(0, magnitude + bonus + devastating);
 };
 
-const promptDamageDialog = async (state, chatMessage) => {
-  const rows = state.targets.filter(t => t.allocatedHits > 0).map(t => `<li>${t.name}: ${t.allocatedHits} hits</li>`).join("");
-  if (!rows) return;
+const openDamageWorkflow = async (state, chatMessage) => {
+  const hasPendingDamage = state.targets.some(t => (t.allocatedHits ?? 0) > 0 && !t.damageResolved);
+  if (!hasPendingDamage) return;
 
-  await new Promise(resolve => {
-    new Dialog({
-      title: `Damage: ${state.attackerName}`,
-      content: `<p>Incoming damage rolls to resolve:</p><ul>${rows}</ul><p>Roll now?</p>`,
-      buttons: {
-        roll: {
-          label: "Roll Damage",
-          callback: async () => {
-            for (const t of state.targets) {
-              if (t.allocatedHits <= 0) continue;
-              const damageRolls = [];
-              const rollCount = state.horde?.active ? 1 : t.allocatedHits;
-              let bonusFormula = Number(state.meleeBestDamageBonus ?? 0) > 0 ? `(${state.weaponDamage}) + ${Number(state.meleeBestDamageBonus)}` : state.weaponDamage;
-              const weaponTraits = parseWeaponTraits({ system: { special: state.weaponSpecial ?? "" } });
-              const hasTearing = hasTrait(weaponTraits, "tearing");
-              if (hasTearing) {
-                const match = String(bonusFormula).replace(/\s+/g, "").match(/^(\d+)d(5|10)([+-]\d+)?$/i);
-                if (match) {
-                  const keepDice = Number(match[1]);
-                  const dieType = Number(match[2]);
-                  const flatBonus = Number(match[3] ?? 0);
-                  const extraDice = 1 + (state.toggles?.flesh ? 1 : 0);
-                  bonusFormula = `${keepDice + extraDice}d${dieType}kh${keepDice}${flatBonus >= 0 ? `+${flatBonus}` : `${flatBonus}`}`;
-                }
-              }
-              for (let i = 0; i < rollCount; i += 1) {
-                const r = await animatedRoll(bonusFormula, chatMessage.speaker);
-                damageRolls.push({ total: r.total, loc: getHitLocation(state.attackRoll || r.total) });
-              }
-              t.damageRolls = damageRolls;
-              t.damageResolved = true;
-              t.damageApplied = false;
-              t.applySummary = null;
-              t.damageApplicationData = buildDamageApplicationData({ state, target: t, rolls: damageRolls, hitLoc: getHitLocation(state.attackRoll || 50) });
-              if (state.horde?.active) {
-                const targetDoc = await fromUuid(t.tokenUuid ?? t.targetTokenUuid);
-                const defenseThreshold = getHordeDefenseThreshold(targetDoc?.actor, state.weaponPen);
-                const minDamage = estimateMinimumDamage(bonusFormula);
-                const canSkipRoll = Number.isFinite(minDamage) && minDamage > defenseThreshold;
-                const rolledDamage = Number(damageRolls[0]?.total ?? 0);
-                const penetrationSucceeded = canSkipRoll || rolledDamage > defenseThreshold;
-                const magHits = penetrationSucceeded ? getHordeMagnitudeHits({ state, target: t }) : 0;
-                const rollNote = canSkipRoll
-                  ? `No damage roll required (minimum damage ${minDamage} exceeds defense ${defenseThreshold}).`
-                  : `Rolled once for penetration (${rolledDamage} vs defense ${defenseThreshold}).`;
-                const resultNote = penetrationSucceeded
-                  ? `Horde takes <b>${magHits}</b> magnitude damage from hits.`
-                  : `Damage did not beat defense; magnitude damage is <b>0</b>.`;
-                t.damageSummary = `<div><b>Horde Damage:</b> ${rollNote} ${resultNote}</div>`;
-                t.damageApplicationData.horde = { active: true, magnitudeHits: magHits, canSkipRoll, defenseThreshold, minimumDamage: minDamage, penetrationSucceeded };
-              }
-            }
-            resolve();
-          }
-        },
-        later: { label: "Open Damage Dialog", callback: () => resolve() }
-      },
-      default: "roll"
-    }).render(true);
-  });
+  const payload = {
+    ownerIds: [game.user.id],
+    attackerName: state.attackerName,
+    chatMessageId: chatMessage.id
+  };
+
+  if (game.warhammer40kCogitator?.setPendingDamageContext) {
+    game.warhammer40kCogitator.setPendingDamageContext(payload);
+  }
+
+  if (game.warhammer40kCogitator?.runStep) {
+    await game.warhammer40kCogitator.runStep("damage");
+    return;
+  }
+
+  const fallbackMacro = game.macros.getName("DH2e External Damage Workflow") ?? game.macros.getName("dh2e_external_damage_workflow");
+  if (fallbackMacro) {
+    await fallbackMacro.execute();
+    return;
+  }
+
+  ui.notifications.warn("Could not find Damage workflow macro to run.");
 };
 
 const getDefenseRecipients = targetDocumentOrActor => {
@@ -1002,12 +964,7 @@ const runAttackWorkflow = async setup => {
   // For grenades, damage already exploded/resolved above; skip weapon damage prompt.
   // Also skip damage while any target is still awaiting owner defense resolution.
   if (!isGrenade && !awaitingDefense) {
-    await promptDamageDialog(state, chatMessage);
-
-    await chatMessage.update({
-      content: buildWorkflowHtml(state),
-      flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
-    });
+    await openDamageWorkflow(state, chatMessage);
   } else if (awaitingDefense) {
     await chatMessage.update({
       content: buildWorkflowHtml(state),
