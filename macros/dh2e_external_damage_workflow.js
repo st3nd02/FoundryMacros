@@ -259,24 +259,37 @@ new Dialog({
         const isD100Success = (roll, target) => roll === 1 ? true : (roll === 100 ? false : roll <= target);
         const calcDoS = (target, roll) => isD100Success(roll, target) ? (1 + Math.floor((target - roll) / 10)) : 0;
 
+        entry.state.talentModifier = entry.state.talentModifier ?? {
+          attack: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
+          defense: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
+          damage: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
+          applyDamage: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] }
+        };
+
         if (mighty && isRanged && !special.includes("grenade")) {
           const bsb = actor.system.characteristics.ballisticSkill.bonus;
-          const bonus = Math.floor(bsb / 2);
+          const bonus = Math.ceil(bsb / 2);
           flat += bonus;
+          entry.state.talentModifier.damage.damage += bonus;
+          entry.state.talentModifier.damage.notes.push(`Mighty Shot +${bonus}`);
           properties.push(`Mighty Shot +${bonus}`);
         }
 
         if (crushing && isMelee) {
           const wsb = actor.system.characteristics.weaponSkill.bonus;
-          const bonus = Math.floor(wsb / 2);
+          const bonus = Math.ceil(wsb / 2);
           flat += bonus;
+          entry.state.talentModifier.damage.damage += bonus;
+          entry.state.talentModifier.damage.notes.push(`Crushing Blow +${bonus}`);
           properties.push(`Crushing Blow +${bonus}`);
         }
 
         if (hammer && isMelee) {
           const sb = actor.system.characteristics.strength.bonus;
-          const bonus = Math.floor(sb / 2);
+          const bonus = Math.ceil(sb / 2);
           pen += bonus;
+          entry.state.talentModifier.damage.penetration += bonus;
+          entry.state.talentModifier.damage.notes.push(`Hammer Blow Pen +${bonus}`);
           properties.push(`Hammer Blow Pen +${bonus}`);
           if (String(entry.state?.modeKey ?? "") === "allout") {
             properties.push("Concussive (2)");
@@ -327,6 +340,7 @@ new Dialog({
           const extra = Math.min(Math.floor(dos / 2), 2);
           if (extra > 0) {
             formula += ` + ${extra}d${dieType}`;
+            entry.state.talentModifier.damage.notes.push(`Raptor +${extra}d${dieType}`);
             properties.push(`Raptor +${extra}d${dieType}`);
           }
         }
@@ -530,6 +544,7 @@ ${furyHtml}
           concussive: traitTests.concussive,
           sprayJam,
           force: traitTests.force,
+          talentModifier: entry.state?.talentModifier ?? null,
           damageSummary
         };
 

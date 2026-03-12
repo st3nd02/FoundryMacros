@@ -1,0 +1,189 @@
+[
+  {
+    "name": "Double Tap",
+    "notes": "If first attack hits, prime same target for +20 on second same-type attack this round.",
+    "weaponType": "ranged",
+    "attackType": ["single", "called", "semi", "full", "suppressSemi", "suppressFull"],
+    "attackDialog": { "text": "normal", "checkbox": "interactive", "default": false },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": ["Tracks same-target follow-up and applies +20 when valid."]
+  },
+  {
+    "name": "Target Selection",
+    "notes": "Auto-negates shooting-into-melee penalty when that attack-specific option is enabled.",
+    "weaponType": "ranged",
+    "attackType": ["any"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": false },
+    "stats": { "attackRoll": 20, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": ["Only applies when Shooting into Melee is checked."]
+  },
+  {
+    "name": "Blademaster",
+    "notes": "Auto-reroll one failed attack per turn for melee weapons with Blade in special rules.",
+    "weaponType": "melee",
+    "attackType": ["any"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": ["Checks weapon special text for Blade keyword (not damage type).", "Applies Blademaster Used effect until next turn refresh."]
+  },
+  {
+    "name": "Berserk Charge",
+    "notes": "Charge-only bonus.",
+    "weaponType": "melee",
+    "attackType": ["charge"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 10, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": []
+  },
+  {
+    "name": "Devastating Assault",
+    "notes": "All Out attack on hit grants follow-up prompt against same target.",
+    "weaponType": "melee",
+    "attackType": ["allout"],
+    "attackDialog": { "text": "normal", "checkbox": "interactive", "default": false },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": ["Adds Devastating Assault effect and chat prompt on hit."]
+  },
+  {
+    "name": "Flesh Render",
+    "notes": "For tearing melee weapons, roll one additional d10 over normal tearing extra and keep normal top dice count.",
+    "weaponType": "melee",
+    "attackType": ["any"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": ["1d10 tearing => 3d10kh1, 2d10 tearing => 4d10kh2."]
+  },
+  {
+    "name": "Raptor",
+    "notes": "Charge-only, optional extra damage by DoS.",
+    "weaponType": "melee",
+    "attackType": ["charge"],
+    "attackDialog": { "text": "normal", "checkbox": "interactive", "default": false },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": ["Adds +1d10 per 2 DoS after first, max +2d10."]
+  },
+  {
+    "name": "Whirlwind of Death",
+    "notes": "Optional alternate behavior for multiple melee targets or a single horde.",
+    "weaponType": "melee",
+    "attackType": ["standard"],
+    "attackDialog": { "text": "normal", "checkbox": "interactive", "default": false },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": ["Single-target attacks up to WS bonus count; horde gets extra magnitude damage equal to WS bonus."]
+  },
+  {
+    "name": "Deadeye Shot",
+    "notes": "Called-shot ranged bonus.",
+    "weaponType": "ranged",
+    "attackType": ["called"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 10, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": []
+  },
+  {
+    "name": "Marksman",
+    "notes": "Ignore Long/Extreme range penalties (short/point blank still apply normally).",
+    "weaponType": "ranged",
+    "attackType": ["any"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": []
+  },
+  {
+    "name": "Crushing Blow",
+    "notes": "Melee damage bonus equal to half WS bonus, rounded up.",
+    "weaponType": "melee",
+    "attackType": ["any"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": []
+  },
+  {
+    "name": "Hammer Blow",
+    "notes": "All Out hit adds half SB (rounded up) as pen and Concussive (2).",
+    "weaponType": "melee",
+    "attackType": ["allout"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": true,
+    "weaponQualities": ["Concussive (2)"],
+    "specialRules": []
+  },
+  {
+    "name": "Mighty Shot",
+    "notes": "Ranged damage bonus equal to half BS bonus, rounded up.",
+    "weaponType": "ranged",
+    "attackType": ["any"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": []
+  },
+  {
+    "name": "Ambidextrous",
+    "notes": "Two-weapon setup mitigation contributor.",
+    "weaponType": "any",
+    "attackType": ["any"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": ["Combines with Two-Weapon Wielder to reduce penalty."]
+  },
+  {
+    "name": "Two-Weapon Wielder (Melee)",
+    "notes": "Melee two-weapon penalty mitigation (+10).",
+    "weaponType": "melee",
+    "attackType": ["any"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 10, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": []
+  },
+  {
+    "name": "Two-Weapon Wielder (Ranged)",
+    "notes": "Ranged two-weapon penalty mitigation (+10).",
+    "weaponType": "ranged",
+    "attackType": ["any"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 10, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": []
+  },
+  {
+    "name": "Two Weapon Master",
+    "notes": "Removes two-weapon penalty when applicable.",
+    "weaponType": "any",
+    "attackType": ["any"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 20, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": []
+  }
+]

@@ -597,6 +597,14 @@ const extra = Number(html.find("#extra").val()) || 0;
 const ignoreArmour = html.find("#ignoreArmour")[0].checked;
 const trueGrit = html.find("#trueGrit")[0].checked;
 
+dmg.talentModifier = dmg.talentModifier ?? {
+  attack: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
+  defense: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
+  damage: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
+  applyDamage: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] }
+};
+dmg.talentModifier.applyDamage.notes.push("Apply Damage workflow resolved.");
+
 let coverRemaining = coverStart;
 
 // ===== PULL STATS (same pattern as original) =====
