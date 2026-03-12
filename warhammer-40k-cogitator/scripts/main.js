@@ -5,7 +5,11 @@ const SETTINGS = {
   defenseMacroName: "defenseMacroName",
   damageMacroName: "damageMacroName",
   masterMacroName: "masterMacroName",
-  autoCreateMacros: "autoCreateMacros"
+  autoCreateMacros: "autoCreateMacros",
+  workflowHudEnabled: "workflowHudEnabled",
+  workflowHudLocked: "workflowHudLocked",
+  workflowHudPosX: "workflowHudPosX",
+  workflowHudPosY: "workflowHudPosY"
 };
 
 const SOCKET_EVENTS = {
@@ -36,6 +40,7 @@ let pendingDefenseContext = null;
 let pendingDamageContext = null;
 let pendingAttackContext = null;
 const recentDefensePromptKeys = new Map();
+let workflowHud = null;
 
 const DEFAULT_MACROS = {
   attack: {
@@ -112,6 +117,42 @@ Hooks.once("init", () => {
     default: true
   });
 
+  game.settings.register(COGITATOR_ID, SETTINGS.workflowHudEnabled, {
+    name: "Enable Persistent Workflow HUD",
+    hint: "Show a movable workflow button bar on the canvas.",
+    scope: "client",
+    config: true,
+    type: Boolean,
+    default: true,
+    onChange: () => refreshWorkflowHud()
+  });
+
+  game.settings.register(COGITATOR_ID, SETTINGS.workflowHudLocked, {
+    name: "Lock Workflow HUD Position",
+    hint: "Lock the workflow HUD so it cannot be dragged.",
+    scope: "client",
+    config: true,
+    type: Boolean,
+    default: false,
+    onChange: () => refreshWorkflowHud()
+  });
+
+  game.settings.register(COGITATOR_ID, SETTINGS.workflowHudPosX, {
+    name: "Workflow HUD Position X",
+    scope: "client",
+    config: false,
+    type: Number,
+    default: 24
+  });
+
+  game.settings.register(COGITATOR_ID, SETTINGS.workflowHudPosY, {
+    name: "Workflow HUD Position Y",
+    scope: "client",
+    config: false,
+    type: Number,
+    default: 24
+  });
+
   game.keybindings.register(COGITATOR_ID, "openLauncher", {
     name: "Open Workflow Launcher",
     hint: "Open Warhammer 40k Cogitator launcher dialog.",
@@ -148,7 +189,8 @@ Hooks.once("ready", async () => {
     applyDevastatingAssaultEffect,
     applyDoubleTapEffect,
     clearDoubleTapEffect,
-    applyWeaponRechargingEffect
+    applyWeaponRechargingEffect,
+    refreshWorkflowHud
   };
 
   initializeSocketlib();
@@ -158,6 +200,10 @@ Hooks.once("ready", async () => {
   if (game.settings.get(COGITATOR_ID, SETTINGS.autoCreateMacros)) {
     await ensureWorkflowMacros();
   }
+
+  Hooks.on("canvasReady", () => refreshWorkflowHud());
+  Hooks.on("canvasTearDown", () => removeWorkflowHud());
+  refreshWorkflowHud();
 
   console.log("Warhammer 40k Cogitator | Ready");
 });
@@ -1141,6 +1187,157 @@ async function openLauncher() {
     return;
   }
   await runStep(choice);
+}
+
+function getWorkflowHudButtons() {
+  const buttons = [
+    { id: "attack", label: "Attack", action: () => runStep("attack") },
+    { id: "defense", label: "Defense", action: () => runStep("defense") },
+    { id: "damage", label: "Damage", action: () => runStep("damage") },
+    { id: "characteristic", label: "Characteristic", action: () => openCharacteristicTest() }
+  ];
+
+  if (game.user.isGM) {
+    buttons.push({ id: "applyDamage", label: "Apply Damage", action: () => runStep("applyDamage") });
+  }
+
+  return buttons;
+}
+
+function refreshWorkflowHud() {
+  const enabled = game.settings.get(COGITATOR_ID, SETTINGS.workflowHudEnabled);
+  if (!enabled || !canvas?.ready) {
+    removeWorkflowHud();
+    return;
+  }
+
+  const locked = game.settings.get(COGITATOR_ID, SETTINGS.workflowHudLocked);
+  const x = Number(game.settings.get(COGITATOR_ID, SETTINGS.workflowHudPosX)) || 24;
+  const y = Number(game.settings.get(COGITATOR_ID, SETTINGS.workflowHudPosY)) || 24;
+  const buttons = getWorkflowHudButtons();
+
+  if (!workflowHud) workflowHud = new WorkflowHud();
+  workflowHud.render({ locked, x, y, buttons });
+}
+
+function removeWorkflowHud() {
+  workflowHud?.destroy();
+  workflowHud = null;
+}
+
+class WorkflowHud {
+  constructor() {
+    this.element = null;
+    this.dragging = false;
+    this.locked = false;
+    this.dragOffset = { x: 0, y: 0 };
+  }
+
+  render({ locked, x, y, buttons }) {
+    this.locked = Boolean(locked);
+
+    if (!this.element) {
+      this.element = document.createElement("div");
+      this.element.id = "warhammer40k-cogitator-workflow-hud";
+      this.element.style.position = "absolute";
+      this.element.style.display = "flex";
+      this.element.style.gap = "6px";
+      this.element.style.padding = "8px";
+      this.element.style.borderRadius = "8px";
+      this.element.style.background = "rgba(12, 12, 12, 0.9)";
+      this.element.style.border = "1px solid rgba(206, 206, 206, 0.45)";
+      this.element.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.45)";
+      this.element.style.zIndex = "95";
+      this.element.style.alignItems = "center";
+      this.element.style.userSelect = "none";
+
+      this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
+
+      document.body.appendChild(this.element);
+    }
+
+    this.element.innerHTML = "";
+
+    for (const button of buttons) {
+      const buttonEl = document.createElement("button");
+      buttonEl.type = "button";
+      buttonEl.dataset.role = "workflow-action";
+      buttonEl.textContent = button.label;
+      buttonEl.style.padding = "4px 8px";
+      buttonEl.style.fontSize = "12px";
+      buttonEl.style.cursor = "pointer";
+      buttonEl.addEventListener("click", async event => {
+        event.stopPropagation();
+        await button.action();
+      });
+      this.element.appendChild(buttonEl);
+    }
+
+    const lockButton = document.createElement("button");
+    lockButton.type = "button";
+    lockButton.textContent = this.locked ? "🔒" : "🔓";
+    lockButton.title = this.locked ? "Unlock bar" : "Lock bar";
+    lockButton.style.padding = "4px 8px";
+    lockButton.style.fontSize = "12px";
+    lockButton.style.cursor = "pointer";
+    lockButton.addEventListener("click", async event => {
+      event.stopPropagation();
+      await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudLocked, !this.locked);
+    });
+    this.element.appendChild(lockButton);
+
+    this.element.style.left = `${Math.round(x)}px`;
+    this.element.style.top = `${Math.round(y)}px`;
+    this.element.style.cursor = this.locked ? "default" : "move";
+  }
+
+  onPointerDown(event) {
+    if (this.locked) return;
+    if (event.target.closest("button")) return;
+
+    this.dragging = true;
+    const rect = this.element.getBoundingClientRect();
+    this.dragOffset = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    };
+
+    this.onPointerMoveBound = this.onPointerMove.bind(this);
+    this.onPointerUpBound = this.onPointerUp.bind(this);
+    window.addEventListener("pointermove", this.onPointerMoveBound);
+    window.addEventListener("pointerup", this.onPointerUpBound, { once: true });
+  }
+
+  onPointerMove(event) {
+    if (!this.dragging) return;
+
+    const maxX = Math.max(window.innerWidth - this.element.offsetWidth - 8, 0);
+    const maxY = Math.max(window.innerHeight - this.element.offsetHeight - 8, 0);
+    const x = Math.min(Math.max(event.clientX - this.dragOffset.x, 8), maxX);
+    const y = Math.min(Math.max(event.clientY - this.dragOffset.y, 8), maxY);
+
+    this.element.style.left = `${Math.round(x)}px`;
+    this.element.style.top = `${Math.round(y)}px`;
+  }
+
+  async onPointerUp() {
+    this.dragging = false;
+    window.removeEventListener("pointermove", this.onPointerMoveBound);
+
+    const x = parseInt(this.element.style.left, 10) || 24;
+    const y = parseInt(this.element.style.top, 10) || 24;
+    await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudPosX, x);
+    await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudPosY, y);
+  }
+
+  destroy() {
+    this.dragging = false;
+    if (this.onPointerMoveBound) {
+      window.removeEventListener("pointermove", this.onPointerMoveBound);
+    }
+    this.element?.remove();
+    this.element = null;
+  }
 }
 
 async function askForFateReroll(actor) {
