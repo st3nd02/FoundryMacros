@@ -13,6 +13,13 @@ const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const DOUBLE_TAP_TARGET_FLAG = "doubleTapEligibleTargetUuid";
 
+const createTalentModifierState = () => ({
+  attack: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
+  defense: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
+  damage: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
+  applyDamage: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] }
+});
+
 const controlled = canvas.tokens.controlled;
 if (!controlled.length) return ui.notifications.warn("Select your attacker token first.");
 
@@ -165,6 +172,7 @@ const presentWeaponItems = detected => {
 const parseWeaponTraits = weapon =>
   (weapon.system.special ?? "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
 const hasTrait = (traits, key) => traits.some(t => t.includes(key));
+const hasWeaponSpecial = (weapon, keyword) => String(weapon?.system?.special ?? "").toLowerCase().includes(String(keyword).toLowerCase());
 const parseTraitNumber = (traits, key, fallback = 0) => {
   const trait = traits.find(t => t.includes(key));
   if (!trait) return fallback;
@@ -649,6 +657,7 @@ const runAttackWorkflow = async setup => {
 
   const modifierNotes = [];
   const selectedTalents = [];
+  const talentModifier = createTalentModifierState();
   let sharedMod = mode.mod + setup.manualMod + setup.aimMod;
   if (setup.manualMod) modifierNotes.push(`Manual ${setup.manualMod >= 0 ? "+" : ""}${setup.manualMod}`);
   if (setup.aimMod) modifierNotes.push(setup.aimLabel);
@@ -666,6 +675,8 @@ const runAttackWorkflow = async setup => {
       sharedMod -= 20;
       modifierNotes.push("Shooting into Melee -20");
     } else {
+      talentModifier.attack.attackRoll += 20;
+      talentModifier.attack.notes.push("Target Selection +20 (ignores shooting into melee penalty)");
       modifierNotes.push("Shooting into Melee (negated)");
     }
   }
@@ -678,6 +689,11 @@ const runAttackWorkflow = async setup => {
       if (hasWielder && t.ambi) penalty = -10;
     }
     sharedMod += penalty;
+    const twoWeaponTalentDelta = penalty - (-20);
+    if (twoWeaponTalentDelta !== 0) {
+      talentModifier.attack.attackRoll += twoWeaponTalentDelta;
+      talentModifier.attack.notes.push(`Two-Weapon talent mitigation ${twoWeaponTalentDelta >= 0 ? "+" : ""}${twoWeaponTalentDelta}`);
+    }
     modifierNotes.push(`Two-Weapon ${penalty}`);
   }
 
@@ -691,7 +707,12 @@ const runAttackWorkflow = async setup => {
     selectedTalents.push("Best Craftsmanship: +1 damage");
   }
 
-  if (t.deadeye && !isMelee && setup.modeKey === "called") { sharedMod += 10; selectedTalents.push("Deadeye +10"); }
+  if (t.deadeye && !isMelee && setup.modeKey === "called") {
+    sharedMod += 10;
+    talentModifier.attack.attackRoll += 10;
+    talentModifier.attack.notes.push("Deadeye Shot +10");
+    selectedTalents.push("Deadeye +10");
+  }
   if (t.grip) { sharedMod += 5; selectedTalents.push("Custom Grip +5"); }
   if (t.stock && !isMelee && setup.aimMod > 0) {
     const b = setup.aimMod === 20 ? 4 : 2;
@@ -700,7 +721,12 @@ const runAttackWorkflow = async setup => {
   }
   if (t.motion && !isMelee && ["semi", "full", "suppressSemi", "suppressFull"].includes(setup.modeKey)) { sharedMod += 10; selectedTalents.push("Motion Predictor +10"); }
   if ((t.reddot || t.omni) && !isMelee && ["single", "called"].includes(setup.modeKey)) { sharedMod += 10; selectedTalents.push("Red-Dot +10"); }
-  if (t.berserk && isMelee && setup.modeKey === "charge") { sharedMod += 10; selectedTalents.push("Berserk Charge +10"); }
+  if (t.berserk && isMelee && setup.modeKey === "charge") {
+    sharedMod += 10;
+    talentModifier.attack.attackRoll += 10;
+    talentModifier.attack.notes.push("Berserk Charge +10");
+    selectedTalents.push("Berserk Charge +10");
+  }
   if (t.marksman && !isMelee) selectedTalents.push("Marksman (ignore Long/Extreme penalties)");
   if (t.mighty && !isMelee) selectedTalents.push("Mighty Shot");
   if (t.crushing && isMelee) selectedTalents.push("Crushing Blow");
@@ -717,6 +743,8 @@ const runAttackWorkflow = async setup => {
   const doubleTapCanApply = !!(t.doubletap && doubleTapEligibleTargetUuid && setup.targetConfigs.length === 1 && setup.targetConfigs[0]?.tokenUuid === doubleTapEligibleTargetUuid);
   if (doubleTapCanApply) {
     sharedMod += 20;
+    talentModifier.attack.attackRoll += 20;
+    talentModifier.attack.notes.push("Double Tap +20 (same target follow-up)");
     selectedTalents.push("Double Tap +20 (same target follow-up)");
   }
 
@@ -778,6 +806,7 @@ const runAttackWorkflow = async setup => {
     horde: { active: !!setup.isHorde },
     whirlwind: { active: !!setup.toggles?.whirlwind, wsBonus: attacker.system.characteristics.weaponSkill?.bonus ?? 0 },
     setupSnapshot: foundry.utils.deepClone(setup),
+    talentModifier,
     targets,
     flags: { immediate: true }
   };
@@ -894,7 +923,7 @@ const runAttackWorkflow = async setup => {
     }
   };
 
-  if (!success && isMelee && setup.toggles?.blademaster && !attacker.effects.some(e => String(e.name ?? "").toLowerCase().includes("blademaster used"))) {
+  if (!success && isMelee && hasWeaponSpecial(weapon, "blade") && setup.toggles?.blademaster && !attacker.effects.some(e => String(e.name ?? "").toLowerCase().includes("blademaster used"))) {
     const reroll = (await animatedRoll("1d100", chatMessage.speaker)).total;
     const evalRe = evaluateAttackResult({ result: reroll, targets: state.targets, weapon, traits });
     state.extraText = [state.extraText, `Blademaster reroll: ${result} → ${reroll}`].filter(Boolean).join(" | ");
@@ -1069,7 +1098,7 @@ const showAttackDialog = async () => {
           <div class="attack-talents-col">
             <label class="talent-toggle" data-needle="double tap"><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
             <label class="talent-toggle" data-needle="target selection"><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
-            <label class="talent-toggle" data-needle="blademaster"><input type="checkbox" id="talent_blademaster"/> Blademaster</label>
+            <label class="talent-toggle talent-auto" data-needle="blademaster"><input type="checkbox" id="talent_blademaster" disabled/> Blademaster (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="berserk charge"><input type="checkbox" id="talent_berserk" disabled/> Berserk Charge (auto)</label>
             <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
             <label class="talent-toggle talent-auto" data-needle="flesh render"><input type="checkbox" id="talent_flesh" disabled/> Flesh Render (auto)</label>
@@ -1110,9 +1139,11 @@ const showAttackDialog = async () => {
           const isMelee = (weaponDoc?.system?.class ?? "").toLowerCase() === "melee";
           const traits = parseWeaponTraits(weaponDoc ?? { system: { special: "" } });
           const isTearingWeapon = hasTrait(traits, "tearing");
+          const isBladeWeapon = hasWeaponSpecial(weaponDoc, "blade");
           const twoWeaponAttack = !!html.find("#twoWeaponAttack")[0]?.checked;
 
           const relevanceById = {
+            talent_blademaster: hasTalent(attacker, "blademaster") && isMelee && isBladeWeapon,
             talent_berserk: hasTalent(attacker, "berserk charge") && isMelee && modeKey === "charge",
             talent_deadeye: hasTalent(attacker, "deadeye") && !isMelee && modeKey === "called",
             talent_marksman: hasTalent(attacker, "marksman") && !isMelee,
