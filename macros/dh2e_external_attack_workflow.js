@@ -807,6 +807,7 @@ const runAttackWorkflow = async setup => {
     whirlwind: { active: !!setup.toggles?.whirlwind, wsBonus: attacker.system.characteristics.weaponSkill?.bonus ?? 0 },
     setupSnapshot: foundry.utils.deepClone(setup),
     talentModifier,
+    toggles: foundry.utils.deepClone(setup.toggles ?? {}),
     targets,
     flags: { immediate: true }
   };
@@ -1170,7 +1171,7 @@ const showAttackDialog = async () => {
             const id = String(input.attr("id") ?? "");
             const hasIt = hasTalent(attacker, needle);
             const relevant = Object.prototype.hasOwnProperty.call(relevanceById, id) ? !!relevanceById[id] : hasIt;
-            const shown = Object.prototype.hasOwnProperty.call(showById, id) ? !!showById[id] : true;
+            const shown = Object.prototype.hasOwnProperty.call(showById, id) ? !!showById[id] : hasIt;
 
             $label.toggle(shown);
             $label.toggleClass("talent-unavailable", !hasIt || !relevant);
@@ -1183,7 +1184,6 @@ const showAttackDialog = async () => {
 
             input.prop("disabled", !hasIt || !relevant);
             if (!relevant || !shown) input.prop("checked", false);
-            else if (!input[0].dataset.userSet) input.prop("checked", hasIt);
           });
 
           html.find("#talent_marksman").prop("checked", !!relevanceById.talent_marksman);
