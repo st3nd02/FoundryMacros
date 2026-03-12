@@ -718,11 +718,11 @@ function buildWorkflowHtml(state) {
           <div style="font-style:italic;"><b>${t.name}</b> attempts <b>${t.defenseAction}</b> against <b>${state.attackerName}</b> with <b>${state.weaponName}</b>.</div>
           <div><b>Incoming Hits:</b> ${t.incomingHits ?? t.allocatedHits ?? 0}</div>
           <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
-          <div><b>Roll vs Target:</b> ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} vs ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")}</div>
+          <div><b>Defense (T vs R):</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseAction} — ${t.defenseOutcome ?? "—"})</div>
           ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
           <div><b>Result:</b> ${styledDegrees(t)}</div>
         </div>`
-      : `<div><b>Defense:</b> ${t.defenseRoll ?? "—"} (${t.defenseOutcome ?? "—"})</div>`;
+      : `<div><b>Defense (T vs R):</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseOutcome ?? "—"})</div>`;
 
     const damageSummary = t.damageSummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
@@ -765,15 +765,8 @@ async function handleDefenseRequest(payload) {
   setPendingDefenseContext(payload);
   await focusDefenseTarget(payload.targetTokenUuid);
 
-  new Dialog({
-    title: "Defense Requested",
-    content: `<p><b>${payload.targetName ?? "A target"}</b> has incoming hit(s) from <b>${payload.attackerName ?? "an attacker"}</b>.</p><p>Run defense workflow now?</p>`,
-    buttons: {
-      run: { label: "Run Defense", callback: async () => runStep("defense") },
-      later: { label: "Later" }
-    },
-    default: "run"
-  }).render(true);
+  ui.notifications.info(`${payload.targetName ?? "A target"}: opening Defense workflow.`);
+  await runStep("defense");
 }
 
 function promptDefenseRequest(payload) {
@@ -1077,7 +1070,7 @@ async function applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll,
       chatMessageId
     });
 
-    if (ownerIds.includes(game.user.id)) {
+    if (!cogitatorSocket && ownerIds.includes(game.user.id)) {
       handleDamageReady({ ownerIds, attackerName: state.attackerName, chatMessageId });
     }
   }
@@ -1089,16 +1082,8 @@ function handleDamageReady(payload) {
 
   setPendingDamageContext(payload);
 
-  new Dialog({
-    title: "Damage Ready",
-    content: `<p>All defense rolls are resolved for <b>${payload.attackerName}</b>.</p>
-              <p>Run damage workflow now?</p>`,
-    buttons: {
-      run: { label: "Run Damage", callback: async () => runStep("damage") },
-      later: { label: "Later" }
-    },
-    default: "run"
-  }).render(true);
+  ui.notifications.info(`${payload.attackerName ?? "Attacker"}: opening Damage workflow.`);
+  void runStep("damage");
 }
 
 function handleMirrorAttackReady(payload) {
