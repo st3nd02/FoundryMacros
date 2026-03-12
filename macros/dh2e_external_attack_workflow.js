@@ -1,6 +1,6 @@
 /**
  * DH2e External Attack Workflow (Foundry V13)
- * Version: 1.1
+ * Version: 1.2
  * V13-safe flow:
  * 1) Attacker dialog (Attack) -> immediately rolls attack and creates workflow chat card.
  * 2) Defense dialogs per target with allocated hits.
@@ -110,6 +110,39 @@ const POWER_MODE_OPTIONS_BY_TYPE = {
 
 const hasTalent = (actorDoc, needle) =>
   actorDoc.items.some(i => i.type === "talent" && i.name.toLowerCase().includes(needle.toLowerCase()));
+
+const getTalentApplicability = ({ talentKey, isMelee, modeKey, targetCount, isTearingWeapon }) => {
+  const isRanged = !isMelee;
+  switch (talentKey) {
+    case "doubletap": return isRanged && targetCount === 1;
+    case "targetsel":
+    case "deadeye":
+    case "marksman":
+    case "mighty":
+    case "twmRanged": return isRanged;
+    case "blademaster":
+    case "whirlwind":
+    case "crushing":
+    case "hammer":
+    case "twmMelee": return isMelee;
+    case "berserk":
+    case "raptor": return isMelee && modeKey === "charge";
+    case "devastating": return isMelee && modeKey === "allout";
+    case "flesh": return isMelee && isTearingWeapon;
+    case "ambi":
+    case "master":
+    case "forceChannel": return true;
+    default: return true;
+  }
+};
+
+const sanitizeTalentToggles = ({ toggles = {}, isMelee, modeKey, targetCount, isTearingWeapon }) => {
+  const out = {};
+  for (const [key, value] of Object.entries(toggles)) {
+    out[key] = !!value && getTalentApplicability({ talentKey: key, isMelee, modeKey, targetCount, isTearingWeapon });
+  }
+  return out;
+};
 
 const MOD_ITEM_TYPES = ["weaponModification", "gear", "tool"];
 
@@ -420,7 +453,7 @@ const buildWorkflowHtml = state => {
 
     const damageSummary = t.damageSummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
-      : `<div style="text-align:center;"><b>Damage</b><div>—</div></div>`;
+      : `<div style="text-align:center;"><b>Damage</b></div>`;
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
@@ -751,6 +784,7 @@ const runAttackWorkflow = async setup => {
     selectedTalents,
     attackTalentsUsed: selectedTalents,
     weaponItems: presentWeaponItems(setup.detectedItems ?? {}),
+    toggles: foundry.utils.deepClone(setup.toggles ?? {}),
     forceChanneling: !!setup.toggles?.forceChannel && !setup.isHorde,
     attackRoll: null,
     dos: 0,
@@ -1064,9 +1098,9 @@ const showAttackDialog = async () => {
             <label class="talent-toggle talent-auto" data-needle="mighty shot"><input type="checkbox" id="talent_mighty" disabled/> Mighty Shot (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="hammer blow"><input type="checkbox" id="talent_hammer" disabled/> Hammer Blow (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (melee)"><input type="checkbox" id="talent_twm_melee" disabled/> Two-Weapon Wielder (Melee) (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="ambidextrous"><input type="checkbox" id="talent_ambi" disabled/> Ambidextrous (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (ranged)"><input type="checkbox" id="talent_twm_ranged" disabled/> Two-Weapon Wielder (Ranged) (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="two weapon master"><input type="checkbox" id="talent_master" disabled/> Two Weapon Master (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="ambidextrous"><input type="checkbox" id="talent_ambi" disabled/> Ambidextrous (auto)</label>
           </div>
         </div>
         <hr><h3>Targets</h3>
@@ -1088,9 +1122,12 @@ const showAttackDialog = async () => {
         const refresh = () => {
           const weaponDoc = attacker.items.get(html.find("#weaponId").val());
           const mode = html.find("#modeKey");
+          const previousMode = mode.val();
           mode.html(buildModeOptions(weaponDoc));
+          const hasPreviousMode = previousMode && mode.find(`option[value="${previousMode}"]`).length > 0;
           const firstEnabled = mode.find("option:not([disabled])").first().val();
-          if (firstEnabled) mode.val(firstEnabled);
+          if (hasPreviousMode) mode.val(previousMode);
+          else if (firstEnabled) mode.val(firstEnabled);
           html.find("#targetsBody").html(targetRows(weaponDoc));
 
           const detected = detectWeaponItems(attacker, weaponDoc);
@@ -1119,6 +1156,52 @@ const showAttackDialog = async () => {
           const forceWeapon = hasTrait(traits, "force");
           html.find("#forceChannelGroup").toggle(!!forceWeapon);
           if (!forceWeapon) html.find("#talent_force_channel").prop("checked", false);
+          const selectedModeKey = html.find("#modeKey").val();
+          const targetCount = targetTokens.length;
+          const isTearingWeapon = hasTrait(traits, "tearing");
+          const appliesFor = talentKey => getTalentApplicability({
+            talentKey,
+            isMelee: isMeleeW,
+            modeKey: selectedModeKey,
+            targetCount,
+            isTearingWeapon
+          });
+
+          const talentSelectorMap = {
+            deadeye: "#talent_deadeye",
+            doubletap: "#talent_doubletap",
+            targetsel: "#talent_targetsel",
+            devastating: "#talent_devastating",
+            blademaster: "#talent_blademaster",
+            whirlwind: "#talent_whirlwind",
+            berserk: "#talent_berserk",
+            twmMelee: "#talent_twm_melee",
+            twmRanged: "#talent_twm_ranged",
+            ambi: "#talent_ambi",
+            master: "#talent_master",
+            mighty: "#talent_mighty",
+            crushing: "#talent_crushing",
+            hammer: "#talent_hammer",
+            flesh: "#talent_flesh",
+            raptor: "#talent_raptor",
+            marksman: null,
+            forceChannel: "#talent_force_channel"
+          };
+
+          for (const [key, selector] of Object.entries(talentSelectorMap)) {
+            if (!selector) continue;
+            const input = html.find(selector);
+            const parentLabel = input.closest("label");
+            const isAuto = parentLabel.hasClass("talent-auto");
+            const needle = String(parentLabel.data("needle") ?? "");
+            const hasActorTalent = key === "forceChannel" ? forceWeapon : hasTalent(attacker, needle);
+            const talentAvailable = key === "forceChannel" ? forceWeapon : hasActorTalent;
+            const applicable = talentAvailable && appliesFor(key);
+            input.prop("disabled", isAuto || !applicable || !hasActorTalent);
+            if (!applicable) input.prop("checked", false);
+            parentLabel.toggle(applicable);
+          }
+
           syncHordeBonus();
         };
 
@@ -1169,6 +1252,7 @@ const showAttackDialog = async () => {
         }
 
         html.find("#weaponId").on("change", refresh);
+        html.find("#modeKey").on("change", refresh);
         html.find("#horde").on("change", syncHordeBonus);
         refresh();
         if (pendingMirrorSetup) {
@@ -1195,19 +1279,11 @@ const showAttackDialog = async () => {
               });
             });
 
-            resolve({
-              weaponId: html.find("#weaponId").val(),
-              modeKey: html.find("#modeKey").val(),
-              manualMod: Number(html.find("#manualMod").val() || 0),
-              aimMod: Number(html.find("#aimMod").val() || 0),
-              aimLabel: html.find("#aimMod option:selected").text(),
-              powerModeKey: Number(html.find("#powerMode").val() || 1),
-              isHorde: html.find("#horde")[0].checked,
-              hordeBonus: Number(html.find("#hordeBonus").val() || 0),
-              shootingMelee: html.find("#shootMelee")[0].checked,
-              twoWeaponAttack: html.find("#twoWeaponAttack")[0].checked,
-              targetTokenIds: targetTokens.map(t => t.id),
-              targetConfigs,
+            const weaponDoc = attacker.items.get(html.find("#weaponId").val());
+            const isMeleeWeapon = (weaponDoc?.system?.class ?? "").toLowerCase() === "melee";
+            const selectedModeKey = html.find("#modeKey").val();
+            const selectedTraits = parseWeaponTraits(weaponDoc ?? { system: { special: "" } });
+            const talentToggles = sanitizeTalentToggles({
               toggles: {
                 deadeye: html.find("#talent_deadeye")[0].checked,
                 marksman: hasTalent(attacker, "marksman"),
@@ -1228,6 +1304,26 @@ const showAttackDialog = async () => {
                 raptor: html.find("#talent_raptor")[0].checked,
                 forceChannel: html.find("#talent_force_channel")[0].checked
               },
+              isMelee: isMeleeWeapon,
+              modeKey: selectedModeKey,
+              targetCount: targetConfigs.length,
+              isTearingWeapon: hasTrait(selectedTraits, "tearing")
+            });
+
+            resolve({
+              weaponId: html.find("#weaponId").val(),
+              modeKey: selectedModeKey,
+              manualMod: Number(html.find("#manualMod").val() || 0),
+              aimMod: Number(html.find("#aimMod").val() || 0),
+              aimLabel: html.find("#aimMod option:selected").text(),
+              powerModeKey: Number(html.find("#powerMode").val() || 1),
+              isHorde: html.find("#horde")[0].checked,
+              hordeBonus: Number(html.find("#hordeBonus").val() || 0),
+              shootingMelee: html.find("#shootMelee")[0].checked,
+              twoWeaponAttack: html.find("#twoWeaponAttack")[0].checked,
+              targetTokenIds: targetTokens.map(t => t.id),
+              targetConfigs,
+              toggles: talentToggles,
               detectedItems: detectWeaponItems(attacker, attacker.items.get(html.find("#weaponId").val()))
             });
           }
