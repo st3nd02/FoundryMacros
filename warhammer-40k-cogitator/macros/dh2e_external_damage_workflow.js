@@ -225,6 +225,7 @@ new Dialog({
         if (meleeBestCraft) { flat += 1; properties.push("Best Craftsmanship +1"); }
         let pen = Number(html.find("#pen").val());
         const dos = Number(html.find("#dos").val());
+        const isHordeTarget = !!entry.state?.horde?.active;
         const traitsText = String(weapon.system.special ?? "").toLowerCase();
         const hasTrait = (name) => traitsText.includes(name);
         const tearing = hasTrait("tearing");
@@ -391,7 +392,7 @@ new Dialog({
           const dieMax = Number(dieType);
           const furyNumbers = spray ? [dieMax] : (gauss && dieMax === 10 ? [9, 10] : [dieMax]);
           if (spray && dice.some(d => d === 9)) sprayJam = true;
-          if (dice.some(d => furyNumbers.includes(d))) {
+          if (!isHordeTarget && dice.some(d => furyNumbers.includes(d))) {
             furyQueue.push(h);
           }
         }
@@ -420,7 +421,7 @@ new Dialog({
           return { label, target, roll: roll.total, success: isD100Success(roll.total, target), dos: calcDoS(target, roll.total) };
         };
 
-        if (toxic) {
+        if (toxic && !isHordeTarget) {
           const toxicValue = parseTraitVal("toxic", 1);
           const test = await rollCharacteristicTest({
             total: targetActor?.system?.characteristics?.toughness?.total ?? 0,
@@ -437,7 +438,7 @@ new Dialog({
           properties.push(`Toxic (${toxicValue})`);
         }
 
-        if (flame) {
+        if (flame && !isHordeTarget) {
           traitTests.flame = {
             ...(await rollCharacteristicTest({ total: targetActor?.system?.characteristics?.agility?.total ?? 0, label: "Agility" })),
             resolved: true
@@ -445,7 +446,7 @@ new Dialog({
           properties.push("Flame");
         }
 
-        if (spray) {
+        if (spray && !isHordeTarget) {
           traitTests.spray = {
             ...(await rollCharacteristicTest({ total: targetActor?.system?.characteristics?.agility?.total ?? 0, label: "Agility" })),
             resolved: true
@@ -453,7 +454,7 @@ new Dialog({
           properties.push("Spray");
         }
 
-        if (force && forceChannel) {
+        if (force && forceChannel && !isHordeTarget) {
           const attackerWP = Number(actor.system?.characteristics?.willpower?.total ?? 0);
           const targetWP = Number(targetActor?.system?.characteristics?.willpower?.total ?? 0);
           const attackerRoll = await new Roll("1d100").evaluate();
