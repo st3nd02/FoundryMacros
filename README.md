@@ -30,6 +30,7 @@ The module provides:
 3. Optional auto-creation of missing world macros from bundled module scripts.
 4. Configurable world settings for macro names (including master macro) and auto-create behavior.
 5. Socket-based player-to-player workflow coordination for defense requests and damage-ready prompts.
+6. Persistent, draggable, lockable canvas workflow HUD with player and GM-specific button sets.
 
 ## Foundry V13 Usage (Module)
 
