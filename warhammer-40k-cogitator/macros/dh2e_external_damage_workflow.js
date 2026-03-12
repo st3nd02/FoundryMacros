@@ -131,6 +131,20 @@ const attackData = {
 const weapon = actor.items.get(entry.state.weaponId) || actor.items.find(w => w.type === "weapon" && w.name === attackData.weapon);
 if (!weapon) return ui.notifications.warn("Weapon not found on actor.");
 
+const getWeaponPenetration = weaponDoc => {
+  const penData = weaponDoc?.system?.penetration;
+  if (typeof penData === "number") return penData;
+  if (typeof penData === "string") {
+    const parsed = Number(penData);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (penData && typeof penData === "object") {
+    const parsed = Number(penData.value ?? penData.total ?? penData.base ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
 const parseVal = (txt, name, dflt = 0) => {
   const m = String(txt ?? "").toLowerCase().match(new RegExp(name + "\\s*\\((\\d+)\\)"));
   return m ? Number(m[1]) : dflt;
@@ -138,7 +152,7 @@ const parseVal = (txt, name, dflt = 0) => {
 
 const special = String(weapon.system.special ?? "").toLowerCase();
 const dmg = String(weapon.system.damage ?? "1d10+0");
-const penBase = Number(weapon.system.penetration ?? 0);
+const penBase = getWeaponPenetration(weapon);
 const m = dmg.match(/(\d+)d(\d+)([+-]\d+)?/i);
 const damageType = String(weapon.system.damageType ?? "").toLowerCase();
 
