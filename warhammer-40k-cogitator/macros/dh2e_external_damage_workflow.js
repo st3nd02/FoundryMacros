@@ -214,7 +214,7 @@ new Dialog({
       callback: async html => {
         const wClass = String(weapon.system.class || "").toLowerCase();
         const isMelee = wClass === "melee";
-        const isRanged = ["basic", "pistol", "heavy", "thrown"].includes(wClass);
+        const isRanged = !isMelee;
 
         const diceCount = Number(html.find("#diceCount").val());
         const dieType = html.find('input[name="dieType"]:checked').val();
@@ -261,23 +261,26 @@ new Dialog({
 
         if (mighty && isRanged && !special.includes("grenade")) {
           const bsb = actor.system.characteristics.ballisticSkill.bonus;
-          const bonus = Math.ceil(bsb / 2);
+          const bonus = Math.floor(bsb / 2);
           flat += bonus;
           properties.push(`Mighty Shot +${bonus}`);
         }
 
         if (crushing && isMelee) {
           const wsb = actor.system.characteristics.weaponSkill.bonus;
-          const bonus = Math.ceil(wsb / 2);
+          const bonus = Math.floor(wsb / 2);
           flat += bonus;
           properties.push(`Crushing Blow +${bonus}`);
         }
 
         if (hammer && isMelee) {
           const sb = actor.system.characteristics.strength.bonus;
-          const bonus = Math.ceil(sb / 2);
+          const bonus = Math.floor(sb / 2);
           pen += bonus;
           properties.push(`Hammer Blow Pen +${bonus}`);
+          if (String(entry.state?.modeKey ?? "") === "allout") {
+            properties.push("Concussive (2)");
+          }
         }
 
         if (scatter && (scatterRange === "Short" || scatterRange === "Point Blank")) {
@@ -307,11 +310,8 @@ new Dialog({
 
         let formula = `${diceCount}d${dieType}`;
         if (tearing) {
-          let extraDice = 1;
-          if (flesh && isMelee) {
-            extraDice += 1;
-            properties.push("Flesh Render");
-          }
+          const extraDice = (flesh && isMelee) ? 2 : 1;
+          if (flesh && isMelee) properties.push("Flesh Render");
           const rollDice = diceCount + extraDice;
           formula = `${rollDice}d${dieType}kh${diceCount}`;
           properties.push("Tearing");
@@ -330,8 +330,6 @@ new Dialog({
             properties.push(`Raptor +${extra}d${dieType}`);
           }
         }
-
-        formula += ` + ${flat}`;
 
         if (entry.state?.modeKey) {
           const wType = String(weapon.system.type || "").toLowerCase();
@@ -352,6 +350,8 @@ new Dialog({
             properties.push("Maximal");
           }
         }
+
+        formula += ` + ${flat}`;
 
         if (razor && dos >= 3) {
           pen *= 2;
@@ -412,7 +412,7 @@ new Dialog({
 
         const targetDoc = await fromUuid(attackData.targetTokenUuid);
         const targetActor = targetDoc?.actor;
-        const traitTests = { toxic: null, flame: null, spray: null, force: null };
+        const traitTests = { toxic: null, flame: null, spray: null, concussive: null, force: null };
 
         const rollCharacteristicTest = async ({ total, label, modifier = 0 }) => {
           const target = Math.max(1, Number(total || 0) + Number(modifier || 0));
@@ -454,6 +454,16 @@ new Dialog({
           properties.push("Spray");
         }
 
+        const concussiveMatch = properties.find(p => /concussive\s*\((\d+)\)/i.test(String(p)));
+        const concussiveValue = concussiveMatch ? Number(String(concussiveMatch).match(/concussive\s*\((\d+)\)/i)?.[1] ?? 0) : 0;
+        if (concussiveValue > 0 && !isHordeTarget) {
+          traitTests.concussive = {
+            value: concussiveValue,
+            ...(await rollCharacteristicTest({ total: targetActor?.system?.characteristics?.toughness?.total ?? 0, label: "Toughness" })),
+            resolved: true
+          };
+        }
+
         if (force && forceChannel && !isHordeTarget) {
           const attackerWP = Number(actor.system?.characteristics?.willpower?.total ?? 0);
           const targetWP = Number(targetActor?.system?.characteristics?.willpower?.total ?? 0);
@@ -477,7 +487,7 @@ new Dialog({
           properties.push("Force");
         }
 
-        const testSummary = [traitTests.flame, traitTests.spray, traitTests.toxic].filter(Boolean)
+        const testSummary = [traitTests.flame, traitTests.spray, traitTests.toxic, traitTests.concussive].filter(Boolean)
           .map(t => `<div><b>${t.label} Test</b> (${t.target}) Roll ${t.roll}: <b>${t.success ? "Success" : "Failure"}</b>${typeof t.damage === "number" ? ` | Extra Damage: <b>${t.damage}</b>` : ""}</div>`)
           .join("");
         const forceSummary = traitTests.force
@@ -517,6 +527,7 @@ ${furyHtml}
           toxic: traitTests.toxic,
           flame: traitTests.flame,
           spray: traitTests.spray,
+          concussive: traitTests.concussive,
           sprayJam,
           force: traitTests.force,
           damageSummary

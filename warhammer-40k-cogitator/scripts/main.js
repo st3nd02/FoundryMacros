@@ -25,8 +25,10 @@ const REACTION_COUNT_FLAG = "reactionUsedForDefenseCount";
 const REACTION_EFFECT_NAME = "Reaction Used";
 const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 const USED_EVASION_EFFECT_ID = "ce-used-evasion";
-const DEVASTATING_ASSAULT_EFFECT_ID = "devastating-assault";
+const DEVASTATING_ASSAULT_EFFECT_ID = "ce-devastating-assault";
 const DEVASTATING_ASSAULT_EFFECT_NAME = "Devastating Assault";
+const DOUBLE_TAP_EFFECT_ID = "ce-double-tap";
+const DOUBLE_TAP_EFFECT_NAME = "Double Tap";
 const WEAPON_RECHARGING_EFFECT_ID = "weapon-recharging";
 const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
 let cogitatorSocket = null;
@@ -143,6 +145,8 @@ Hooks.once("ready", async () => {
     setPendingAttackContext,
     consumePendingAttackContext,
     applyDevastatingAssaultEffect,
+    applyDoubleTapEffect,
+    clearDoubleTapEffect,
     applyWeaponRechargingEffect
   };
 
@@ -398,6 +402,17 @@ async function removeUsedEvasionEffect(actor) {
 async function applyDevastatingAssaultEffect(actor) {
   if (!actor) return false;
   return addConvenientEffectToActor({ actorUuid: actor.uuid, effectId: DEVASTATING_ASSAULT_EFFECT_ID, effectName: DEVASTATING_ASSAULT_EFFECT_NAME });
+}
+
+async function applyDoubleTapEffect(actor) {
+  if (!actor) return false;
+  return addConvenientEffectToActor({ actorUuid: actor.uuid, effectId: DOUBLE_TAP_EFFECT_ID, effectName: DOUBLE_TAP_EFFECT_NAME });
+}
+
+async function clearDoubleTapEffect(actor) {
+  if (!actor) return false;
+  await removeConvenientEffectFromActor({ actorUuid: actor.uuid, effectId: DOUBLE_TAP_EFFECT_ID, effectName: DOUBLE_TAP_EFFECT_NAME });
+  return true;
 }
 
 async function applyWeaponRechargingEffect(actor) {
