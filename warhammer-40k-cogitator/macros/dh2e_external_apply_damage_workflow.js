@@ -1,6 +1,6 @@
 /**
  * DH2e External Apply Damage Workflow (Foundry V13)
- * Version: 1.3
+ * Version: 1.4
  * GM-only damage application from `game.dh2eLastDamage`.
  */
 
@@ -452,6 +452,29 @@ const selectedIndex = await new Promise(resolve => {
 if (selectedIndex == null) return;
 const selectedEntry = candidates[selectedIndex];
 const dmg = selectedEntry.damageData;
+
+async function clearSelectedDamageFromWorkflow() {
+  if (selectedEntry.msg && selectedEntry.state) {
+    const latest = selectedEntry.msg.getFlag(WORKFLOW_NS, WORKFLOW_KEY);
+    if (latest?.targets?.length) {
+      const tgt = latest.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === dmg.targetTokenUuid);
+      if (tgt) {
+        tgt.damageResolved = false;
+        tgt.damageApplied = false;
+        tgt.damageSummary = null;
+        tgt.applySummary = null;
+        tgt.damageRolls = [];
+        tgt.damageApplicationData = null;
+      }
+      await selectedEntry.msg.update({
+        content: buildWorkflowHtml(latest),
+        flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: latest } }
+      });
+    }
+  } else {
+    game.dh2eLastDamage = null;
+  }
+}
 
 const token = await fromUuid(dmg.targetTokenUuid);
 if (!token) return ui.notifications.warn("Target token not found.");
@@ -980,6 +1003,16 @@ if (selectedEntry.msg && selectedEntry.state) {
 }
 
 }
+},
+delete:{
+label:"Delete",
+callback: async ()=>{
+  await clearSelectedDamageFromWorkflow();
+  ui.notifications.info("Pending damage was deleted from the workflow.");
+}
+},
+cancel:{
+label:"Cancel"
 }
 }
 
