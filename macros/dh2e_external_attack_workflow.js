@@ -1,6 +1,6 @@
 /**
  * DH2e External Attack Workflow (Foundry V13)
- * Version: 1.2
+ * Version: 1.1
  * V13-safe flow:
  * 1) Attacker dialog (Attack) -> immediately rolls attack and creates workflow chat card.
  * 2) Defense dialogs per target with allocated hits.
@@ -111,39 +111,6 @@ const POWER_MODE_OPTIONS_BY_TYPE = {
 const hasTalent = (actorDoc, needle) =>
   actorDoc.items.some(i => i.type === "talent" && i.name.toLowerCase().includes(needle.toLowerCase()));
 
-const getTalentApplicability = ({ talentKey, isMelee, modeKey, targetCount, isTearingWeapon }) => {
-  const isRanged = !isMelee;
-  switch (talentKey) {
-    case "doubletap": return isRanged && targetCount === 1;
-    case "targetsel":
-    case "deadeye":
-    case "marksman":
-    case "mighty":
-    case "twmRanged": return isRanged;
-    case "blademaster":
-    case "whirlwind":
-    case "crushing":
-    case "hammer":
-    case "twmMelee": return isMelee;
-    case "berserk":
-    case "raptor": return isMelee && modeKey === "charge";
-    case "devastating": return isMelee && modeKey === "allout";
-    case "flesh": return isMelee && isTearingWeapon;
-    case "ambi":
-    case "master":
-    case "forceChannel": return true;
-    default: return true;
-  }
-};
-
-const sanitizeTalentToggles = ({ toggles = {}, isMelee, modeKey, targetCount, isTearingWeapon }) => {
-  const out = {};
-  for (const [key, value] of Object.entries(toggles)) {
-    out[key] = !!value && getTalentApplicability({ talentKey: key, isMelee, modeKey, targetCount, isTearingWeapon });
-  }
-  return out;
-};
-
 const MOD_ITEM_TYPES = ["weaponModification", "gear", "tool"];
 
 const findItemByName = (actorDoc, name) =>
@@ -203,6 +170,20 @@ const parseTraitNumber = (traits, key, fallback = 0) => {
   if (!trait) return fallback;
   const match = trait.match(/\((\d+)\)/);
   return match ? Number(match[1]) : fallback;
+};
+
+const getWeaponPenetration = weaponDoc => {
+  const penData = weaponDoc?.system?.penetration;
+  if (typeof penData === "number") return penData;
+  if (typeof penData === "string") {
+    const parsed = Number(penData);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (penData && typeof penData === "object") {
+    const parsed = Number(penData.value ?? penData.total ?? penData.base ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 };
 
 const getHordeBonusFromMagnitude = magnitude => {
@@ -453,7 +434,7 @@ const buildWorkflowHtml = state => {
 
     const damageSummary = t.damageSummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
-      : `<div style="text-align:center;"><b>Damage</b></div>`;
+      : `<div style="text-align:center;"><b>Damage</b><div>—</div></div>`;
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
@@ -770,7 +751,7 @@ const runAttackWorkflow = async setup => {
     weaponId: weapon.id,
     weaponName: weapon.name,
     weaponDamage: weapon.system.damage || "1d10",
-    weaponPen: weapon.system.penetration || 0,
+    weaponPen: getWeaponPenetration(weapon),
     weaponType: weapon.system.damageType || "impact",
     weaponSpecial: weapon.system.special || "",
     meleeBestDamageBonus: (isMelee && craftData.meleeBestDamageBonus) ? 1 : 0,
@@ -784,7 +765,6 @@ const runAttackWorkflow = async setup => {
     selectedTalents,
     attackTalentsUsed: selectedTalents,
     weaponItems: presentWeaponItems(setup.detectedItems ?? {}),
-    toggles: foundry.utils.deepClone(setup.toggles ?? {}),
     forceChanneling: !!setup.toggles?.forceChannel && !setup.isHorde,
     attackRoll: null,
     dos: 0,
@@ -1085,10 +1065,10 @@ const showAttackDialog = async () => {
             <label class="talent-toggle" data-needle="double tap"><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
             <label class="talent-toggle" data-needle="target selection"><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
             <label class="talent-toggle" data-needle="blademaster"><input type="checkbox" id="talent_blademaster"/> Blademaster</label>
-            <label class="talent-toggle" data-needle="berserk charge"><input type="checkbox" id="talent_berserk"/> Berserk Charge</label>
+            <label class="talent-toggle talent-auto" data-needle="berserk charge"><input type="checkbox" id="talent_berserk" disabled/> Berserk Charge (auto)</label>
             <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
             <label class="talent-toggle talent-auto" data-needle="flesh render"><input type="checkbox" id="talent_flesh" disabled/> Flesh Render (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="raptor"><input type="checkbox" id="talent_raptor" disabled/> Raptor (auto)</label>
+            <label class="talent-toggle" data-needle="raptor"><input type="checkbox" id="talent_raptor"/> Raptor</label>
             <label class="talent-toggle" data-needle="whirlwind"><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
           </div>
           <div class="attack-talents-col">
@@ -1098,9 +1078,9 @@ const showAttackDialog = async () => {
             <label class="talent-toggle talent-auto" data-needle="mighty shot"><input type="checkbox" id="talent_mighty" disabled/> Mighty Shot (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="hammer blow"><input type="checkbox" id="talent_hammer" disabled/> Hammer Blow (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (melee)"><input type="checkbox" id="talent_twm_melee" disabled/> Two-Weapon Wielder (Melee) (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="ambidextrous"><input type="checkbox" id="talent_ambi" disabled/> Ambidextrous (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (ranged)"><input type="checkbox" id="talent_twm_ranged" disabled/> Two-Weapon Wielder (Ranged) (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="two weapon master"><input type="checkbox" id="talent_master" disabled/> Two Weapon Master (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="ambidextrous"><input type="checkbox" id="talent_ambi" disabled/> Ambidextrous (auto)</label>
           </div>
         </div>
         <hr><h3>Targets</h3>
@@ -1119,15 +1099,66 @@ const showAttackDialog = async () => {
           html.find("#talent_force_channel").prop("checked", false);
         };
 
+        const refreshTalents = () => {
+          const weaponDoc = attacker.items.get(html.find("#weaponId").val());
+          const modeKey = String(html.find("#modeKey").val() ?? "");
+          const isMelee = (weaponDoc?.system?.class ?? "").toLowerCase() === "melee";
+          const traits = parseWeaponTraits(weaponDoc ?? { system: { special: "" } });
+          const isTearingWeapon = hasTrait(traits, "tearing");
+          const twoWeaponAttack = !!html.find("#twoWeaponAttack")[0]?.checked;
+
+          const relevanceById = {
+            talent_berserk: hasTalent(attacker, "berserk charge") && isMelee && modeKey === "charge",
+            talent_deadeye: hasTalent(attacker, "deadeye") && !isMelee && modeKey === "called",
+            talent_marksman: hasTalent(attacker, "marksman") && !isMelee,
+            talent_crushing: hasTalent(attacker, "crushing blow") && isMelee,
+            talent_mighty: hasTalent(attacker, "mighty shot") && !isMelee,
+            talent_hammer: hasTalent(attacker, "hammer blow") && isMelee,
+            talent_twm_melee: hasTalent(attacker, "two-weapon wielder (melee)") && isMelee && twoWeaponAttack,
+            talent_twm_ranged: hasTalent(attacker, "two-weapon wielder (ranged)") && !isMelee && twoWeaponAttack,
+            talent_ambi: hasTalent(attacker, "ambidextrous") && twoWeaponAttack,
+            talent_master: hasTalent(attacker, "two weapon master") && twoWeaponAttack,
+            talent_flesh: hasTalent(attacker, "flesh render") && isMelee && isTearingWeapon,
+            talent_raptor: hasTalent(attacker, "raptor") && isMelee && modeKey === "charge"
+          };
+
+          const showById = {
+            talent_raptor: !!relevanceById.talent_raptor,
+            talent_marksman: !!relevanceById.talent_marksman
+          };
+
+          html.find(".talent-toggle").each((_, el) => {
+            const $label = $(el);
+            const needle = String($label.data("needle") ?? "");
+            const input = $label.find("input");
+            const id = String(input.attr("id") ?? "");
+            const hasIt = hasTalent(attacker, needle);
+            const relevant = Object.prototype.hasOwnProperty.call(relevanceById, id) ? !!relevanceById[id] : hasIt;
+            const shown = Object.prototype.hasOwnProperty.call(showById, id) ? !!showById[id] : true;
+
+            $label.toggle(shown);
+            $label.toggleClass("talent-unavailable", !hasIt || !relevant);
+
+            if ($label.hasClass("talent-auto")) {
+              input.prop("disabled", true);
+              input.prop("checked", hasIt && relevant);
+              return;
+            }
+
+            input.prop("disabled", !hasIt || !relevant);
+            if (!relevant || !shown) input.prop("checked", false);
+            else if (!input[0].dataset.userSet) input.prop("checked", hasIt);
+          });
+
+          html.find("#talent_marksman").prop("checked", !!relevanceById.talent_marksman);
+        };
+
         const refresh = () => {
           const weaponDoc = attacker.items.get(html.find("#weaponId").val());
           const mode = html.find("#modeKey");
-          const previousMode = mode.val();
           mode.html(buildModeOptions(weaponDoc));
-          const hasPreviousMode = previousMode && mode.find(`option[value="${previousMode}"]`).length > 0;
           const firstEnabled = mode.find("option:not([disabled])").first().val();
-          if (hasPreviousMode) mode.val(previousMode);
-          else if (firstEnabled) mode.val(firstEnabled);
+          if (firstEnabled) mode.val(firstEnabled);
           html.find("#targetsBody").html(targetRows(weaponDoc));
 
           const detected = detectWeaponItems(attacker, weaponDoc);
@@ -1156,67 +1187,12 @@ const showAttackDialog = async () => {
           const forceWeapon = hasTrait(traits, "force");
           html.find("#forceChannelGroup").toggle(!!forceWeapon);
           if (!forceWeapon) html.find("#talent_force_channel").prop("checked", false);
-          const selectedModeKey = html.find("#modeKey").val();
-          const targetCount = targetTokens.length;
-          const isTearingWeapon = hasTrait(traits, "tearing");
-          const appliesFor = talentKey => getTalentApplicability({
-            talentKey,
-            isMelee: isMeleeW,
-            modeKey: selectedModeKey,
-            targetCount,
-            isTearingWeapon
-          });
-
-          const talentSelectorMap = {
-            deadeye: "#talent_deadeye",
-            doubletap: "#talent_doubletap",
-            targetsel: "#talent_targetsel",
-            devastating: "#talent_devastating",
-            blademaster: "#talent_blademaster",
-            whirlwind: "#talent_whirlwind",
-            berserk: "#talent_berserk",
-            twmMelee: "#talent_twm_melee",
-            twmRanged: "#talent_twm_ranged",
-            ambi: "#talent_ambi",
-            master: "#talent_master",
-            mighty: "#talent_mighty",
-            crushing: "#talent_crushing",
-            hammer: "#talent_hammer",
-            flesh: "#talent_flesh",
-            raptor: "#talent_raptor",
-            marksman: null,
-            forceChannel: "#talent_force_channel"
-          };
-
-          for (const [key, selector] of Object.entries(talentSelectorMap)) {
-            if (!selector) continue;
-            const input = html.find(selector);
-            const parentLabel = input.closest("label");
-            const isAuto = parentLabel.hasClass("talent-auto");
-            const needle = String(parentLabel.data("needle") ?? "");
-            const hasActorTalent = key === "forceChannel" ? forceWeapon : hasTalent(attacker, needle);
-            const talentAvailable = key === "forceChannel" ? forceWeapon : hasActorTalent;
-            const applicable = talentAvailable && appliesFor(key);
-            input.prop("disabled", isAuto || !applicable || !hasActorTalent);
-            if (!applicable) input.prop("checked", false);
-            parentLabel.toggle(applicable);
-          }
-
           syncHordeBonus();
+          refreshTalents();
         };
 
-        html.find(".talent-toggle").each((_, el) => {
-          const $label = $(el);
-          const needle = String($label.data("needle") ?? "");
-          const input = $label.find("input");
-          const available = hasTalent(attacker, needle);
-          $label.toggleClass("talent-unavailable", !available);
-          if ($label.hasClass("talent-auto")) {
-            input.prop("checked", available);
-            return;
-          }
-          input.prop("disabled", !available);
-          input.prop("checked", available);
+        html.find(".talent-toggle input").on("change", ev => {
+          ev.currentTarget.dataset.userSet = "1";
         });
         html.find("#talent_doubletap").prop("checked", false);
         html.find("#talent_devastating").prop("checked", false);
@@ -1252,7 +1228,8 @@ const showAttackDialog = async () => {
         }
 
         html.find("#weaponId").on("change", refresh);
-        html.find("#modeKey").on("change", refresh);
+        html.find("#modeKey").on("change", refreshTalents);
+        html.find("#twoWeaponAttack").on("change", refreshTalents);
         html.find("#horde").on("change", syncHordeBonus);
         refresh();
         if (pendingMirrorSetup) {
@@ -1279,14 +1256,22 @@ const showAttackDialog = async () => {
               });
             });
 
-            const weaponDoc = attacker.items.get(html.find("#weaponId").val());
-            const isMeleeWeapon = (weaponDoc?.system?.class ?? "").toLowerCase() === "melee";
-            const selectedModeKey = html.find("#modeKey").val();
-            const selectedTraits = parseWeaponTraits(weaponDoc ?? { system: { special: "" } });
-            const talentToggles = sanitizeTalentToggles({
+            resolve({
+              weaponId: html.find("#weaponId").val(),
+              modeKey: html.find("#modeKey").val(),
+              manualMod: Number(html.find("#manualMod").val() || 0),
+              aimMod: Number(html.find("#aimMod").val() || 0),
+              aimLabel: html.find("#aimMod option:selected").text(),
+              powerModeKey: Number(html.find("#powerMode").val() || 1),
+              isHorde: html.find("#horde")[0].checked,
+              hordeBonus: Number(html.find("#hordeBonus").val() || 0),
+              shootingMelee: html.find("#shootMelee")[0].checked,
+              twoWeaponAttack: html.find("#twoWeaponAttack")[0].checked,
+              targetTokenIds: targetTokens.map(t => t.id),
+              targetConfigs,
               toggles: {
                 deadeye: html.find("#talent_deadeye")[0].checked,
-                marksman: hasTalent(attacker, "marksman"),
+                marksman: html.find("#talent_marksman")[0].checked,
                 doubletap: html.find("#talent_doubletap")[0].checked,
                 targetsel: html.find("#talent_targetsel")[0].checked,
                 devastating: html.find("#talent_devastating")[0].checked,
@@ -1304,26 +1289,6 @@ const showAttackDialog = async () => {
                 raptor: html.find("#talent_raptor")[0].checked,
                 forceChannel: html.find("#talent_force_channel")[0].checked
               },
-              isMelee: isMeleeWeapon,
-              modeKey: selectedModeKey,
-              targetCount: targetConfigs.length,
-              isTearingWeapon: hasTrait(selectedTraits, "tearing")
-            });
-
-            resolve({
-              weaponId: html.find("#weaponId").val(),
-              modeKey: selectedModeKey,
-              manualMod: Number(html.find("#manualMod").val() || 0),
-              aimMod: Number(html.find("#aimMod").val() || 0),
-              aimLabel: html.find("#aimMod option:selected").text(),
-              powerModeKey: Number(html.find("#powerMode").val() || 1),
-              isHorde: html.find("#horde")[0].checked,
-              hordeBonus: Number(html.find("#hordeBonus").val() || 0),
-              shootingMelee: html.find("#shootMelee")[0].checked,
-              twoWeaponAttack: html.find("#twoWeaponAttack")[0].checked,
-              targetTokenIds: targetTokens.map(t => t.id),
-              targetConfigs,
-              toggles: talentToggles,
               detectedItems: detectWeaponItems(attacker, attacker.items.get(html.find("#weaponId").val()))
             });
           }

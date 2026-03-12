@@ -1103,6 +1103,8 @@ const showAttackDialog = async () => {
           const weaponDoc = attacker.items.get(html.find("#weaponId").val());
           const modeKey = String(html.find("#modeKey").val() ?? "");
           const isMelee = (weaponDoc?.system?.class ?? "").toLowerCase() === "melee";
+          const traits = parseWeaponTraits(weaponDoc ?? { system: { special: "" } });
+          const isTearingWeapon = hasTrait(traits, "tearing");
           const twoWeaponAttack = !!html.find("#twoWeaponAttack")[0]?.checked;
 
           const relevanceById = {
@@ -1116,12 +1118,13 @@ const showAttackDialog = async () => {
             talent_twm_ranged: hasTalent(attacker, "two-weapon wielder (ranged)") && !isMelee && twoWeaponAttack,
             talent_ambi: hasTalent(attacker, "ambidextrous") && twoWeaponAttack,
             talent_master: hasTalent(attacker, "two weapon master") && twoWeaponAttack,
-            talent_flesh: hasTalent(attacker, "flesh render") && isMelee,
+            talent_flesh: hasTalent(attacker, "flesh render") && isMelee && isTearingWeapon,
             talent_raptor: hasTalent(attacker, "raptor") && isMelee && modeKey === "charge"
           };
 
           const showById = {
-            talent_raptor: !!relevanceById.talent_raptor
+            talent_raptor: !!relevanceById.talent_raptor,
+            talent_marksman: !!relevanceById.talent_marksman
           };
 
           html.find(".talent-toggle").each((_, el) => {

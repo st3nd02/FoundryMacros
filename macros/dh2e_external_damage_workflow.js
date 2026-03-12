@@ -43,7 +43,7 @@ const buildWorkflowHtml = state => {
     const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
     const damageSummary = t.damageSummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
-      : `<div style="text-align:center;"><b>Damage</b></div>`;
+      : `<div style="text-align:center;"><b>Damage</b><div>—</div></div>`;
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
@@ -131,6 +131,20 @@ const attackData = {
 const weapon = actor.items.get(entry.state.weaponId) || actor.items.find(w => w.type === "weapon" && w.name === attackData.weapon);
 if (!weapon) return ui.notifications.warn("Weapon not found on actor.");
 
+const getWeaponPenetration = weaponDoc => {
+  const penData = weaponDoc?.system?.penetration;
+  if (typeof penData === "number") return penData;
+  if (typeof penData === "string") {
+    const parsed = Number(penData);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (penData && typeof penData === "object") {
+    const parsed = Number(penData.value ?? penData.total ?? penData.base ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
 const parseVal = (txt, name, dflt = 0) => {
   const m = String(txt ?? "").toLowerCase().match(new RegExp(name + "\\s*\\((\\d+)\\)"));
   return m ? Number(m[1]) : dflt;
@@ -138,7 +152,7 @@ const parseVal = (txt, name, dflt = 0) => {
 
 const special = String(weapon.system.special ?? "").toLowerCase();
 const dmg = String(weapon.system.damage ?? "1d10+0");
-const penBase = Number(weapon.system.penetration ?? 0);
+const penBase = getWeaponPenetration(weapon);
 const m = dmg.match(/(\d+)d(\d+)([+-]\d+)?/i);
 const damageType = String(weapon.system.damageType ?? "").toLowerCase();
 
@@ -211,6 +225,7 @@ new Dialog({
         if (meleeBestCraft) { flat += 1; properties.push("Best Craftsmanship +1"); }
         let pen = Number(html.find("#pen").val());
         const dos = Number(html.find("#dos").val());
+        const isHordeTarget = !!entry.state?.horde?.active;
         const traitsText = String(weapon.system.special ?? "").toLowerCase();
         const hasTrait = (name) => traitsText.includes(name);
         const tearing = hasTrait("tearing");
@@ -377,7 +392,7 @@ new Dialog({
           const dieMax = Number(dieType);
           const furyNumbers = spray ? [dieMax] : (gauss && dieMax === 10 ? [9, 10] : [dieMax]);
           if (spray && dice.some(d => d === 9)) sprayJam = true;
-          if (dice.some(d => furyNumbers.includes(d))) {
+          if (!isHordeTarget && dice.some(d => furyNumbers.includes(d))) {
             furyQueue.push(h);
           }
         }
@@ -406,7 +421,7 @@ new Dialog({
           return { label, target, roll: roll.total, success: isD100Success(roll.total, target), dos: calcDoS(target, roll.total) };
         };
 
-        if (toxic) {
+        if (toxic && !isHordeTarget) {
           const toxicValue = parseTraitVal("toxic", 1);
           const test = await rollCharacteristicTest({
             total: targetActor?.system?.characteristics?.toughness?.total ?? 0,
@@ -423,7 +438,7 @@ new Dialog({
           properties.push(`Toxic (${toxicValue})`);
         }
 
-        if (flame) {
+        if (flame && !isHordeTarget) {
           traitTests.flame = {
             ...(await rollCharacteristicTest({ total: targetActor?.system?.characteristics?.agility?.total ?? 0, label: "Agility" })),
             resolved: true
@@ -431,7 +446,7 @@ new Dialog({
           properties.push("Flame");
         }
 
-        if (spray) {
+        if (spray && !isHordeTarget) {
           traitTests.spray = {
             ...(await rollCharacteristicTest({ total: targetActor?.system?.characteristics?.agility?.total ?? 0, label: "Agility" })),
             resolved: true
@@ -439,7 +454,7 @@ new Dialog({
           properties.push("Spray");
         }
 
-        if (force && forceChannel) {
+        if (force && forceChannel && !isHordeTarget) {
           const attackerWP = Number(actor.system?.characteristics?.willpower?.total ?? 0);
           const targetWP = Number(targetActor?.system?.characteristics?.willpower?.total ?? 0);
           const attackerRoll = await new Roll("1d100").evaluate();
