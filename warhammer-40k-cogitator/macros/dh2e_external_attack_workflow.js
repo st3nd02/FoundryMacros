@@ -704,7 +704,10 @@ const runAttackWorkflow = async setup => {
   if (t.marksman && !isMelee) selectedTalents.push("Marksman (ignore Long/Extreme penalties)");
   if (t.mighty && !isMelee) selectedTalents.push("Mighty Shot");
   if (t.crushing && isMelee) selectedTalents.push("Crushing Blow");
-  if (t.hammer && isMelee) selectedTalents.push("Hammer Blow");
+  if (t.hammer && isMelee) {
+    selectedTalents.push("Hammer Blow");
+    if (setup.modeKey === "allout") selectedTalents.push("Hammer Blow grants Concussive (2)");
+  }
   if (t.flesh && isMelee) selectedTalents.push("Flesh Render");
   if (t.raptor) selectedTalents.push("Raptor");
   if (t.forceChannel) selectedTalents.push("Force Channeling");
@@ -904,9 +907,11 @@ const runAttackWorkflow = async setup => {
   const consumedDoubleTapTarget = attacker.getFlag(WORKFLOW_NS, DOUBLE_TAP_TARGET_FLAG);
   if (consumedDoubleTapTarget) {
     await attacker.unsetFlag(WORKFLOW_NS, DOUBLE_TAP_TARGET_FLAG);
+    await game.warhammer40kCogitator?.clearDoubleTapEffect?.(attacker);
   }
   if (t.doubletap && hitTargets.length === 1) {
     await attacker.setFlag(WORKFLOW_NS, DOUBLE_TAP_TARGET_FLAG, hitTargets[0].tokenUuid);
+    await game.warhammer40kCogitator?.applyDoubleTapEffect?.(attacker);
     selectedTalents.push(`Double Tap primed on ${hitTargets[0].name}`);
   }
 
