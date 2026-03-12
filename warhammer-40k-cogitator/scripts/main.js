@@ -847,11 +847,11 @@ function updateUserTokenTargets(tokenIds = []) {
   }
 }
 
-async function submitDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll, defenseOutcome, allocatedHits }) {
+async function submitDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll, defenseOutcome, allocatedHits, defenseDetails }) {
   const canDirectUpdate = !!game.user.isGM;
 
   if (canDirectUpdate) {
-    await applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll, defenseOutcome, allocatedHits });
+    await applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll, defenseOutcome, allocatedHits, defenseDetails });
     return { ok: true, mode: "gm-direct" };
   }
 
@@ -862,6 +862,7 @@ async function submitDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll
       defenseRoll,
       defenseOutcome,
       allocatedHits,
+      defenseDetails,
       resolverUserId: game.user.id
     });
   }
@@ -877,6 +878,7 @@ async function submitDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll
     defenseRoll,
     defenseOutcome,
     allocatedHits,
+    defenseDetails,
     resolverUserId: game.user.id
   });
 
