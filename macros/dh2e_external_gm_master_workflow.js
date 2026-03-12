@@ -1,7 +1,7 @@
 /**
  * DH2e External GM Master Workflow (Foundry V13)
- * Version: 1.0
- * GM-only launcher macro: Attack / Defense / Damage / Apply Damage
+ * Version: 1.1
+ * GM-only launcher macro: Attack / Defense / Damage / Apply Damage / Characteristic Test
  */
 
 (async () => {
@@ -20,6 +20,7 @@
           defense: { label: "Defense", callback: () => resolve("defense") },
           damage: { label: "Damage", callback: () => resolve("damage") },
           applyDamage: { label: "Apply Damage", callback: () => resolve("applyDamage") },
+          characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
           cancel: { label: "Cancel", callback: () => resolve(null) }
         },
         default: "attack"
@@ -27,6 +28,15 @@
     });
 
     if (!choice) return;
+    if (choice === "characteristic") {
+      if (game.warhammer40kCogitator?.openCharacteristicTest) {
+        await game.warhammer40kCogitator.openCharacteristicTest();
+        return;
+      }
+
+      return ui.notifications.warn("Characteristic Test requires the Warhammer 40k Cogitator module API.");
+    }
+
     if (choice === "applyDamage") {
       const macro = game.macros.getName("DH2e External Apply Damage Workflow") ?? game.macros.getName("dh2e_external_apply_damage_workflow");
       if (!macro) return ui.notifications.warn("Could not find apply damage macro by name. Create/import it first.");
@@ -62,6 +72,7 @@
         defense: { label: "Defense", callback: () => resolve("defense") },
         damage: { label: "Damage", callback: () => resolve("damage") },
         applyDamage: { label: "Apply Damage", callback: () => resolve("applyDamage") },
+        characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
       default: "attack"
@@ -69,6 +80,14 @@
   });
 
   if (!choice) return;
+  if (choice === "characteristic") {
+    if (game.warhammer40kCogitator?.openCharacteristicTest) {
+      await game.warhammer40kCogitator.openCharacteristicTest();
+      return;
+    }
+
+    return ui.notifications.warn("Characteristic Test requires the Warhammer 40k Cogitator module API.");
+  }
 
   const macro = findMacro(macroNames[choice]);
   if (!macro) {
