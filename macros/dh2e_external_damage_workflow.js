@@ -1,6 +1,6 @@
 /**
  * DH2e External Damage Workflow (Foundry V13)
- * Version: 1.2
+ * Version: 1.3
  * Run this as the attacker owner to resolve pending damage on existing workflows.
  */
 
@@ -36,7 +36,9 @@ const buildWorkflowHtml = state => {
 
   const cards = (state.targets ?? []).map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
-    const defenseSummary = `<div><b>Defense:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseOutcome ?? "—"})</div>`;
+    const defenseSummary = t.defenseAction
+      ? `<div><b>Defense:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseAction} — ${t.defenseOutcome ?? "—"})</div>`
+      : `<div><b>Defense:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseOutcome ?? "—"})</div>`;
     const shownHits = state.horde?.active ? (t.hordeHitsPreview ?? t.allocatedHits ?? 0) : (t.allocatedHits ?? 0);
     const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
     const damageSummary = t.damageSummary
@@ -87,7 +89,8 @@ for (const msg of game.messages.contents) {
     if ((target.allocatedHits ?? 0) <= 0) continue;
     if (target.damageResolved) continue;
     const out = String(target.defenseOutcome ?? "").toLowerCase();
-    if (out.includes("awaiting")) continue;
+    const defenseResolved = out.includes("success") || out.includes("failed") || out.includes("skipped") || out.includes("no active owner");
+    if (!defenseResolved || out.includes("awaiting")) continue;
     pending.push({ msg, state, target, targetUuid: target.tokenUuid ?? target.targetTokenUuid });
   }
 }
