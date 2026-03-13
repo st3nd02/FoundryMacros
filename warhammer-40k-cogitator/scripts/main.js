@@ -1666,7 +1666,6 @@ hr{
           const manualMod = Number(html.find("#mod").val());
 
           let target = base + difficultyMod + manualMod;
-          const baseTarget = target;
 
           notes.push(`Difficulty ${difficultyMod >= 0 ? "+" : ""}${difficultyMod}`);
           if (manualMod !== 0) {
@@ -1715,13 +1714,15 @@ hr{
             }
           });
 
+          const baseTarget = target;
+
           const roll = await new Roll("1d100").roll({ async: true });
           let rollVal = roll.total;
           if (target < 1) target = 1;
 
           let keenData = null;
 
-          if (html.find("#keen").is(":checked") && selected === "awareness" && rollVal > baseTarget) {
+          if (html.find("#keen").is(":checked") && selected === "awareness" && rollVal > target) {
             const firstVal = rollVal;
 
             let keenTarget = baseTarget - 10;
@@ -1866,8 +1867,8 @@ Roll:
               const fateRoll = await new Roll("1d100").roll({ async: true });
               const fateVal = fateRoll.total;
 
-              const fateSuccess = fateVal <= baseTarget;
-              const fateDegrees = Math.floor(Math.abs(baseTarget - fateVal) / 10) + 1;
+              const fateSuccess = fateVal <= target;
+              const fateDegrees = Math.floor(Math.abs(target - fateVal) / 10) + 1;
 
               const fateText = fateSuccess ?
                 `${fateDegrees} Degrees of Success` :
