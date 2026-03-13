@@ -1,7 +1,7 @@
 /**
  * DH2e External GM Master Workflow (Foundry V13)
- * Version: 1.1
- * GM-only launcher macro: Attack / Defense / Damage / Apply Damage / Characteristic Test
+ * Version: 1.2
+ * GM-only launcher macro: Attack / Defense / Damage / Apply Damage / Skill Test / Characteristic Test
  */
 
 (async () => {
@@ -20,6 +20,7 @@
           defense: { label: "Defense", callback: () => resolve("defense") },
           damage: { label: "Damage", callback: () => resolve("damage") },
           applyDamage: { label: "Apply Damage", callback: () => resolve("applyDamage") },
+          skill: { label: "Skill Test", callback: () => resolve("skill") },
           characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
           cancel: { label: "Cancel", callback: () => resolve(null) }
         },
@@ -28,6 +29,15 @@
     });
 
     if (!choice) return;
+    if (choice === "skill") {
+      if (game.warhammer40kCogitator?.openSkillTest) {
+        await game.warhammer40kCogitator.openSkillTest();
+        return;
+      }
+
+      return ui.notifications.warn("Skill Test requires the Warhammer 40k Cogitator module API.");
+    }
+
     if (choice === "characteristic") {
       if (game.warhammer40kCogitator?.openCharacteristicTest) {
         await game.warhammer40kCogitator.openCharacteristicTest();
@@ -72,6 +82,7 @@
         defense: { label: "Defense", callback: () => resolve("defense") },
         damage: { label: "Damage", callback: () => resolve("damage") },
         applyDamage: { label: "Apply Damage", callback: () => resolve("applyDamage") },
+        skill: { label: "Skill Test", callback: () => resolve("skill") },
         characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
@@ -80,6 +91,15 @@
   });
 
   if (!choice) return;
+  if (choice === "skill") {
+    if (game.warhammer40kCogitator?.openSkillTest) {
+      await game.warhammer40kCogitator.openSkillTest();
+      return;
+    }
+
+    return ui.notifications.warn("Skill Test requires the Warhammer 40k Cogitator module API.");
+  }
+
   if (choice === "characteristic") {
     if (game.warhammer40kCogitator?.openCharacteristicTest) {
       await game.warhammer40kCogitator.openCharacteristicTest();

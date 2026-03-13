@@ -26,7 +26,7 @@ These can be used directly as script macros.
 The module provides:
 
 1. **Project identity** as `warhammer-40k-cogitator` / "Warhammer 40k Cogitator".
-2. A launcher API (`game.warhammer40kCogitator.openLauncher()`) with **Attack / Defense / Damage** choices.
+2. A launcher API (`game.warhammer40kCogitator.openLauncher()`) with **Attack / Defense / Damage / Skill Test / Characteristic Test** choices.
 3. Optional auto-creation of missing world macros from bundled module scripts.
 4. Configurable world settings for macro names (including master macro) and auto-create behavior.
 5. Socket-based player-to-player workflow coordination for defense requests and damage-ready prompts.

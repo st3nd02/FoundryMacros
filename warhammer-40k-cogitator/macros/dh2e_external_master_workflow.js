@@ -1,7 +1,7 @@
 /**
  * DH2e External Master Workflow (Foundry V13)
- * Version: 1.2
- * Launcher macro: Attack / Defense / Damage / Characteristic Test
+ * Version: 1.3
+ * Launcher macro: Attack / Defense / Damage / Skill Test / Characteristic Test
  */
 
 (async () => {
@@ -32,6 +32,7 @@
         attack: { label: "Attack", callback: () => resolve("attack") },
         defense: { label: "Defense", callback: () => resolve("defense") },
         damage: { label: "Damage", callback: () => resolve("damage") },
+        skill: { label: "Skill Test", callback: () => resolve("skill") },
         characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
@@ -40,6 +41,15 @@
   });
 
   if (!choice) return;
+  if (choice === "skill") {
+    if (game.warhammer40kCogitator?.openSkillTest) {
+      await game.warhammer40kCogitator.openSkillTest();
+      return;
+    }
+
+    return ui.notifications.warn("Skill Test requires the Warhammer 40k Cogitator module API.");
+  }
+
   if (choice === "characteristic") {
     if (game.warhammer40kCogitator?.openCharacteristicTest) {
       await game.warhammer40kCogitator.openCharacteristicTest();
