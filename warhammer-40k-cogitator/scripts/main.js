@@ -170,6 +170,7 @@ Hooks.once("ready", async () => {
   game.warhammer40kCogitator = {
     openLauncher,
     openCharacteristicTest,
+    openSkillTest,
     ensureWorkflowMacros,
     runStep,
     emitSocket,
@@ -1174,6 +1175,7 @@ async function openLauncher() {
         attack: { label: "Attack", callback: () => resolve("attack") },
         defense: { label: "Defense", callback: () => resolve("defense") },
         damage: { label: "Damage", callback: () => resolve("damage") },
+        skill: { label: "Skill Test", callback: () => resolve("skill") },
         characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
@@ -1182,6 +1184,10 @@ async function openLauncher() {
   });
 
   if (!choice) return;
+  if (choice === "skill") {
+    await openSkillTest();
+    return;
+  }
   if (choice === "characteristic") {
     await openCharacteristicTest();
     return;
@@ -1194,6 +1200,7 @@ function getWorkflowHudButtons() {
     { id: "attack", label: "Attack", action: () => runStep("attack") },
     { id: "defense", label: "Defense", action: () => runStep("defense") },
     { id: "damage", label: "Damage", action: () => runStep("damage") },
+    { id: "skill", label: "Skill", action: () => openSkillTest() },
     { id: "characteristic", label: "Characteristic", action: () => openCharacteristicTest() }
   ];
 
@@ -1355,6 +1362,640 @@ async function askForFateReroll(actor) {
       default: "no"
     }).render(true);
   });
+}
+
+
+async function openSkillTest() {
+  const token = canvas.tokens.controlled[0];
+  if (!token) {
+    ui.notifications.warn("Select a token first.");
+    return;
+  }
+
+  const actor = token.actor;
+  const skills = actor.system.skills;
+
+  const hasEnemy = actor.items.some(i => i.type === "talent" && /enemy/i.test(i.name));
+  const hasPeer = actor.items.some(i => i.type === "talent" && /peer/i.test(i.name));
+  const hasKeen = actor.items.some(i => i.type === "talent" && /keen intuition/i.test(i.name));
+  const hasInfusedKnowledge = actor.items.some(i => i.type === "talent" && /infused knowledge/i.test(i.name));
+  const hasHeightened = actor.items.some(i => i.type === "talent" && slug(i.name).startsWith("heightenedsenses"));
+
+  async function askForFate() {
+    const fateCurrent = actor.system.fate?.value ?? 0;
+    if (fateCurrent <= 0) return false;
+    if ((actor.system.fate?.value ?? 0) <= 0) return false;
+
+    return new Promise(resolve => {
+      new Dialog({
+        title: "Spend Fate?",
+        content: `<p><b>Test Failed!</b><br> Spend 1 Fate Point to reroll?<br>Remaining: <b>${fateCurrent}</b></p>`,
+        buttons: {
+          yes: { label: "Spend Fate (-1)", callback: () => resolve(true) },
+          no: { label: "Keep Result", callback: () => resolve(false) }
+        },
+        default: "no"
+      }).render(true);
+    });
+  }
+
+  function prettyLabel(str) {
+    return str
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/[_\-]/g, " ")
+      .replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function slug(s) {
+    return s.replace(/[\s\-']/g, "").replace(/[()]/g, "").toLowerCase();
+  }
+
+  function buildOptions(obj) {
+    return Object.entries(obj)
+      .map(([k]) => `<option value="${k}">${prettyLabel(k)}</option>`)
+      .join("");
+  }
+
+  function buildSpecialityOptions(group) {
+    const list = skills[group]?.specialities ?? {};
+
+    const infusedAllowed =
+      hasInfusedKnowledge &&
+      (group === "commonLore" || group === "scholasticLore");
+
+    return Object.entries(list)
+      .filter(([, v]) => infusedAllowed || v?.isKnown)
+      .map(([k]) => `<option value="${k}">${prettyLabel(k)}</option>`)
+      .join("");
+  }
+
+  const difficulties = [
+    { value: 60, label: "Trivial (+60)" },
+    { value: 50, label: "Elementary (+50)" },
+    { value: 40, label: "Simple (+40)" },
+    { value: 30, label: "Easy (+30)" },
+    { value: 20, label: "Routine (+20)" },
+    { value: 10, label: "Ordinary (+10)" },
+    { value: 0, label: "Challenging (+0)" },
+    { value: -10, label: "Difficult (-10)" },
+    { value: -20, label: "Hard (-20)" },
+    { value: -30, label: "Very Hard (-30)" },
+    { value: -40, label: "Arduous (-40)" },
+    { value: -50, label: "Punishing (-50)" },
+    { value: -60, label: "Hellish (-60)" }
+  ];
+
+  const difficultyOptions = difficulties
+    .map(d => `<option value="${d.value}" ${d.value === 0 ? "selected" : ""}>${d.label}</option>`)
+    .join("");
+
+  const skillOptions = buildOptions({
+    acrobatics: 1,
+    athletics: 1,
+    awareness: 1,
+    charm: 1,
+    command: 1,
+    commerce: 1,
+    deceive: 1,
+    inquiry: 1,
+    interrogation: 1,
+    intimidate: 1,
+    logic: 1,
+    psyniscience: 1,
+    scrutiny: 1,
+    security: 1,
+    sleightOfHand: 1,
+    stealth: 1,
+    survival: 1,
+    techUse: 1
+  });
+
+  const commonOptions = buildSpecialityOptions("commonLore");
+  const forbiddenOptions = buildSpecialityOptions("forbiddenLore");
+  const scholasticOptions = buildSpecialityOptions("scholasticLore");
+  const operateOptions = buildSpecialityOptions("operate");
+  const navigateOptions = buildSpecialityOptions("navigate");
+  const tradeOptions = buildSpecialityOptions("trade");
+
+  new Dialog({
+    title: "Skill Test",
+    content: `
+<style>
+.skill-test-dialog form{
+  font-size:14px;
+}
+
+.skill-test-dialog select,
+.skill-test-dialog input[type="number"]{
+  width:100%;
+  margin-bottom:6px;
+}
+
+.grid3{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:8px 14px;
+}
+
+.grid3 label{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+
+h3{
+  margin:10px 0 4px;
+}
+
+hr{
+  margin:10px 0;
+}
+</style>
+<form>
+
+<h3>Skills</h3>
+<div style="display:flex; gap:6px; align-items:center;">
+  <select id="skill" style="flex:1;">
+    <option value="">--</option>${skillOptions}
+  </select>
+
+  <div id="selectedSkillDisplay" style="
+    min-width:140px;
+    text-align:center;
+    font-weight:bold;
+    font-size:1.1em;
+    color:#ffad55;
+    text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+  ">—</div>
+</div>
+<hr>
+
+<h3 style="margin-bottom:4px;">Lore</h3>
+
+<div style="display:flex; gap:6px; width:100%;">
+  <select id="common" style="flex:1; min-width:0;">
+    <option value="">Common Lore</option>${commonOptions}
+  </select>
+
+  <select id="forbidden" style="flex:1; min-width:0;">
+    <option value="">Forbidden Lore</option>${forbiddenOptions}
+  </select>
+
+  <select id="scholastic" style="flex:1; min-width:0;">
+    <option value="">Scholastic Lore</option>${scholasticOptions}
+  </select>
+</div>
+
+<hr>
+
+<h3>Operate / Navigate</h3>
+<div class="grid3">
+<select id="operate"><option value="">Operate</option>${operateOptions}</select>
+<select id="navigate"><option value="">Navigate</option>${navigateOptions}</select>
+</div>
+<h3>Trade</h3>
+<div class="grid3">
+<select id="trade"><option value="">Trade</option>${tradeOptions}</select>
+</div>
+<hr>
+<h3>Modifiers</h3>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; align-items:end;">
+
+  <div>
+    <label style="font-weight:bold;">Difficulty</label>
+    <select id="difficulty">
+      ${difficultyOptions}
+    </select>
+  </div>
+
+  <div>
+    <label style="font-weight:bold;">Modifier</label>
+    <input id="mod" type="number" value="0"/>
+  </div>
+
+</div>
+<hr>
+
+<h3>Talents</h3>
+<div class="grid3">
+<label style="opacity:${hasEnemy ? 1 : 0.4};"><input type="checkbox" id="enemy" ${hasEnemy ? "" : "disabled"}> Enemy</label>
+<label style="opacity:${hasPeer ? 1 : 0.4};"><input type="checkbox" id="peer" ${hasPeer ? "" : "disabled"}> Peer</label>
+<label style="opacity:${hasKeen ? 1 : 0.4};"><input type="checkbox" id="keen" ${hasKeen ? "" : "disabled"}> Keen Intuition</label>
+<label style="opacity:${hasHeightened ? 1 : 0.4};">
+  <input type="checkbox" id="heightened"
+  ${hasHeightened ? "" : "disabled"}>
+  Heightened Senses
+</label>
+<label style="opacity:${hasInfusedKnowledge ? 1 : 0.4};"><input type="checkbox" id="infused" ${hasInfusedKnowledge ? "checked" : "disabled"}> Infused Knowledge</label>
+</div>
+
+<hr>
+
+<h3>Items</h3>
+<div class="grid3">
+
+<label><input type="checkbox" data-bonus="20" data-skill="awareness"> Auspex</label>
+<label><input type="checkbox" data-bonus="30" data-skill="awareness"> Good Auspex</label>
+<label><input type="checkbox" data-bonus="20" data-skill="medicae,awareness"> Diagnostor</label>
+
+<label><input type="checkbox" data-bonus="10" data-skill="deceive"> Disguise Kit</label>
+<label><input type="checkbox" data-bonus="30" data-skill="athletics"> Clip Harness</label>
+<label><input type="checkbox" data-bonus="10" data-skill="techuse"> Combi-Tool</label>
+
+<label><input type="checkbox" data-bonus="20" data-skill="interrogation"> Excruciator Kit</label>
+<label><input type="checkbox" data-bonus="30" data-skill="security"> Multikey</label>
+
+<label><input type="checkbox" data-bonus="30" data-skill="medicae"> Field Suture</label>
+
+<label><input type="checkbox" data-bonus="20" data-skill="stealth"> Camo Cloak</label>
+<label><input type="checkbox" data-bonus="30" data-skill="stealth"> Stummer</label>
+<label><input type="checkbox" data-bonus="10" data-skill="stealth"> Synskin</label>
+
+</div>
+
+</form>
+`,
+
+    buttons: {
+      roll: {
+        label: "Roll",
+        callback: async html => {
+          const picks = [
+            ["skill", "skill"],
+            ["common", "commonLore"],
+            ["forbidden", "forbiddenLore"],
+            ["scholastic", "scholasticLore"],
+            ["operate", "operate"],
+            ["navigate", "navigate"],
+            ["trade", "trade"]
+          ];
+
+          let selected;
+          let group;
+
+          for (const [id, g] of picks) {
+            const val = html.find(`#${id}`).val();
+            if (val) {
+              if (selected) return ui.notifications.warn("Select only ONE skill.");
+              selected = val;
+              group = g;
+            }
+          }
+
+          if (!selected) return ui.notifications.warn("Pick a skill.");
+
+          let base;
+          let label;
+
+          if (group === "skill") {
+            base = skills[selected].total;
+            label = prettyLabel(selected);
+          } else {
+            base = skills[group].specialities[selected].total;
+            label = `${prettyLabel(group)} (${prettyLabel(selected)})`;
+          }
+
+          const notes = [];
+
+          const difficultyMod = Number(html.find("#difficulty").val());
+          const manualMod = Number(html.find("#mod").val());
+
+          let target = base + difficultyMod + manualMod;
+          const baseTarget = target;
+
+          notes.push(`Difficulty ${difficultyMod >= 0 ? "+" : ""}${difficultyMod}`);
+          if (manualMod !== 0) {
+            notes.push(`Modifier ${manualMod >= 0 ? "+" : ""}${manualMod}`);
+          }
+
+          const characteristics = skills[selected]?.characteristics ?? "";
+
+          if (html.find("#enemy").is(":checked") && /fel|inf/i.test(characteristics)) {
+            target -= 10;
+            notes.push("Enemy -10");
+          }
+
+          if (html.find("#peer").is(":checked") && /fel|inf/i.test(characteristics)) {
+            target += 10;
+            notes.push("Peer +10");
+          }
+
+          if (
+            hasInfusedKnowledge &&
+            (group === "commonLore" || group === "scholasticLore")
+          ) {
+            const spec = skills[group]?.specialities[selected];
+
+            if (spec && spec.isKnown === false) {
+              target += 20;
+              notes.push("Infused Knowledge +20");
+            }
+          }
+
+          if (
+            hasHeightened &&
+            html.find("#heightened").is(":checked") &&
+            selected === "awareness"
+          ) {
+            target += 10;
+            notes.push("Heightened Senses +10");
+          }
+
+          html.find("[data-bonus]:checked").each(function () {
+            const bonus = Number(this.dataset.bonus);
+            const skillList = this.dataset.skill.split(",");
+            if (skillList.includes(selected)) {
+              target += bonus;
+              notes.push(`${this.parentNode.textContent.trim()} +${bonus}`);
+            }
+          });
+
+          const roll = await new Roll("1d100").roll({ async: true });
+          let rollVal = roll.total;
+          if (target < 1) target = 1;
+
+          let keenData = null;
+
+          if (html.find("#keen").is(":checked") && selected === "awareness" && rollVal > baseTarget) {
+            const firstVal = rollVal;
+
+            let keenTarget = baseTarget - 10;
+            if (keenTarget < 1) keenTarget = 1;
+
+            const r2 = await new Roll("1d100").roll({ async: true });
+            const secondVal = r2.total;
+
+            rollVal = secondVal;
+            target = keenTarget;
+
+            keenData = {
+              firstVal,
+              firstTarget: baseTarget,
+              secondVal,
+              secondTarget: keenTarget
+            };
+
+            notes.push("Keen Intuition reroll -10");
+          }
+
+          const success = rollVal <= target;
+          const degrees = Math.floor(Math.abs(target - rollVal) / 10) + 1;
+
+          const resultText = success ?
+            `${degrees} Degrees of Success` :
+            `${degrees} Degrees of Failure`;
+
+          const successColor = success ? "#1aff1a" : "#ff2a2a";
+
+          roll.toMessage({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            flavor: `
+<div style="text-align:center; color:#000000;">
+
+<div style="font-style:italic;font-size:1.2em;">
+<b>${actor.name}</b> performs a <b>${label}</b> Test
+</div>
+
+<hr>
+
+${!keenData ? `
+<div style="margin-top:6px;font-size:1.3em;">
+Target:
+<span style="
+  color:#ffad55;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${target}</span>
+</div>
+` : ``}
+
+  ${keenData ? `
+  <div style="font-size:1.4em; margin-bottom:4px;">
+    <b>First Roll:</b> <span style="
+  color:#bd7548;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${keenData.firstVal}</span> <i><b>vs</b></i> <span style="
+  color:#ffad55;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${keenData.firstTarget}</span>
+  </div>
+
+  <div style="font-size:1.4em; margin-bottom:4px;">
+   <b> Keen Reroll:</b> <span style="
+  color:#bd7548;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${keenData.secondVal}</span> <i><b>vs</b></i> <span style="
+  color:#ffad55;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${keenData.secondTarget}</span>
+  </div>
+` : `
+  <div style="font-size:1.4em;">
+Roll:
+<span style="
+  color:#bd7548;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${rollVal}</span>
+  </div>
+`}
+
+  ${notes.length ? `
+  <div style="font-size:1.3em; font-style:italic; opacity:0.85; margin-bottom:6px;">
+    ${notes.join(" | ")}
+  </div>` : ""}
+
+  <div style="
+    font-size:1.4em;
+    font-weight:bold;
+    color:${successColor};
+   text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+  ">
+    ${resultText}
+  </div>
+
+</div>
+`
+          });
+
+          if (!success && (actor.system.fate?.value ?? 0) > 0) {
+            const useFate = await askForFate();
+
+            if (useFate) {
+              await actor.update({
+                "system.fate.value": actor.system.fate.value - 1
+              });
+
+              const fateRoll = await new Roll("1d100").roll({ async: true });
+              const fateVal = fateRoll.total;
+
+              const fateSuccess = fateVal <= baseTarget;
+              const fateDegrees = Math.floor(Math.abs(baseTarget - fateVal) / 10) + 1;
+
+              const fateText = fateSuccess ?
+                `${fateDegrees} Degrees of Success` :
+                `${fateDegrees} Degrees of Failure`;
+
+              const fateColor = fateSuccess ? "#1aff1a" : "#ff2a2a";
+
+              fateRoll.toMessage({
+                speaker: ChatMessage.getSpeaker({ actor }),
+                flavor: `
+<div style="text-align:center;">
+
+<b style="
+  color:gold;
+  font-style:italic;
+  font-size:1.1em;
+   text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">✦ ${actor.name} spends Fate and rerolls! ✦
+</b></div><hr>
+<div style="text-align:center; color:#000000;">
+
+<div style="font-style:italic;font-size:1.1em;">
+<b>${actor.name}</b> performs a <b>${label}</b> Test
+</div>
+
+<hr>
+
+<div style="margin-top:6px;font-size:1.3em;">
+Target:
+<span style="
+  color:#ffad55;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${target}</span>
+</div>
+
+<div style="font-size:1.4em;">
+Roll:
+<span style="
+  color:#bd7548;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${fateVal}</span>
+  </div>
+
+  ${notes.length ? `
+  <div style="font-size:1.3em; font-style:italic; opacity:0.85; margin-bottom:6px;">
+    ${notes.join(" | ")}
+  </div>` : ""}
+
+  <div style="
+    font-size:1.4em;
+    font-weight:bold;
+    color:${fateColor};
+    text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+  ">
+    ${fateText}
+  </div>
+
+</div>
+`
+              });
+            }
+          }
+        }
+      }
+    },
+    render: html => {
+      function updateSelectedSkill() {
+        const picks = [
+          ["skill", "skill"],
+          ["common", "commonLore"],
+          ["forbidden", "forbiddenLore"],
+          ["scholastic", "scholasticLore"],
+          ["operate", "operate"],
+          ["navigate", "navigate"],
+          ["trade", "trade"]
+        ];
+
+        let selected;
+        let group;
+
+        for (const [id, g] of picks) {
+          const val = html.find(`#${id}`).val();
+          if (val) {
+            selected = val;
+            group = g;
+          }
+        }
+
+        if (!selected) {
+          html.find("#selectedSkillDisplay").text("—");
+          return;
+        }
+
+        let total;
+
+        if (group === "skill") {
+          total = skills[selected]?.total ?? 0;
+          html.find("#selectedSkillDisplay")
+            .text(`${prettyLabel(selected)} ${total}`);
+        } else {
+          total = skills[group]?.specialities[selected]?.total ?? 0;
+          html.find("#selectedSkillDisplay")
+            .text(`${prettyLabel(group)} (${prettyLabel(selected)}) ${total}`);
+        }
+      }
+
+      html.find("select").on("change", updateSelectedSkill);
+      updateSelectedSkill();
+    }
+  }).render(true);
 }
 
 async function openCharacteristicTest() {
