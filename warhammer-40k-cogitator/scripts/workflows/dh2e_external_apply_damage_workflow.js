@@ -818,6 +818,42 @@ if (dmg.toxic?.resolved) {
   report += `<hr><b>☣ TOXIC DAMAGE ☣</b><br>Damage: ${toxicDamage}<br>Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}`;
 }
 
+let shockingOutcomeSummary = "";
+const hasShocking = Boolean(dmg.shocking?.active)
+  || (dmg.properties ?? []).some(p => String(p).toLowerCase().includes("shocking"));
+
+if (hasShocking && totalInflicted > 0) {
+  const shockingTarget = Math.max(1, Number(actor.system?.characteristics?.toughness?.total ?? 0));
+  const shockingRoll = await new Roll("1d100").evaluate();
+  if (game.dice3d) await game.dice3d.showForRoll(shockingRoll, game.user, true);
+
+  const succeeded = shockingRoll.total <= shockingTarget && shockingRoll.total !== 100;
+  const dof = succeeded ? 0 : Math.max(1, 1 + Math.floor((shockingRoll.total - shockingTarget) / 10));
+
+  report += `
+  <hr>
+  <b><span style='color:#ffd200;'>⚡</span> <span style='color:#00b3ff;'>SHOCKING TOUGHNESS TEST</span></b><br>
+  Target: <b>${shockingTarget}</b><br>
+  Roll: <b>${shockingRoll.total}</b><br>
+  Result: ${succeeded
+    ? "<span style='color:#6EC1FF;font-weight:900;'>SUCCESS</span>"
+    : `<span style='color:#00b3ff;font-weight:900;'>FAILED</span> (DoF ${dof})`}
+  `;
+
+  if (succeeded) {
+    shockingOutcomeSummary = `<br><b>${dmg.target}</b> succeeded vs <span style='color:#00b3ff;font-weight:900;'>Shocking</span>.`;
+  } else {
+    const currentFatigue = Number(actor.system?.fatigue?.value ?? 0);
+    await actor.update({ "system.fatigue.value": currentFatigue + 1 });
+    await applyConvenientEffect(actor, {
+      effectId: "stunned",
+      effectName: "Stunned",
+      counter: dof
+    });
+    shockingOutcomeSummary = `<br><b>${dmg.target}</b> is <span style='color:#00b3ff;font-weight:900;'>stunned</span> for <b>${dof}</b> round${dof === 1 ? "" : "s"}.`;
+  }
+}
+
 if (dmg.force?.resolved) {
   report += `
   <hr>
@@ -936,6 +972,7 @@ const applySummary = `
 <b>Penetration:</b> ${dmg.penetration}<br>
 <b>Properties:</b> ${dmg.properties?.join(", ") || "None"}
 ${report}
+${shockingOutcomeSummary}
 ${trueGrit ? "<hr><i>True Grit applied</i>" : ""}
 ${ignoreArmour ? "<br><i>Armour ignored</i>" : ""}
 ${critReport}

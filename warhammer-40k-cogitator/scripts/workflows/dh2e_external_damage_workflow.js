@@ -242,6 +242,7 @@ new Dialog({
         const spray = hasTrait("spray");
         const flame = hasTrait("flame");
         const toxic = hasTrait("toxic");
+        const shocking = hasTrait("shocking");
         const parseTraitVal = (name, d=0) => {
           const mm = traitsText.match(new RegExp(name + "\\s*\\((\\d+)\\)"));
           return mm ? Number(mm[1]) : d;
@@ -466,6 +467,11 @@ new Dialog({
           properties.push(`Toxic (${toxicValue})`);
         }
 
+        if (shocking && !isHordeTarget) {
+          const shockingValue = parseTraitVal("shocking", 0);
+          properties.push(shockingValue > 0 ? `Shocking (${shockingValue})` : "Shocking");
+        }
+
         if (flame && !isHordeTarget) {
           traitTests.flame = {
             ...(await rollCharacteristicTest({ total: targetActor?.system?.characteristics?.agility?.total ?? 0, label: "Agility" })),
@@ -553,6 +559,7 @@ ${furyHtml}
           fury: furyResults,
           properties,
           toxic: traitTests.toxic,
+          shocking: shocking ? { active: true } : null,
           flame: traitTests.flame,
           spray: traitTests.spray,
           concussive: traitTests.concussive,
