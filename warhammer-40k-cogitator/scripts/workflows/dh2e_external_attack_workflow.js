@@ -700,6 +700,11 @@ const runAttackWorkflow = async setup => {
     selectedTalents.push("Best Craftsmanship: +1 damage");
   }
 
+  if (isMelee && hasTrait(traits, "defensive")) {
+    sharedMod -= 10;
+    modifierNotes.push("Defensive -10");
+  }
+
   if (t.deadeye && !isMelee && setup.modeKey === "called") {
     sharedMod += 10;
     talentModifier.attack.attackRoll += 10;
