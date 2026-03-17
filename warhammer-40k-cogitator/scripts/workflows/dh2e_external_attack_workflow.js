@@ -632,6 +632,7 @@ const runAttackWorkflow = async setup => {
 
   const rof = weapon.system.rateOfFire ?? {};
   const isSpray = hasTrait(traits, "spray");
+  const isTwinLinked = hasTrait(traits, "twin-linked");
   const infiniteAmmo = hasTrait(traits, "living ammunition") || hasTrait(traits, "infammo");
   const isGrenade = hasTrait(traits, "grenade");
   if (!isMelee) {
@@ -707,6 +708,10 @@ const runAttackWorkflow = async setup => {
     selectedTalents.push("Deadeye +10");
   }
   if (t.grip) { sharedMod += 5; selectedTalents.push("Custom Grip +5"); }
+  if (!isMelee && isTwinLinked) {
+    sharedMod += 20;
+    modifierNotes.push("Twin-Linked +20");
+  }
   if (t.stock && !isMelee && setup.aimMod > 0) {
     const b = setup.aimMod === 20 ? 4 : 2;
     sharedMod += b;
@@ -819,6 +824,7 @@ const runAttackWorkflow = async setup => {
     if (["semi", "suppressSemi"].includes(state.modeKey)) shotsRequired = rof.burst ?? 1;
     else if (["full", "suppressFull"].includes(state.modeKey)) shotsRequired = rof.full ?? 1;
     if (hasTrait(traits, "storm")) shotsRequired *= 2;
+    if (isTwinLinked) shotsRequired *= 2;
     shotsRequired *= state.powerMultiplier;
 
     const currentClip = weapon.system.clip.value;
@@ -861,6 +867,9 @@ const runAttackWorkflow = async setup => {
     if (["full", "suppressFull"].includes(state.modeKey)) {
       hits = Math.min(hits, (rof.full ?? hits) * 2);
     }
+  }
+  if (success && !isMelee && isTwinLinked && dos > 2) {
+    hits += 1;
   }
 
   let ammoSpent = 0;
