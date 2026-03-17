@@ -168,6 +168,11 @@ const presentWeaponItems = detected => {
   return present.length ? present : ["None"];
 };
 
+const presentWeaponTraits = weapon => {
+  const special = String(weapon?.system?.special ?? "").trim();
+  return special || "None";
+};
+
 const parseWeaponTraits = weapon =>
   (weapon.system.special ?? "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
 const hasTrait = (traits, key) => traits.some(t => t.includes(key));
@@ -460,6 +465,7 @@ const buildWorkflowHtml = state => {
     <div><b>Craftsmanship:</b> ${state.craftName} | <b>Aim:</b> ${state.aimLabel}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes.join(", ") || "None"}</div>
     <div><b>Talents:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
+    <div><b>Weapon Traits:</b> ${state.weaponTraits || "None"}</div>
     <div><b>Items:</b> ${state.weaponItems?.join(", ") || "None"}</div>
     <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Target:</b> ${outlined(state.bestTarget ?? Math.max(...(state.targets ?? []).map(t => Number(t.targetNumber ?? 0))), "#3aa0ff")}</div>
     <div><b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))} | <b>Total ${state.horde?.active ? "Hits vs Horde" : "Hits"}:</b> ${state.totalHits ?? 0}</div>
@@ -790,6 +796,7 @@ const runAttackWorkflow = async setup => {
     weaponPen: getWeaponPenetration(weapon),
     weaponType: weapon.system.damageType || "impact",
     weaponSpecial: weapon.system.special || "",
+    weaponTraits: presentWeaponTraits(weapon),
     meleeBestDamageBonus: (isMelee && craftData.meleeBestDamageBonus) ? 1 : 0,
     modeKey: setup.modeKey,
     modeLabel: mode.label,
