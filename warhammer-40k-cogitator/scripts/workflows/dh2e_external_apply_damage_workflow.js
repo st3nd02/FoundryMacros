@@ -958,6 +958,12 @@ if (realCritToApply > 0 && lastCritLocation){
 }
 
   const damageTypeHTML = getDamageTypeHTML(dmg.damageType);
+  const reminderTraits = ["Crippling", "Sanctified", "Haywire"].filter((trait) =>
+    (dmg.properties ?? []).some((property) => String(property ?? "").toLowerCase().includes(trait.toLowerCase()))
+  );
+  const traitReminderHtml = reminderTraits.length
+    ? `<hr><b>Trait Reminder:</b> ${reminderTraits.join(", ")}`
+    : "";
   
 // ===============================
 // WORKFLOW CARD INTEGRATION
@@ -976,6 +982,7 @@ ${shockingOutcomeSummary}
 ${trueGrit ? "<hr><i>True Grit applied</i>" : ""}
 ${ignoreArmour ? "<br><i>Armour ignored</i>" : ""}
 ${critReport}
+${traitReminderHtml}
 </div>`;
 
 if (selectedEntry.msg && selectedEntry.state) {
