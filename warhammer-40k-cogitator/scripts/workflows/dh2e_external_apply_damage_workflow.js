@@ -1,10 +1,11 @@
+export async function runApplyDamageWorkflow() {
 /**
  * DH2e External Apply Damage Workflow (Foundry V13)
  * Version: 1.4
  * GM-only damage application from `game.dh2eLastDamage`.
  */
 
-(async () => {
+
 if (!game.user.isGM) return ui.notifications.warn("Apply Damage is GM-only.");
 
 //======================================
@@ -1017,4 +1018,4 @@ label:"Cancel"
 }
 
 }).render(true);
-})();
+}

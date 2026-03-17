@@ -1,11 +1,11 @@
+import { runAttackWorkflow } from "./workflows/dh2e_external_attack_workflow.js";
+import { runDefenseWorkflow } from "./workflows/dh2e_external_defense_workflow.js";
+import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js";
+import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
+
 const COGITATOR_ID = "warhammer-40k-cogitator";
 
 const SETTINGS = {
-  attackMacroName: "attackMacroName",
-  defenseMacroName: "defenseMacroName",
-  damageMacroName: "damageMacroName",
-  masterMacroName: "masterMacroName",
-  autoCreateMacros: "autoCreateMacros",
   workflowHudEnabled: "workflowHudEnabled",
   workflowHudLocked: "workflowHudLocked",
   workflowHudPosX: "workflowHudPosX",
@@ -23,7 +23,6 @@ const SOCKET_EVENTS = {
 
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
-const MACRO_FOLDER_NAME = "Warhammer 40k Cogitator";
 const REACTION_FLAG = "reactionUsedForDefense";
 const REACTION_COUNT_FLAG = "reactionUsedForDefenseCount";
 const REACTION_EFFECT_NAME = "Reaction Used";
@@ -42,80 +41,8 @@ let pendingAttackContext = null;
 const recentDefensePromptKeys = new Map();
 let workflowHud = null;
 
-const DEFAULT_MACROS = {
-  attack: {
-    name: "DH2e External Attack Workflow",
-    file: "macros/dh2e_external_attack_workflow.js"
-  },
-  defense: {
-    name: "DH2e External Defense Workflow",
-    file: "macros/dh2e_external_defense_workflow.js"
-  },
-  damage: {
-    name: "DH2e External Damage Workflow",
-    file: "macros/dh2e_external_damage_workflow.js"
-  },
-  master: {
-    name: "DH2e External Master Workflow",
-    file: "macros/dh2e_external_master_workflow.js"
-  },
-  gmMaster: {
-    name: "DH2e External GM Master Workflow",
-    file: "macros/dh2e_external_gm_master_workflow.js"
-  },
-  applyDamage: {
-    name: "DH2e External Apply Damage Workflow",
-    file: "macros/dh2e_external_apply_damage_workflow.js"
-  }
-};
-
 Hooks.once("init", () => {
   console.log("Warhammer 40k Cogitator | Initializing");
-
-  game.settings.register(COGITATOR_ID, SETTINGS.attackMacroName, {
-    name: "Attack Macro Name",
-    hint: "World macro name used for attack workflow execution.",
-    scope: "world",
-    config: true,
-    type: String,
-    default: DEFAULT_MACROS.attack.name
-  });
-
-  game.settings.register(COGITATOR_ID, SETTINGS.defenseMacroName, {
-    name: "Defense Macro Name",
-    hint: "World macro name used for defense workflow execution.",
-    scope: "world",
-    config: true,
-    type: String,
-    default: DEFAULT_MACROS.defense.name
-  });
-
-  game.settings.register(COGITATOR_ID, SETTINGS.damageMacroName, {
-    name: "Damage Macro Name",
-    hint: "World macro name used for damage workflow execution.",
-    scope: "world",
-    config: true,
-    type: String,
-    default: DEFAULT_MACROS.damage.name
-  });
-  game.settings.register(COGITATOR_ID, SETTINGS.masterMacroName, {
-    name: "Master Macro Name",
-    hint: "World macro name used for one-click launcher execution.",
-    scope: "world",
-    config: true,
-    type: String,
-    default: DEFAULT_MACROS.master.name
-  });
-
-
-  game.settings.register(COGITATOR_ID, SETTINGS.autoCreateMacros, {
-    name: "Auto-create workflow macros",
-    hint: "Automatically create missing Attack/Defense/Damage world macros from bundled scripts on ready.",
-    scope: "world",
-    config: true,
-    type: Boolean,
-    default: true
-  });
 
   game.settings.register(COGITATOR_ID, SETTINGS.workflowHudEnabled, {
     name: "Enable Persistent Workflow HUD",
@@ -171,7 +98,6 @@ Hooks.once("ready", async () => {
     openLauncher,
     openCharacteristicTest,
     openSkillTest,
-    ensureWorkflowMacros,
     runStep,
     emitSocket,
     submitDefenseResult,
@@ -197,10 +123,7 @@ Hooks.once("ready", async () => {
   initializeSocketlib();
   registerSocketHandlers();
   registerCombatHooks();
-
-  if (game.settings.get(COGITATOR_ID, SETTINGS.autoCreateMacros)) {
-    await ensureWorkflowMacros();
-  }
+  reportLegacyMacroSettings();
 
   Hooks.on("canvasReady", () => refreshWorkflowHud());
   Hooks.on("canvasTearDown", () => removeWorkflowHud());
@@ -1175,6 +1098,7 @@ async function openLauncher() {
         attack: { label: "Attack", callback: () => resolve("attack") },
         defense: { label: "Defense", callback: () => resolve("defense") },
         damage: { label: "Damage", callback: () => resolve("damage") },
+        ...(game.user.isGM ? { applyDamage: { label: "Apply Damage", callback: () => resolve("applyDamage") } } : {}),
         skill: { label: "Skill Test", callback: () => resolve("skill") },
         characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
         cancel: { label: "Cancel", callback: () => resolve(null) }
@@ -2270,129 +2194,44 @@ text-shadow:
 }
 
 async function runStep(step) {
-  const { macro, configuredName } = resolveStepMacro(step);
-  if (!macro) {
-    ui.notifications.warn(`Warhammer 40k Cogitator: Macro not found. Checked: ${getMacroLookupNames(step).join(", ")}`);
+  const handlers = {
+    attack: { gmOnly: false, execute: runAttackWorkflow },
+    defense: { gmOnly: false, execute: runDefenseWorkflow },
+    damage: { gmOnly: false, execute: runDamageWorkflow },
+    master: { gmOnly: false, execute: openLauncher },
+    gmMaster: { gmOnly: true, execute: openLauncher },
+    applyDamage: { gmOnly: true, execute: runApplyDamageWorkflow }
+  };
+
+  const handler = handlers[step];
+  if (!handler) {
+    ui.notifications.warn(`Warhammer 40k Cogitator: Unknown workflow step '${step}'.`);
     return;
   }
 
-  if (configuredName && macro.name !== configuredName && game.user.isGM) {
-    await game.settings.set(COGITATOR_ID, getStepSettingKey(step), macro.name);
+  if (handler.gmOnly && !game.user.isGM) {
+    ui.notifications.warn("Warhammer 40k Cogitator: This workflow step is GM-only.");
+    return;
   }
 
-  await macro.execute();
+  await handler.execute();
 }
 
-function resolveStepMacro(step) {
-  const configuredName = getConfiguredMacroName(step);
-  const lookupNames = getMacroLookupNames(step);
-  const candidates = lookupNames
-    .map(name => game.macros.getName(name))
-    .filter(Boolean);
-
-  if (!candidates.length) return { macro: null, configuredName };
-
-  const preferred = candidates.find(isCurrentWorkflowMacro) ?? candidates[0];
-  return { macro: preferred, configuredName };
-}
-
-function isCurrentWorkflowMacro(macro) {
-  const command = String(macro?.command ?? "");
-  return command.includes("DH2e External") && command.includes("Foundry V13");
-}
-
-function getMacroLookupNames(step) {
-  const names = [getConfiguredMacroName(step), DEFAULT_MACROS[step]?.name];
-
-  if (step === "attack") names.push("dh2e_external_attack_workflow");
-  if (step === "defense") names.push("dh2e_external_defense_workflow");
-  if (step === "damage") names.push("dh2e_external_damage_workflow");
-  if (step === "master") names.push("dh2e_external_master_workflow");
-
-  return [...new Set(names.filter(Boolean))];
-}
-
-function getStepSettingKey(step) {
-  if (step === "attack") return SETTINGS.attackMacroName;
-  if (step === "defense") return SETTINGS.defenseMacroName;
-  if (step === "damage") return SETTINGS.damageMacroName;
-  return SETTINGS.masterMacroName;
-}
-
-function getConfiguredMacroName(step) {
-  if (step === "gmMaster") return DEFAULT_MACROS.gmMaster.name;
-  if (step === "applyDamage") return DEFAULT_MACROS.applyDamage.name;
-  return game.settings.get(COGITATOR_ID, getStepSettingKey(step));
-}
-
-async function ensureWorkflowMacros() {
-  if (!game.user.isGM) return;
-
-  const mapping = [
-    ["attack", DEFAULT_MACROS.attack],
-    ["defense", DEFAULT_MACROS.defense],
-    ["damage", DEFAULT_MACROS.damage],
-    ["master", DEFAULT_MACROS.master],
-    ["gmMaster", DEFAULT_MACROS.gmMaster],
-    ["applyDamage", DEFAULT_MACROS.applyDamage]
+function reportLegacyMacroSettings() {
+  const legacyKeys = [
+    "attackMacroName",
+    "defenseMacroName",
+    "damageMacroName",
+    "masterMacroName",
+    "autoCreateMacros"
   ];
 
-  const folder = await ensureMacroFolder();
+  const worldSettings = game.settings.storage?.get("world");
+  if (!worldSettings) return;
 
-  for (const [step, data] of mapping) {
-    const configuredName = getConfiguredMacroName(step);
-    const script = await loadBundledMacroScript(data.file);
-    if (!script) {
-      ui.notifications.warn(`Warhammer 40k Cogitator: Could not load bundled script ${data.file}`);
-      continue;
-    }
+  const found = legacyKeys.filter(key => worldSettings.get(`${COGITATOR_ID}.${key}`));
+  if (!found.length) return;
 
-    let macro = game.macros.getName(configuredName);
-    if (!macro) {
-      macro = await Macro.create({
-        name: configuredName,
-        type: "script",
-        scope: "global",
-        command: script,
-        img: "icons/svg/d20-black.svg",
-        folder: folder?.id ?? null
-      });
-
-      ui.notifications.info(`Warhammer 40k Cogitator: Created macro '${configuredName}'.`);
-      continue;
-    }
-
-    const updateData = {};
-    if (String(macro.command ?? "") !== String(script ?? "")) updateData.command = script;
-    if (folder?.id && macro.folder?.id !== folder.id) updateData.folder = folder.id;
-
-    if (Object.keys(updateData).length) {
-      await macro.update(updateData);
-      ui.notifications.info(`Warhammer 40k Cogitator: Updated macro '${configuredName}'.`);
-    }
-  }
+  console.info(`Warhammer 40k Cogitator | Legacy macro settings detected and ignored in macro-free mode: ${found.join(", ")}`);
 }
 
-
-async function ensureMacroFolder() {
-  const existing = game.folders.find(f => f.type === "Macro" && f.name === MACRO_FOLDER_NAME);
-  if (existing) return existing;
-
-  return Folder.create({
-    name: MACRO_FOLDER_NAME,
-    type: "Macro",
-    color: "#7f5af0"
-  });
-}
-
-async function loadBundledMacroScript(relativePath) {
-  try {
-    const modulePath = `/modules/${COGITATOR_ID}/${relativePath}`;
-    const response = await fetch(modulePath);
-    if (!response.ok) return null;
-    return await response.text();
-  } catch (err) {
-    console.error("Warhammer 40k Cogitator | Failed to load bundled macro", relativePath, err);
-    return null;
-  }
-}

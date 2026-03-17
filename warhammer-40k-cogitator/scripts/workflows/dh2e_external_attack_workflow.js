@@ -1,3 +1,4 @@
+export async function runAttackWorkflow() {
 /**
  * DH2e External Attack Workflow (Foundry V13)
  * Version: 1.1
@@ -7,7 +8,7 @@
  * 3) Damage dialog for attacker to roll per-target damage.
  */
 
-(async () => {
+
 
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
@@ -544,18 +545,12 @@ const openDamageWorkflow = async (state, chatMessage) => {
     game.warhammer40kCogitator.setPendingDamageContext(payload);
   }
 
-  if (game.warhammer40kCogitator?.runStep) {
-    await game.warhammer40kCogitator.runStep("damage");
+  if (!game.warhammer40kCogitator?.runStep) {
+    ui.notifications.warn("Warhammer 40k Cogitator API is unavailable; cannot open Damage workflow.");
     return;
   }
 
-  const fallbackMacro = game.macros.getName("DH2e External Damage Workflow") ?? game.macros.getName("dh2e_external_damage_workflow");
-  if (fallbackMacro) {
-    await fallbackMacro.execute();
-    return;
-  }
-
-  ui.notifications.warn("Could not find Damage workflow macro to run.");
+  await game.warhammer40kCogitator.runStep("damage");
 };
 
 const getDefenseRecipients = targetDocumentOrActor => {
@@ -1362,3 +1357,4 @@ await runAttackWorkflow(setup);
   console.error("DH2E external attack workflow failed", err);
   ui.notifications.error("DH2E workflow failed. Check console for details.");
 });
+}

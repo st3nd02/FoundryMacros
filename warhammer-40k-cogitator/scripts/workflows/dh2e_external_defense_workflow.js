@@ -1,10 +1,11 @@
+export async function runDefenseWorkflow() {
 /**
  * DH2e External Defense Workflow (Foundry V13)
  * Version: 1.4
  * Run this as the defender owner to resolve pending defenses on existing attack workflows.
  */
 
-(async () => {
+
 
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
@@ -412,3 +413,4 @@ ui.notifications.info("Defense resolved and workflow updated.");
   console.error("DH2E external defense workflow failed", err);
   ui.notifications.error(`DH2E defense workflow failed: ${err.message ?? "Check console for details."}`);
 });
+}
