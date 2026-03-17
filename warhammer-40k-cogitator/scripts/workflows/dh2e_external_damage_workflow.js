@@ -247,6 +247,7 @@ new Dialog({
         const snare = hasTrait("snare");
         const warpWeapon = hasTrait("warp weapon");
         const corrosive = hasTrait("corrosive");
+        const lance = hasTrait("lance");
         const parseTraitVal = (name, d=0) => {
           const mm = traitsText.match(new RegExp(name + "\\s*\\((\\d+)\\)"));
           return mm ? Number(mm[1]) : d;
@@ -386,6 +387,12 @@ new Dialog({
         if (razor && dos >= 3) {
           pen *= 2;
           properties.push("Razor Sharp");
+        }
+
+        if (lance && dos > 0) {
+          const lanceBonus = pen * dos;
+          pen += lanceBonus;
+          properties.push(`Lance (+${lanceBonus} Pen from ${dos} DoS)`);
         }
 
         if (fellingVal > 0) {

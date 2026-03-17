@@ -737,7 +737,9 @@ function buildWorkflowHtml(state) {
     <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;"><b>${state.attackerName}</b> attacks with <b>${state.weaponName}</b></div>
     <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes?.join(", ") || "None"}</div>
-    <div><b>Talents/Items:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
+    <div><b>Talents:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
+    <div><b>Weapon Traits:</b> ${state.weaponTraits || state.weaponSpecial || "None"}</div>
+    <div><b>Items:</b> ${state.weaponItems?.join(", ") || "None"}</div>
     <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))}</div>
     <div style="font-size:1.1em;"><b>Total Hits:</b> ${state.totalHits ?? 0}</div>
     ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
