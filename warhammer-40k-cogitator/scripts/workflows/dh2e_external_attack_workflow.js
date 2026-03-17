@@ -743,6 +743,7 @@ const runAttackWorkflow = async setup => {
 
   const targets = setup.targetConfigs.map(conf => {
     const effectiveRangeMod = (!isMelee && t.marksman && conf.rangeMod < 0) ? 0 : conf.rangeMod;
+    const scatterPointBlankBonus = (!isMelee && hasTrait(traits, "scatter") && conf.rangeMod === 30) ? 10 : 0;
     return ({
     tokenUuid: conf.tokenUuid,
     targetTokenUuid: conf.tokenUuid,
@@ -750,10 +751,11 @@ const runAttackWorkflow = async setup => {
     distanceMeters: conf.distanceMeters,
     rangeLabel: conf.rangeLabel,
     rangeMod: effectiveRangeMod,
+    scatterAttackBonus: scatterPointBlankBonus,
     sizeLabel: conf.sizeLabel,
     sizeMod: conf.sizeMod,
     sizeIgnored: conf.sizeIgnored,
-    targetNumber: Math.max(1, baseSkill + sharedMod + effectiveRangeMod + conf.sizeMod),
+    targetNumber: Math.max(1, baseSkill + sharedMod + effectiveRangeMod + scatterPointBlankBonus + conf.sizeMod),
     allocatedHits: 0,
     defenseRoll: null,
     defenseOutcome: null,
