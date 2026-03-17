@@ -330,7 +330,7 @@ new Dialog({
           properties.push("Tearing");
         }
 
-        if (accurate && aim === "yes") {
+        if (accurate && wClass === "basic" && aim === "yes") {
           const extra = Math.min(Math.floor(dos / 2), 2);
           if (extra > 0) formula += ` + ${extra}d${dieType}`;
           properties.push("Accurate");
