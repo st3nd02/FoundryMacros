@@ -243,6 +243,7 @@ new Dialog({
         const flame = hasTrait("flame");
         const toxic = hasTrait("toxic");
         const shocking = hasTrait("shocking");
+        const warpWeapon = hasTrait("warp weapon");
         const parseTraitVal = (name, d=0) => {
           const mm = traitsText.match(new RegExp(name + "\\s*\\((\\d+)\\)"));
           return mm ? Number(mm[1]) : d;
@@ -520,6 +521,8 @@ new Dialog({
           }
           properties.push("Force");
         }
+
+        if (warpWeapon) properties.push("Warp Weapon");
 
         const testSummary = [traitTests.flame, traitTests.spray, traitTests.toxic, traitTests.concussive].filter(Boolean)
           .map(t => `<div><b>${t.label} Test</b> (${t.target}) Roll ${t.roll}: <b>${t.success ? "Success" : "Failure"}</b>${typeof t.damage === "number" ? ` | Extra Damage: <b>${t.damage}</b>` : ""}</div>`)
