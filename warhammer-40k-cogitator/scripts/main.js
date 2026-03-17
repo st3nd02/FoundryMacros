@@ -44,6 +44,15 @@ let workflowHud = null;
 Hooks.once("init", () => {
   console.log("Warhammer 40k Cogitator | Initializing");
 
+  game.settings.registerMenu(COGITATOR_ID, "workflowHudResetMenu", {
+    name: "Reset Workflow HUD Position",
+    label: "Center HUD",
+    hint: "Reset the workflow HUD to the center of your screen.",
+    icon: "fas fa-crosshairs",
+    type: WorkflowHudResetMenu,
+    restricted: false
+  });
+
   game.settings.register(COGITATOR_ID, SETTINGS.workflowHudEnabled, {
     name: "Enable Persistent Workflow HUD",
     hint: "Show a movable workflow button bar on the canvas.",
@@ -1156,6 +1165,26 @@ function removeWorkflowHud() {
   workflowHud = null;
 }
 
+function getWorkflowHudCenterPosition() {
+  const minMargin = 8;
+  const hudWidth = workflowHud?.element?.offsetWidth ?? 500;
+  const hudHeight = workflowHud?.element?.offsetHeight ?? 42;
+  const centerX = Math.round((window.innerWidth - hudWidth) / 2);
+  const centerY = Math.round((window.innerHeight - hudHeight) / 2);
+
+  return {
+    x: Math.max(centerX, minMargin),
+    y: Math.max(centerY, minMargin)
+  };
+}
+
+async function resetWorkflowHudToCenter() {
+  const { x, y } = getWorkflowHudCenterPosition();
+  await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudPosX, x);
+  await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudPosY, y);
+  refreshWorkflowHud();
+}
+
 class WorkflowHud {
   constructor() {
     this.element = null;
@@ -1178,7 +1207,7 @@ class WorkflowHud {
       this.element.style.background = "rgba(12, 12, 12, 0.9)";
       this.element.style.border = "1px solid rgba(206, 206, 206, 0.45)";
       this.element.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.45)";
-      this.element.style.zIndex = "80";
+      this.element.style.zIndex = "9999";
       this.element.style.alignItems = "center";
       this.element.style.userSelect = "none";
       this.element.style.pointerEvents = "all";
@@ -1292,6 +1321,30 @@ class WorkflowHud {
     }
     this.element?.remove();
     this.element = null;
+  }
+}
+
+class WorkflowHudResetMenu extends FormApplication {
+  static get defaultOptions() {
+    return foundry.utils.mergeObject(super.defaultOptions, {
+      id: "warhammer40k-cogitator-reset-workflow-hud",
+      title: "Reset Workflow HUD Position"
+    });
+  }
+
+  getData() {
+    return {};
+  }
+
+  activateListeners(html) {
+    super.activateListeners(html);
+    this.submit();
+    this.close();
+  }
+
+  async _updateObject() {
+    await resetWorkflowHudToCenter();
+    ui.notifications.info("Workflow HUD moved to screen center.");
   }
 }
 
