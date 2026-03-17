@@ -135,6 +135,7 @@ Hooks.once("ready", async () => {
   reportLegacyMacroSettings();
 
   Hooks.on("canvasReady", () => refreshWorkflowHud());
+  Hooks.on("renderSceneControls", () => refreshWorkflowHud());
   Hooks.on("canvasTearDown", () => removeWorkflowHud());
   refreshWorkflowHud();
 
@@ -1145,9 +1146,10 @@ function getWorkflowHudButtons() {
 }
 
 function refreshWorkflowHud() {
-  const activeCanvas = globalThis.canvas ?? game.canvas;
   const enabled = game.settings.get(COGITATOR_ID, SETTINGS.workflowHudEnabled);
-  if (!enabled || !activeCanvas?.ready) {
+  const activeCanvas = globalThis.canvas ?? game.canvas;
+  const canvasIsAvailable = Boolean(activeCanvas && (activeCanvas.ready ?? activeCanvas.initialized ?? true));
+  if (!enabled || !canvasIsAvailable) {
     removeWorkflowHud();
     return;
   }
@@ -1215,7 +1217,7 @@ class WorkflowHud {
 
       this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
 
-      const hudHost = document.getElementById("ui-top") ?? document.getElementById("interface") ?? document.body;
+      const hudHost = document.getElementById("interface") ?? document.body;
       hudHost.appendChild(this.element);
     }
 
