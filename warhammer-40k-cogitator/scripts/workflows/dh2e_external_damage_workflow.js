@@ -252,8 +252,10 @@ new Dialog({
         const mighty = !!entry.state?.toggles?.mighty;
         const crushing = !!entry.state?.toggles?.crushing;
         const forceChannel = !!entry.state?.forceChanneling;
+        const targetRangeLabel = String(entry.target?.rangeLabel ?? "");
+        const scatterPointBlank = targetRangeLabel.includes("Point Blank");
+        const scatterLongOrExtreme = targetRangeLabel.includes("Long") || targetRangeLabel.includes("Extreme");
         const meltaRange = "Short";
-        const scatterRange = "Short";
         const provenVal = parseTraitVal("proven", 1);
         const primitiveVal = parseTraitVal("primitive", 9);
         const aim = Number(entry.state?.aimMod ?? 0) > 0 ? "yes" : "no";
@@ -298,9 +300,14 @@ new Dialog({
           }
         }
 
-        if (scatter && (scatterRange === "Short" || scatterRange === "Point Blank")) {
+        if (scatter && scatterPointBlank) {
           flat += 2;
-          properties.push("Scatter");
+          properties.push("Scatter (+2 @ Point Blank)");
+        }
+
+        if (scatter && scatterLongOrExtreme) {
+          flat -= 2;
+          properties.push("Scatter (-2 @ Long/Extreme)");
         }
 
         if (melta && (meltaRange === "Short" || meltaRange === "Point Blank")) {
