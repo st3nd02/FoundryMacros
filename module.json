@@ -42,6 +42,13 @@
         "id": "socketlib",
         "type": "module"
       }
+    ],
+    "recommends": [
+      {
+        "id": "fvtt-token-action-hud-core",
+        "type": "module",
+        "reason": "Optional integration point for users who manage action bars via Token Action HUD."
+      }
     ]
   }
 }
