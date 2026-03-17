@@ -7,9 +7,7 @@ export async function runAttackWorkflow() {
  * 2) Defense dialogs per target with allocated hits.
  * 3) Damage dialog for attacker to roll per-target damage.
  */
-
-
-
+try {
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const DOUBLE_TAP_TARGET_FLAG = "doubleTapEligibleTargetUuid";
@@ -1352,9 +1350,8 @@ if (!setup.toggles?.whirlwind && !isSprayWeapon && singleTargetModes.includes(se
   return;
 }
 await runAttackWorkflow(setup);
-
-})().catch(err => {
+} catch (err) {
   console.error("DH2E external attack workflow failed", err);
   ui.notifications.error("DH2E workflow failed. Check console for details.");
-});
+}
 }
