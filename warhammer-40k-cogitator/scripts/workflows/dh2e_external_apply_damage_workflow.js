@@ -800,19 +800,20 @@ if (dmg.spray?.resolved) {
 }
 
 if (dmg.concussive?.resolved) {
+  const stunRounds = Number(dmg.concussive.dof ?? 1);
   report += `
   <hr>
   <b>💥 CONCUSSIVE TOUGHNESS TEST</b><br>
   Target: <b>${dmg.concussive.target}</b><br>
   Roll: <b>${dmg.concussive.roll}</b><br>
-  Result: ${dmg.concussive.success ? "<span style='color:#6EC1FF;font-weight:900;'>RESISTED</span>" : `<span style='color:#ff9f1a;font-weight:900;'>FAILED</span> (Stunned ${Number(dmg.concussive.value ?? 1)} round${Number(dmg.concussive.value ?? 1) === 1 ? "" : "s"})`}
+  Result: ${dmg.concussive.success ? "<span style='color:#6EC1FF;font-weight:900;'>RESISTED</span>" : `<span style='color:#ff9f1a;font-weight:900;'>FAILED</span> (Stunned ${stunRounds} round${stunRounds === 1 ? "" : "s"})`}
   `;
 
   if (!dmg.concussive.success) {
     await applyConvenientEffect(actor, {
       effectId: "stunned",
       effectName: "Stunned",
-      counter: Number(dmg.concussive.value ?? 1)
+      counter: stunRounds
     });
   }
 }
