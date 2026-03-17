@@ -549,10 +549,17 @@ new Dialog({
 
         const concussiveMatch = properties.find(p => /concussive\s*\((\d+)\)/i.test(String(p)));
         const concussiveValue = concussiveMatch ? Number(String(concussiveMatch).match(/concussive\s*\((\d+)\)/i)?.[1] ?? 0) : 0;
-        if (concussiveValue > 0 && !isHordeTarget) {
+        if (concussiveMatch && concussiveValue >= 0 && !isHordeTarget) {
+          const concussiveTest = await rollCharacteristicTest({
+            total: targetActor?.system?.characteristics?.toughness?.total ?? 0,
+            label: "Toughness",
+            modifier: -10 * concussiveValue
+          });
+          const concussiveDof = concussiveTest.success ? 0 : Math.max(1, 1 + Math.floor((concussiveTest.roll - concussiveTest.target) / 10));
           traitTests.concussive = {
             value: concussiveValue,
-            ...(await rollCharacteristicTest({ total: targetActor?.system?.characteristics?.toughness?.total ?? 0, label: "Toughness" })),
+            dof: concussiveDof,
+            ...concussiveTest,
             resolved: true
           };
         }
