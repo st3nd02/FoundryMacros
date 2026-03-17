@@ -1,4 +1,5 @@
 export async function runDamageWorkflow() {
+try {
 /**
  * DH2e External Damage Workflow (Foundry V13)
  * Version: 1.3
@@ -588,8 +589,8 @@ ${furyHtml}
   }
 }).render(true, { width: 700 });
 
-})().catch(err => {
+} catch (err) {
   console.error("DH2E external damage workflow failed", err);
   ui.notifications.error("DH2E damage workflow failed. Check console for details.");
-});
+}
 }
