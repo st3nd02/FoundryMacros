@@ -620,6 +620,8 @@ ${(dmg.properties ?? []).length ? `${(dmg.properties ?? []).map(p => p === "Hord
 const extra = Number(html.find("#extra").val()) || 0;
 const ignoreArmour = html.find("#ignoreArmour")[0].checked;
 const trueGrit = html.find("#trueGrit")[0].checked;
+const warpWeaponIgnoresArmour = (dmg.properties ?? []).some((property) => String(property ?? "").toLowerCase().includes("warp weapon"));
+const armourIgnored = ignoreArmour || warpWeaponIgnoresArmour;
 
 dmg.talentModifier = dmg.talentModifier ?? {
   attack: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
@@ -672,7 +674,7 @@ let totalInflicted = 0;
 
   const totalArmour = armour + coverUsed;
 
-  const effectiveArmour = ignoreArmour
+  const effectiveArmour = armourIgnored
     ? 0
     : Math.max(totalArmour - dmg.penetration, 0);
 
@@ -980,7 +982,7 @@ const applySummary = `
 ${report}
 ${shockingOutcomeSummary}
 ${trueGrit ? "<hr><i>True Grit applied</i>" : ""}
-${ignoreArmour ? "<br><i>Armour ignored</i>" : ""}
+${armourIgnored ? `<br><i>Armour ignored${warpWeaponIgnoresArmour && !ignoreArmour ? " (Warp Weapon)" : ""}</i>` : ""}
 ${critReport}
 ${traitReminderHtml}
 </div>`;
