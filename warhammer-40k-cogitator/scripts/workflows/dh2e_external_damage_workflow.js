@@ -245,6 +245,7 @@ new Dialog({
         const shocking = hasTrait("shocking");
         const snare = hasTrait("snare");
         const warpWeapon = hasTrait("warp weapon");
+        const corrosive = hasTrait("corrosive");
         const parseTraitVal = (name, d=0) => {
           const mm = traitsText.match(new RegExp(name + "\\s*\\((\\d+)\\)"));
           return mm ? Number(mm[1]) : d;
@@ -525,6 +526,7 @@ new Dialog({
         }
 
         if (warpWeapon) properties.push("Warp Weapon");
+        if (corrosive) properties.push("Corrosive");
         if (snare) properties.push(snareVal > 0 ? `Snare (${snareVal})` : "Snare");
 
         const testSummary = [traitTests.flame, traitTests.spray, traitTests.toxic, traitTests.concussive].filter(Boolean)
