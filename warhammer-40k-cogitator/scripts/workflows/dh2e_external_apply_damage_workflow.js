@@ -646,6 +646,10 @@ let woundsCurrent = actor.system.wounds.value;
 let critCurrent = actor.system.wounds.critical || 0;
 
 const armourValues = actor.system.armour;
+const armourLocationKeys = ["head", "body", "leftArm", "rightArm", "leftLeg", "rightLeg"];
+const startingArmourByLocation = Object.fromEntries(
+  armourLocationKeys.map((key) => [key, Number(armourValues?.[key]?.value ?? 0)])
+);
 
 let report = "";
 let lastCritLocation = null;
@@ -666,13 +670,34 @@ RL ${armourValues.rightLeg?.value||0}
 // LOOP HITS
 // ===============================
 let totalInflicted = 0;
-  for (let hit of dmg.hitsData){
+const hasCorrosive = (dmg.properties ?? []).some((property) => String(property ?? "").toLowerCase().includes("corrosive"));
+let corrosiveArmourDamageTotal = 0;
+let corrosiveWoundsDamageTotal = 0;
+for (let hit of dmg.hitsData){
   const loc = locKey(hit.location);
-  const armour = armourValues[loc]?.value || 0;
+  const currentLocationArmour = Number(armourValues?.[loc]?.value ?? 0);
 
   const coverUsed = Math.max(coverRemaining,0);
 
-  const totalArmour = armour + coverUsed;
+  let corrosiveRoll = null;
+  let corrosiveArmourDamage = 0;
+  let corrosiveWoundDamage = 0;
+  if (hasCorrosive) {
+    corrosiveRoll = await new Roll("1d10").evaluate();
+    if (game.dice3d) await game.dice3d.showForRoll(corrosiveRoll, game.user, true);
+    corrosiveArmourDamage = Math.min(currentLocationArmour, Number(corrosiveRoll.total ?? 0));
+    corrosiveWoundDamage = Math.max(Number(corrosiveRoll.total ?? 0) - currentLocationArmour, 0);
+
+    if (armourValues?.[loc]) {
+      armourValues[loc].value = Math.max(currentLocationArmour - corrosiveArmourDamage, 0);
+    }
+
+    corrosiveArmourDamageTotal += corrosiveArmourDamage;
+    corrosiveWoundsDamageTotal += corrosiveWoundDamage;
+  }
+
+  const armourAfterCorrosive = Number(armourValues?.[loc]?.value ?? 0);
+  const totalArmour = armourAfterCorrosive + coverUsed;
 
   const effectiveArmour = armourIgnored
     ? 0
@@ -688,7 +713,7 @@ let totalInflicted = 0;
 
   const woundsBefore = woundsCurrent;
 
-  let newWounds = woundsCurrent + inflicted;
+  let newWounds = woundsCurrent + inflicted + corrosiveWoundDamage;
   let critDamage = 0;
 
   if (newWounds > woundsMax){
@@ -702,17 +727,22 @@ let totalInflicted = 0;
 
   woundsCurrent = newWounds;
   critCurrent += critDamage;
-if (critDamage > 0){
-  lastCritLocation = hit.location;
-  realCritToApply = critCurrent;
-}
+  if (critDamage > 0){
+    lastCritLocation = hit.location;
+    realCritToApply = critCurrent;
+  }
 
-if (hit.fury){
-  furyCrits.push({
-    location: hit.location,
-    value: Number(hit?.fury?.result ?? hit?.fury ?? 1) || 1
-  });
-}
+  if (hit.fury){
+    furyCrits.push({
+      location: hit.location,
+      value: Number(hit?.fury?.result ?? hit?.fury ?? 1) || 1
+    });
+  }
+
+  const corrosiveHitHtml = hasCorrosive
+    ? `<b>Corrosive (1d10):</b> ${Number(corrosiveRoll?.total ?? 0)} → Armour -${corrosiveArmourDamage}${corrosiveWoundDamage > 0 ? ` | Wounds +${corrosiveWoundDamage} (ignores armour & TB)` : ""}<br>`
+    : "";
+
   report += `
   <hr>
   <b>Hit ${hit.hit}</b> — <i>${prettyLoc(hit.location)}</i><br>
@@ -726,6 +756,7 @@ if (hit.fury){
   text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;
 ">${baseDamage}${extra?` + ${extra}`:""}</span><br>
 
+  ${corrosiveHitHtml}
   <b>Soak:</b> ${soak}<br>
 
   <b>Inflicted:</b> <span style="color:#ff2a2a;font-weight:900; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${inflicted}</span><br>
@@ -936,9 +967,19 @@ if (dmg.force?.resolved) {
 }
 
 // ===== UPDATE ACTOR (same as original logic) =====
+const armourUpdates = {};
+for (const key of armourLocationKeys) {
+  const startingArmour = Number(startingArmourByLocation[key] ?? 0);
+  const currentArmour = Number(armourValues?.[key]?.value ?? 0);
+  if (currentArmour !== startingArmour) {
+    armourUpdates[`system.armour.${key}.value`] = currentArmour;
+  }
+}
+
 await actor.update({
   "system.wounds.value": Math.min(woundsCurrent, woundsMax),
-  "system.wounds.critical": critCurrent
+  "system.wounds.critical": critCurrent,
+  ...armourUpdates
 });
 let critReport = "";
 
@@ -991,7 +1032,11 @@ if (realCritToApply > 0 && lastCritLocation){
   }
 }
 
-  const damageTypeHTML = getDamageTypeHTML(dmg.damageType);
+  const corrosiveSummary = hasCorrosive
+  ? `<hr><b>☣ CORROSIVE</b><br>Armour Damage: <b>${corrosiveArmourDamageTotal}</b>${corrosiveWoundsDamageTotal > 0 ? `<br>Direct Wounds: <b>${corrosiveWoundsDamageTotal}</b> (ignores armour & TB)` : ""}`
+  : "";
+
+const damageTypeHTML = getDamageTypeHTML(dmg.damageType);
   const reminderTraits = ["Crippling", "Sanctified", "Haywire"].filter((trait) =>
     (dmg.properties ?? []).some((property) => String(property ?? "").toLowerCase().includes(trait.toLowerCase()))
   );
@@ -1014,6 +1059,7 @@ const applySummary = `
 ${report}
 ${shockingOutcomeSummary}
 ${snareOutcomeSummary}
+${corrosiveSummary}
 ${trueGrit ? "<hr><i>True Grit applied</i>" : ""}
 ${armourIgnored ? `<br><i>Armour ignored${warpWeaponIgnoresArmour && !ignoreArmour ? " (Warp Weapon)" : ""}</i>` : ""}
 ${critReport}
