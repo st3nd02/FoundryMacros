@@ -1,4 +1,5 @@
 export async function runDefenseWorkflow() {
+try {
 /**
  * DH2e External Defense Workflow (Foundry V13)
  * Version: 1.4
@@ -409,8 +410,8 @@ if (game.warhammer40kCogitator?.consumeDefenseReaction) {
 
 ui.notifications.info("Defense resolved and workflow updated.");
 
-})().catch(err => {
+} catch (err) {
   console.error("DH2E external defense workflow failed", err);
   ui.notifications.error(`DH2E defense workflow failed: ${err.message ?? "Check console for details."}`);
-});
+}
 }
