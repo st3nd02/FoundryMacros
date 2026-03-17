@@ -1215,7 +1215,7 @@ class WorkflowHud {
 
       this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
 
-      const hudHost = document.getElementById("board") ?? document.getElementById("interface") ?? document.body;
+      const hudHost = document.getElementById("ui-top") ?? document.getElementById("interface") ?? document.body;
       hudHost.appendChild(this.element);
     }
 
