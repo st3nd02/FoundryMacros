@@ -1170,7 +1170,7 @@ class WorkflowHud {
     if (!this.element) {
       this.element = document.createElement("div");
       this.element.id = "warhammer40k-cogitator-workflow-hud";
-      this.element.style.position = "absolute";
+      this.element.style.position = "fixed";
       this.element.style.display = "flex";
       this.element.style.gap = "6px";
       this.element.style.padding = "8px";
@@ -1178,13 +1178,14 @@ class WorkflowHud {
       this.element.style.background = "rgba(12, 12, 12, 0.9)";
       this.element.style.border = "1px solid rgba(206, 206, 206, 0.45)";
       this.element.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.45)";
-      this.element.style.zIndex = "1000";
+      this.element.style.zIndex = "80";
       this.element.style.alignItems = "center";
       this.element.style.userSelect = "none";
+      this.element.style.pointerEvents = "all";
 
       this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
 
-      const hudHost = document.getElementById("hud") ?? document.body;
+      const hudHost = document.getElementById("interface") ?? document.body;
       hudHost.appendChild(this.element);
     }
 
