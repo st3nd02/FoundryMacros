@@ -634,7 +634,10 @@ let coverRemaining = coverStart;
 // ===== PULL STATS (same pattern as original) =====
 const TBtotal = actor.system.characteristics.toughness.total || 0;
 const TBunnat = actor.system.characteristics.toughness.unnatural || 0;
-const TB = Math.floor(TBtotal/10) + TBunnat;
+const TBBonus = Math.floor(TBtotal/10);
+const felling = Math.max(Number(dmg.felling ?? 0), 0);
+const effectiveUnnaturalTB = Math.max(TBunnat - felling, 0);
+const TB = TBBonus + effectiveUnnaturalTB;
 
 const woundsMax = actor.system.wounds.max;
 let woundsCurrent = actor.system.wounds.value;
@@ -926,8 +929,8 @@ if (realCritToApply > 0 && lastCritLocation){
 const applySummary = `
 <div style="text-align:center;">
 <b>Armour:</b><br>${armourBlock}<br>
-<b>Toughness Bonus:</b> ${Math.floor(TBtotal/10)}<br>
-<b>Unnatural Toughness:</b> ${TBunnat}
+<b>Toughness Bonus:</b> ${TBBonus}<br>
+<b>Unnatural Toughness:</b> ${TBunnat}${felling > 0 ? ` (Felling ${felling} → ${effectiveUnnaturalTB})` : ""}
 <hr>
 <b>Damage Type:</b> ${damageTypeHTML} <br>
 <b>Penetration:</b> ${dmg.penetration}<br>

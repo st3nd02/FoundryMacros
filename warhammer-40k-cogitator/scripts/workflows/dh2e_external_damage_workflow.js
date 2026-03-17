@@ -258,6 +258,7 @@ new Dialog({
         const meltaRange = "Short";
         const provenVal = parseTraitVal("proven", 1);
         const primitiveVal = parseTraitVal("primitive", 9);
+        const fellingVal = parseTraitVal("felling", 0);
         const aim = Number(entry.state?.aimMod ?? 0) > 0 ? "yes" : "no";
 
         const isD100Success = (roll, target) => roll === 1 ? true : (roll === 100 ? false : roll <= target);
@@ -379,6 +380,10 @@ new Dialog({
         if (razor && dos >= 3) {
           pen *= 2;
           properties.push("Razor Sharp");
+        }
+
+        if (fellingVal > 0) {
+          properties.push(`Felling (${fellingVal})`);
         }
 
         const hits = attackData.hits;
@@ -551,6 +556,7 @@ ${furyHtml}
           flame: traitTests.flame,
           spray: traitTests.spray,
           concussive: traitTests.concussive,
+          felling: fellingVal,
           sprayJam,
           force: traitTests.force,
           talentModifier: entry.state?.talentModifier ?? null,
