@@ -1,10 +1,11 @@
+export async function runDamageWorkflow() {
 /**
  * DH2e External Damage Workflow (Foundry V13)
  * Version: 1.3
  * Run this as the attacker owner to resolve pending damage on existing workflows.
  */
 
-(async () => {
+
 
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
@@ -252,8 +253,8 @@ new Dialog({
         const forceChannel = !!entry.state?.forceChanneling;
         const meltaRange = "Short";
         const scatterRange = "Short";
-        const provenVal = parseTraitVal("proven", 3);
-        const primitiveVal = parseTraitVal("primitive", 8);
+        const provenVal = parseTraitVal("proven", 1);
+        const primitiveVal = parseTraitVal("primitive", 9);
         const aim = Number(entry.state?.aimMod ?? 0) > 0 ? "yes" : "no";
 
         const isD100Success = (roll, target) => roll === 1 ? true : (roll === 100 ? false : roll <= target);
@@ -330,7 +331,7 @@ new Dialog({
           properties.push("Tearing");
         }
 
-        if (accurate && aim === "yes") {
+        if (accurate && wClass === "basic" && aim === "yes") {
           const extra = Math.min(Math.floor(dos / 2), 2);
           if (extra > 0) formula += ` + ${extra}d${dieType}`;
           properties.push("Accurate");
@@ -591,3 +592,4 @@ ${furyHtml}
   console.error("DH2E external damage workflow failed", err);
   ui.notifications.error("DH2E damage workflow failed. Check console for details.");
 });
+}

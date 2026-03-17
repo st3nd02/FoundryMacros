@@ -2,47 +2,48 @@
 
 ## Project Scope
 
-This repository now contains the **Warhammer 40k Cogitator** workflow project for Foundry VTT V13, focused on Dark Heresy 2e external combat orchestration.
+This repository contains the **Warhammer 40k Cogitator** Foundry VTT V13 module for Dark Heresy 2e workflow orchestration.
 
-## Included Deliverables
+## Module Architecture (Macro-Free)
 
-### Standalone Workflow Macros
+The module is now fully **macro-free at runtime**:
 
-- `macros/dh2e_external_attack_workflow.js` (Version 1.0)
-- `macros/dh2e_external_defense_workflow.js` (Version 1.0)
-- `macros/dh2e_external_damage_workflow.js` (Version 1.0)
-- `macros/dh2e_external_master_workflow.js` (Version 1.1)
-- `macros/dh2e_external_gm_master_workflow.js` (Version 1.0, GM-only)
-- `macros/dh2e_external_apply_damage_workflow.js` (Version 1.2, GM-only)
+- Workflow execution is driven directly by module code in `warhammer-40k-cogitator/scripts/main.js` and internal workflow handlers.
+- `runStep(step)` dispatches directly to module-owned handlers for:
+  - `attack`
+  - `defense`
+  - `damage`
+  - `master`
+  - `gmMaster`
+  - `applyDamage`
+- No `macro.execute()` fallback path is used by the launcher or Workflow HUD.
 
-These can be used directly as script macros.
-
-### Foundry Module Scaffold
-
-- `module.json` (single canonical manifest for Forge/Foundry installs)
-- `warhammer-40k-cogitator/scripts/main.js`
-- `warhammer-40k-cogitator/macros/*.js` (bundled copies of the workflow scripts)
-
-The module provides:
-
-1. **Project identity** as `warhammer-40k-cogitator` / "Warhammer 40k Cogitator".
-2. A launcher API (`game.warhammer40kCogitator.openLauncher()`) with **Attack / Defense / Damage / Skill Test / Characteristic Test** choices.
-3. Optional auto-creation of missing world macros from bundled module scripts.
-4. Configurable world settings for macro names (including master macro) and auto-create behavior.
-5. Socket-based player-to-player workflow coordination for defense requests and damage-ready prompts.
-6. Persistent, draggable, lockable canvas workflow HUD with player and GM-specific button sets.
-
-## Foundry V13 Usage (Module)
+## Runtime Usage
 
 1. Install as Foundry module `warhammer-40k-cogitator` using root manifest `module.json`.
 2. Ensure the installed folder name is `warhammer-40k-cogitator`.
 3. Enable the module in your world.
-4. Log in as a **GM** at least once after enabling (macro creation/update is GM-only).
-5. On world ready, the module auto-creates or updates Attack/Defense/Damage/Master plus GM Master/Apply Damage macros in the **Warhammer 40k Cogitator** macro folder (if enabled in settings).
-6. Players can run the auto-created **DH2e External Master Workflow** macro directly (recommended).
-7. Alternative launcher access:
-   - Keybinding `Ctrl+Shift+C`, or
-   - `game.warhammer40kCogitator.openLauncher()` in console.
+4. Use any of the built-in module entry points:
+   - Workflow HUD (canvas bar)
+   - Launcher hotkey `Ctrl+Shift+C`
+   - `game.warhammer40kCogitator.openLauncher()` from console
+
+Available launcher/HUD actions:
+
+- Player + GM: Attack, Defense, Damage, Skill Test, Characteristic Test
+- GM only: Apply Damage
+
+## Permissions and Networking
+
+- GM-only actions remain GM-only (including Apply Damage).
+- Player-available actions remain player-available.
+- Socket-based defense and damage coordination remains active for multi-user workflows.
+
+## Migration Notes
+
+- Legacy macro-related world settings from older versions are safely ignored.
+- No macro auto-create/update behavior is performed on startup.
+- Existing worlds with old macro settings continue loading without crashes.
 
 ## Forge / Manifest Troubleshooting
 
@@ -59,12 +60,3 @@ Direct Forge manifest URL:
 ### Forge-ready public manifest template
 
 A ready-to-fill public manifest template is included at `forge-manifest.template.json`.
-
-Use it like this:
-
-1. Confirm the repo/branch URLs match your intended release branch (currently `main`).
-2. Upload a release ZIP named `warhammer-40k-cogitator.zip` (or adjust `download`).
-3. Host/publish the final manifest at a raw JSON URL.
-4. Paste that raw manifest URL into Forge Content Creator.
-
-> Important: Forge generally needs a working `download` URL in the published manifest for install/update workflows.
