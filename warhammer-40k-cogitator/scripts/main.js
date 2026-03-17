@@ -1178,13 +1178,14 @@ class WorkflowHud {
       this.element.style.background = "rgba(12, 12, 12, 0.9)";
       this.element.style.border = "1px solid rgba(206, 206, 206, 0.45)";
       this.element.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.45)";
-      this.element.style.zIndex = "95";
+      this.element.style.zIndex = "1000";
       this.element.style.alignItems = "center";
       this.element.style.userSelect = "none";
 
       this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
 
-      document.body.appendChild(this.element);
+      const hudHost = document.getElementById("hud") ?? document.body;
+      hudHost.appendChild(this.element);
     }
 
     this.element.innerHTML = "";
@@ -1217,9 +1218,31 @@ class WorkflowHud {
     });
     this.element.appendChild(lockButton);
 
-    this.element.style.left = `${Math.round(x)}px`;
-    this.element.style.top = `${Math.round(y)}px`;
+    const { clampedX, clampedY } = this.getClampedPosition(x, y);
+    this.element.style.left = `${Math.round(clampedX)}px`;
+    this.element.style.top = `${Math.round(clampedY)}px`;
+
+    this.persistPositionIfChanged(clampedX, clampedY, x, y);
     this.element.style.cursor = this.locked ? "default" : "move";
+  }
+
+  getClampedPosition(x, y) {
+    const rawX = Number.isFinite(Number(x)) ? Number(x) : 24;
+    const rawY = Number.isFinite(Number(y)) ? Number(y) : 24;
+    const maxX = Math.max(window.innerWidth - this.element.offsetWidth - 8, 0);
+    const maxY = Math.max(window.innerHeight - this.element.offsetHeight - 8, 0);
+    const clampedX = Math.min(Math.max(rawX, 8), maxX);
+    const clampedY = Math.min(Math.max(rawY, 8), maxY);
+    return { clampedX, clampedY };
+  }
+
+  async persistPositionIfChanged(clampedX, clampedY, x, y) {
+    const originalX = Number.isFinite(Number(x)) ? Number(x) : 24;
+    const originalY = Number.isFinite(Number(y)) ? Number(y) : 24;
+    if (Math.round(clampedX) === Math.round(originalX) && Math.round(clampedY) === Math.round(originalY)) return;
+
+    await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudPosX, Math.round(clampedX));
+    await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudPosY, Math.round(clampedY));
   }
 
   onPointerDown(event) {
@@ -2234,4 +2257,3 @@ function reportLegacyMacroSettings() {
 
   console.info(`Warhammer 40k Cogitator | Legacy macro settings detected and ignored in macro-free mode: ${found.join(", ")}`);
 }
-
