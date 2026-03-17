@@ -1145,8 +1145,9 @@ function getWorkflowHudButtons() {
 }
 
 function refreshWorkflowHud() {
+  const activeCanvas = globalThis.canvas ?? game.canvas;
   const enabled = game.settings.get(COGITATOR_ID, SETTINGS.workflowHudEnabled);
-  if (!enabled || !canvas?.ready) {
+  if (!enabled || !activeCanvas?.ready) {
     removeWorkflowHud();
     return;
   }
@@ -1214,7 +1215,7 @@ class WorkflowHud {
 
       this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
 
-      const hudHost = document.getElementById("interface") ?? document.body;
+      const hudHost = document.getElementById("board") ?? document.getElementById("interface") ?? document.body;
       hudHost.appendChild(this.element);
     }
 
