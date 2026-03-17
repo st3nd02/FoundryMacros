@@ -976,8 +976,10 @@ async function applyDamageResult({ chatMessageId, targetTokenUuid, damageResult 
     fury: damageResult.fury,
     properties: damageResult.properties,
     toxic: damageResult.toxic,
+    shocking: damageResult.shocking,
     flame: damageResult.flame,
     spray: damageResult.spray,
+    concussive: damageResult.concussive,
     sprayJam: damageResult.sprayJam,
     force: damageResult.force
   };
