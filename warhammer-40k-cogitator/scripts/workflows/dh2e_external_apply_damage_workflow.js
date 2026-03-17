@@ -417,6 +417,8 @@ for (const msg of game.messages.contents) {
       target: target.name,
       targetTokenUuid: targetUuid,
       weapon: state.weaponName,
+      modeKey: state.modeKey ?? null,
+      modeLabel: state.modeLabel ?? null,
       damageType: "impact",
       penetration: 0,
       hits: (target.damageRolls ?? []).length,
@@ -890,6 +892,42 @@ if (dmg.hallucinogenic?.resolved) {
 
 let shockingOutcomeSummary = "";
 let snareOutcomeSummary = "";
+let suppressingOutcomeSummary = "";
+const suppressModeKey = String(dmg.modeKey ?? "").toLowerCase();
+const suppressingPenalty = suppressModeKey === "suppresssemi"
+  ? 10
+  : (suppressModeKey === "suppressfull" ? 20 : 0);
+
+if (suppressingPenalty > 0) {
+  const willpowerTotal = Math.max(1, Number(actor.system?.characteristics?.willpower?.total ?? 0));
+  const suppressingTarget = Math.max(1, willpowerTotal - suppressingPenalty);
+  const suppressingRoll = await new Roll("1d100").evaluate();
+  if (game.dice3d) await game.dice3d.showForRoll(suppressingRoll, game.user, true);
+  const resisted = suppressingRoll.total <= suppressingTarget && suppressingRoll.total !== 100;
+
+  report += `
+  <hr>
+  <b><span style='color:#f4d03f;'>🔻 SUPPRESSING FIRE WILLPOWER TEST</span></b><br>
+  Mode: <b>${dmg.modeLabel ?? dmg.modeKey ?? "Suppressing Fire"}</b><br>
+  Target: <b>${suppressingTarget}</b> (WP ${willpowerTotal} - ${suppressingPenalty})<br>
+  Roll: <b>${suppressingRoll.total}</b><br>
+  Result: ${resisted
+    ? "<span style='color:#6EC1FF;font-weight:900;'>SUCCESS</span> (Avoids Pinning)"
+    : "<span style='color:#ff9f1a;font-weight:900;'>FAILED</span> (<span style='color:#ffd200;font-weight:900;'>Pinned</span>)"}
+  `;
+
+  if (!resisted) {
+    await applyConvenientEffect(actor, {
+      effectId: "pinned",
+      effectName: "Pinned"
+    });
+  }
+
+  suppressingOutcomeSummary = resisted
+    ? `<br><b>${dmg.target}</b> passed Suppressing Fire WP test (${suppressingRoll.total}/${suppressingTarget}) and avoided pinning.`
+    : `<br><b>${dmg.target}</b> failed Suppressing Fire WP test (${suppressingRoll.total}/${suppressingTarget}) — <span style='color:#ffd200;font-weight:900;'>Pinned</span>.`;
+}
+
 const hasShocking = Boolean(dmg.shocking?.active)
   || (dmg.properties ?? []).some(p => String(p).toLowerCase().includes("shocking"));
 
@@ -1094,6 +1132,7 @@ const applySummary = `
 <b>Penetration:</b> ${dmg.penetration}<br>
 <b>Properties:</b> ${dmg.properties?.join(", ") || "None"}
 ${report}
+${suppressingOutcomeSummary}
 ${shockingOutcomeSummary}
 ${snareOutcomeSummary}
 ${corrosiveSummary}

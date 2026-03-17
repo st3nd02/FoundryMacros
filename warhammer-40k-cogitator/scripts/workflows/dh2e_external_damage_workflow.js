@@ -624,6 +624,8 @@ ${furyHtml}
           target: attackData.target,
           targetTokenUuid: attackData.targetTokenUuid,
           weapon: attackData.weapon,
+          modeKey: entry.state?.modeKey ?? null,
+          modeLabel: entry.state?.modeLabel ?? null,
           damageType,
           penetration: pen,
           hits,
