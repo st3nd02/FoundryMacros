@@ -821,6 +821,7 @@ if (dmg.toxic?.resolved) {
 }
 
 let shockingOutcomeSummary = "";
+let snareOutcomeSummary = "";
 const hasShocking = Boolean(dmg.shocking?.active)
   || (dmg.properties ?? []).some(p => String(p).toLowerCase().includes("shocking"));
 
@@ -854,6 +855,37 @@ if (hasShocking && totalInflicted > 0) {
     });
     shockingOutcomeSummary = `<br><b>${dmg.target}</b> is <span style='color:#00b3ff;font-weight:900;'>stunned</span> for <b>${dof}</b> round${dof === 1 ? "" : "s"}.`;
   }
+}
+
+
+const snareProperty = (dmg.properties ?? []).find((property) => /snare/i.test(String(property ?? "")));
+const snareValue = snareProperty
+  ? Number(String(snareProperty).match(/snare\s*\((\d+)\)/i)?.[1] ?? 0)
+  : 0;
+const hasSnare = Boolean(snareProperty);
+
+if (hasSnare && totalInflicted > 0) {
+  const agilityTotal = Number(actor.system?.characteristics?.agility?.total ?? 0);
+  const snarePenalty = snareValue * 10;
+  const snareTarget = Math.max(1, agilityTotal - snarePenalty);
+  const snareRoll = await new Roll("1d100").evaluate();
+  if (game.dice3d) await game.dice3d.showForRoll(snareRoll, game.user, true);
+
+  const succeeded = snareRoll.total <= snareTarget && snareRoll.total !== 100;
+
+  report += `
+  <hr>
+  <b><span style='color:#89d185;'>🪤 SNARE AGILITY TEST</span></b><br>
+  Target: <b>${snareTarget}</b> ${snarePenalty > 0 ? `(Ag ${agilityTotal} - ${snarePenalty})` : ""}<br>
+  Roll: <b>${snareRoll.total}</b><br>
+  Result: ${succeeded
+    ? "<span style='color:#6EC1FF;font-weight:900;'>SUCCESS</span>"
+    : "<span style='color:#ff9f1a;font-weight:900;'>FAILED</span>"}
+  `;
+
+  snareOutcomeSummary = succeeded
+    ? `<br><b>${dmg.target}</b> avoided the <span style='color:#89d185;font-weight:900;'>Snare</span>.`
+    : `<br><b>${dmg.target}</b> is <span style='color:#89d185;font-weight:900;'>Immobilized</span> by <span style='color:#89d185;font-weight:900;'>Snare</span>.`;
 }
 
 if (dmg.force?.resolved) {
@@ -981,6 +1013,7 @@ const applySummary = `
 <b>Properties:</b> ${dmg.properties?.join(", ") || "None"}
 ${report}
 ${shockingOutcomeSummary}
+${snareOutcomeSummary}
 ${trueGrit ? "<hr><i>True Grit applied</i>" : ""}
 ${armourIgnored ? `<br><i>Armour ignored${warpWeaponIgnoresArmour && !ignoreArmour ? " (Warp Weapon)" : ""}</i>` : ""}
 ${critReport}

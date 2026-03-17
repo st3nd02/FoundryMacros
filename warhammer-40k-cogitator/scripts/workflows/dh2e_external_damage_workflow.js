@@ -243,6 +243,7 @@ new Dialog({
         const flame = hasTrait("flame");
         const toxic = hasTrait("toxic");
         const shocking = hasTrait("shocking");
+        const snare = hasTrait("snare");
         const warpWeapon = hasTrait("warp weapon");
         const parseTraitVal = (name, d=0) => {
           const mm = traitsText.match(new RegExp(name + "\\s*\\((\\d+)\\)"));
@@ -261,6 +262,7 @@ new Dialog({
         const provenVal = parseTraitVal("proven", 1);
         const primitiveVal = parseTraitVal("primitive", 9);
         const fellingVal = parseTraitVal("felling", 0);
+        const snareVal = parseTraitVal("snare", 0);
         const aim = Number(entry.state?.aimMod ?? 0) > 0 ? "yes" : "no";
 
         const isD100Success = (roll, target) => roll === 1 ? true : (roll === 100 ? false : roll <= target);
@@ -523,6 +525,7 @@ new Dialog({
         }
 
         if (warpWeapon) properties.push("Warp Weapon");
+        if (snare) properties.push(snareVal > 0 ? `Snare (${snareVal})` : "Snare");
 
         const testSummary = [traitTests.flame, traitTests.spray, traitTests.toxic, traitTests.concussive].filter(Boolean)
           .map(t => `<div><b>${t.label} Test</b> (${t.target}) Roll ${t.roll}: <b>${t.success ? "Success" : "Failure"}</b>${typeof t.damage === "number" ? ` | Extra Damage: <b>${t.damage}</b>` : ""}</div>`)
