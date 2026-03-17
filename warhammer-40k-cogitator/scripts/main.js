@@ -1214,11 +1214,14 @@ class WorkflowHud {
       this.element.style.alignItems = "center";
       this.element.style.userSelect = "none";
       this.element.style.pointerEvents = "all";
+      this.element.style.opacity = "1";
+      this.element.style.visibility = "visible";
 
       this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
+    }
 
-      const hudHost = document.getElementById("interface") ?? document.body;
-      hudHost.appendChild(this.element);
+    if (!this.element.isConnected) {
+      this.attachToDom();
     }
 
     this.element.innerHTML = "";
@@ -1257,6 +1260,11 @@ class WorkflowHud {
 
     this.persistPositionIfChanged(clampedX, clampedY, x, y);
     this.element.style.cursor = this.locked ? "default" : "move";
+  }
+
+  attachToDom() {
+    const hudHost = document.body;
+    hudHost.appendChild(this.element);
   }
 
   getClampedPosition(x, y) {
