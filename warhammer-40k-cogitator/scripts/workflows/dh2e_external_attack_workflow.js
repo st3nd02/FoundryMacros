@@ -1346,8 +1346,9 @@ if (setup.toggles?.whirlwind) {
 const selectedWeapon = attacker.items.get(setup.weaponId);
 const setupTraits = parseWeaponTraits(selectedWeapon ?? { system: { special: "" } });
 const isSprayWeapon = hasTrait(setupTraits, "spray");
+const isBlastWeapon = hasTrait(setupTraits, "blast");
 const singleTargetModes = ["single","called","standard"];
-if (!setup.toggles?.whirlwind && !isSprayWeapon && singleTargetModes.includes(setup.modeKey) && setup.targetConfigs.length > 1) {
+if (!setup.toggles?.whirlwind && !isSprayWeapon && !isBlastWeapon && singleTargetModes.includes(setup.modeKey) && setup.targetConfigs.length > 1) {
   ui.notifications.warn("Selected attack type can only target one opponent.");
   return;
 }
