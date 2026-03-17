@@ -252,8 +252,8 @@ new Dialog({
         const forceChannel = !!entry.state?.forceChanneling;
         const meltaRange = "Short";
         const scatterRange = "Short";
-        const provenVal = parseTraitVal("proven", 3);
-        const primitiveVal = parseTraitVal("primitive", 8);
+        const provenVal = parseTraitVal("proven", 1);
+        const primitiveVal = parseTraitVal("primitive", 9);
         const aim = Number(entry.state?.aimMod ?? 0) > 0 ? "yes" : "no";
 
         const isD100Success = (roll, target) => roll === 1 ? true : (roll === 100 ? false : roll <= target);
