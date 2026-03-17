@@ -242,6 +242,7 @@ new Dialog({
         const spray = hasTrait("spray");
         const flame = hasTrait("flame");
         const toxic = hasTrait("toxic");
+        const hallucinogenic = hasTrait("hallucinogenic");
         const shocking = hasTrait("shocking");
         const snare = hasTrait("snare");
         const warpWeapon = hasTrait("warp weapon");
@@ -445,7 +446,7 @@ new Dialog({
 
         const targetDoc = await fromUuid(attackData.targetTokenUuid);
         const targetActor = targetDoc?.actor;
-        const traitTests = { toxic: null, flame: null, spray: null, concussive: null, force: null };
+        const traitTests = { toxic: null, flame: null, spray: null, concussive: null, hallucinogenic: null, force: null };
 
         const rollCharacteristicTest = async ({ total, label, modifier = 0 }) => {
           const target = Math.max(1, Number(total || 0) + Number(modifier || 0));
@@ -469,6 +470,60 @@ new Dialog({
           }
           traitTests.toxic = { value: toxicValue, ...test, damage: toxicDamage, resolved: true };
           properties.push(`Toxic (${toxicValue})`);
+        }
+
+        const hallucinogenicResultTable = {
+          1: "Bugsbugsbugsbugs! The character drops to the floor, flailing and screaming as he tries to claw off imaginary insects devouring his skin and flesh. The character gains the Prone and Stunned conditions.",
+          2: "My hands…! The character believes his hands have turned into slimy tentacles, or perhaps the flesh has begun to strip off the bone in bloody lumps. Regardless of the particulars, the character drops everything he is carrying and spends the duration staring at his hands and screaming. The character is Stunned.",
+          3: "They're coming through the walls! The character sees gruesome aliens bursting through the walls/ceiling/floor/bushes and opens fire. The character must spend each turn firing at a random piece of terrain within his line of sight. Any creatures caught in the line of fire are subject to attacks as normal. Each round, choose a new target at random (use the Scatter Diagram) to determine which direction that is, with a "7" meaning he shoots the ground, and a "10" meaning he fires wildly into the air.",
+          4: "Nobody can see me! The character believes he is invisible and wanders aimlessly, making faces at those around him. He waddles about in random directions each round (use the Scatter Diagram), using a Full Action to move. The character retains his Reactions.",
+          5: "I can fly! The sky looks so big and inviting, the character flaps his arms trying to imitate a pterasquirrel. He might do nothing but jump up and down on the spot. If he is standing above ground level, he may throw himself off in a random direction, with the usual consequences for falling—appalling injury or death being the likely outcomes.",
+          6: "They've got it in for me…! The character is overcome with paranoia, believing even his own comrades are out to get him. On the character's turn, he must move to a position of cover, getting out of line of sight from any other characters. He remains hidden until the effect ends, moving to new cover as needed to stay as hidden as possible.",
+          7: "They got me! The character believes that the gas is toxic and collapses to the floor as if dead; he counts as being Helpless. Other characters who sees him "die" must pass a Challenging (+0) Intelligence test; should they fail then they also think the character is dead.",
+          8: "I'll take you all on! The character is filled with a burning rage and a desire for violence. The character becomes Frenzied (see page 127) for the duration of the effects, and must attack the closest opponent.",
+          9: "I'm only little! The character believes he has shrunk to half his normal size and everything else is big and frightening now. All other characters count as having the Fear (3) trait to the character.",
+          10: "The worms! The character desperately tries to remove a massive fanged worm he thinks is slowly winding its way up his leg. If holding a gun, he shoots himself with it or, if not, he hits himself in the leg with whatever melee weapon he is holding. If the character is currently holding no weapon, he draws a random weapon from those he carries and attacks himself with it. Randomly determine which leg the character believes to be trapped by the worm. The attack automatically inflicts a single hit with 1d5 degrees of success that deals damage normally."
+        };
+
+        if (hallucinogenic && !isHordeTarget) {
+          const hallucinogenicValue = parseTraitVal("hallucinogenic", 1);
+          const hasRespirator = targetActor?.items?.some(item => String(item?.type ?? "").toLowerCase() === "gear" && /respirator/i.test(String(item?.name ?? "")));
+          const respiratorBonus = hasRespirator ? 20 : 0;
+          const hallucinogenicPenalty = 10 * hallucinogenicValue;
+          const test = await rollCharacteristicTest({
+            total: targetActor?.system?.characteristics?.toughness?.total ?? 0,
+            label: "Toughness",
+            modifier: respiratorBonus - hallucinogenicPenalty
+          });
+
+          let effectRollTotal = null;
+          let dof = 0;
+          let resultText = null;
+          let resultInlineRolls = null;
+          if (!test.success) {
+            const effectRoll = await new Roll("1d10").evaluate();
+            if (game.dice3d) await game.dice3d.showForRoll(effectRoll, game.user, true);
+            effectRollTotal = effectRoll.total;
+            dof = Math.max(1, 1 + Math.floor((test.roll - test.target) / 10));
+            resultText = hallucinogenicResultTable[effectRollTotal] ?? "";
+            if (effectRollTotal === 3 || effectRollTotal === 4) resultInlineRolls = 'Scatter Diagram: [[/r 1d10]]';
+            if (effectRollTotal === 10) resultInlineRolls = '1d5 degrees of success: [[/r 1d5]]';
+          }
+
+          traitTests.hallucinogenic = {
+            value: hallucinogenicValue,
+            respiratorBonus,
+            hasRespirator: Boolean(hasRespirator),
+            penalty: hallucinogenicPenalty,
+            ...test,
+            dof,
+            effectRoll: effectRollTotal,
+            resultText,
+            resultInlineRolls,
+            duration: dof,
+            resolved: true
+          };
+          properties.push(`Hallucinogenic (${hallucinogenicValue})`);
         }
 
         if (shocking && !isHordeTarget) {
@@ -532,6 +587,9 @@ new Dialog({
         const testSummary = [traitTests.flame, traitTests.spray, traitTests.toxic, traitTests.concussive].filter(Boolean)
           .map(t => `<div><b>${t.label} Test</b> (${t.target}) Roll ${t.roll}: <b>${t.success ? "Success" : "Failure"}</b>${typeof t.damage === "number" ? ` | Extra Damage: <b>${t.damage}</b>` : ""}</div>`)
           .join("");
+        const hallucinogenicSummary = traitTests.hallucinogenic
+          ? `<div><b>Hallucinogenic (${traitTests.hallucinogenic.value}) Toughness Test</b> (Target ${traitTests.hallucinogenic.target}${traitTests.hallucinogenic.respiratorBonus ? ` = Toughness ${traitTests.hallucinogenic.target + traitTests.hallucinogenic.penalty - traitTests.hallucinogenic.respiratorBonus} - ${traitTests.hallucinogenic.penalty} + ${traitTests.hallucinogenic.respiratorBonus} (Respirator)` : ""}) Roll ${traitTests.hallucinogenic.roll}: <b>${traitTests.hallucinogenic.success ? "Target resisted the hallucinogenic effect" : `FAILED | Duration: <b>${traitTests.hallucinogenic.duration}</b> round${traitTests.hallucinogenic.duration === 1 ? "" : "s"}`}</b>${traitTests.hallucinogenic.success ? "" : `<div style="margin-top:4px;">${traitTests.hallucinogenic.resultText ?? ""}</div>${traitTests.hallucinogenic.resultInlineRolls ? `<div>${traitTests.hallucinogenic.resultInlineRolls}</div>` : ""}`}</div>`
+          : "";
         const forceSummary = traitTests.force
           ? `<div><b>Force Opposed WP</b> Attacker ${traitTests.force.attackerRoll}/${traitTests.force.attackerWP} (DoS ${traitTests.force.attackerDoS}) vs Target ${traitTests.force.targetRoll}/${traitTests.force.targetWP} (DoS ${traitTests.force.targetDoS}) → <b>${traitTests.force.won ? `Attacker Wins (${traitTests.force.dos}d10 = ${traitTests.force.result})` : "Target Resists"}</b></div>`
           : "";
@@ -550,7 +608,7 @@ new Dialog({
 <div><b>Penetration:</b> ${pen}</div>
 ${damageResults.map((d, i) => `<div><span style="font-weight:700;color:#000;">Damage done:</span> <span style="font-weight:700;color:#000;">${d}</span> <i style="font-weight:400;">${hitLocations[i]}</i></div>`).join("")}
 <div style="margin-top:6px;"><b>Properties:</b> ${properties.join(", ") || "None"}</div>
-${testSummary}${forceSummary}${sprayJamHtml}
+${testSummary}${hallucinogenicSummary}${forceSummary}${sprayJamHtml}
 ${furyHtml}
 </div>`;
 
@@ -571,6 +629,7 @@ ${furyHtml}
           flame: traitTests.flame,
           spray: traitTests.spray,
           concussive: traitTests.concussive,
+          hallucinogenic: traitTests.hallucinogenic,
           felling: fellingVal,
           sprayJam,
           force: traitTests.force,
