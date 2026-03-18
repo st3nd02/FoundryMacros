@@ -358,6 +358,10 @@ function stylizeCriticalText(text){
 }
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
+const STUNNED_EFFECT_ID = "ce-(whc)-stunned";
+const STUNNED_EFFECT_NAME = "Stunned";
+const BLOOD_LOSS_EFFECT_ID = "ce-(whc)-blood-loss";
+const BLOOD_LOSS_EFFECT_NAME = "Blood Loss";
 
 const buildWorkflowHtml = state => {
   const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${text}</span>`;
@@ -556,6 +560,24 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, counter =
   return true;
 }
 
+function extractStunnedRounds(text) {
+  if (!text) return 0;
+  const plain = String(text).replace(/<[^>]*>/g, " ");
+  let rounds = 0;
+  const regex = /stunned\s+for\s+(\d+)\s*round/gi;
+  let match;
+  while ((match = regex.exec(plain)) !== null) {
+    rounds += Math.max(0, Number(match[1] ?? 0));
+  }
+  return rounds;
+}
+
+function textMentionsBloodLoss(text) {
+  if (!text) return false;
+  const plain = String(text).replace(/<[^>]*>/g, " ");
+  return /\bblood\s+loss\b/i.test(plain);
+}
+
 function prettyLoc(loc){
   return loc.replace(/([A-Z])/g," $1").replace(/^./,s=>s.toUpperCase());
 }
@@ -696,6 +718,8 @@ const startingArmourByLocation = Object.fromEntries(
 );
 
 let report = "";
+let pendingStunnedRounds = extractStunnedRounds((dmg.properties ?? []).join(" | "));
+let pendingBloodLoss = textMentionsBloodLoss((dmg.properties ?? []).join(" | "));
 let lastCritLocation = null;
 let realCritToApply = 0;
 let furyCrits = [];
@@ -856,11 +880,7 @@ if (dmg.concussive?.resolved) {
   `;
 
   if (!dmg.concussive.success) {
-    await applyConvenientEffect(actor, {
-      effectId: "stunned",
-      effectName: "Stunned",
-      counter: stunRounds
-    });
+    pendingStunnedRounds += stunRounds;
   }
 }
 
@@ -998,11 +1018,7 @@ if (hasShocking && totalInflicted > 0) {
   } else {
     const currentFatigue = Number(actor.system?.fatigue?.value ?? 0);
     await actor.update({ "system.fatigue.value": currentFatigue + 1 });
-    await applyConvenientEffect(actor, {
-      effectId: "stunned",
-      effectName: "Stunned",
-      counter: dof
-    });
+    pendingStunnedRounds += dof;
     shockingOutcomeSummary = `<br><b>${dmg.target}</b> is <span style='color:#00b3ff;font-weight:900;'>stunned</span> for <b>${dof}</b> round${dof === 1 ? "" : "s"}.`;
   }
 }
@@ -1116,6 +1132,8 @@ for (let i = 0; i < furyCrits.length; i++){
   let text = getCritText(critType, loc, fury.value);
   if (text){
     text = await rollInlineDice(text);
+    pendingStunnedRounds += extractStunnedRounds(text);
+    pendingBloodLoss = pendingBloodLoss || textMentionsBloodLoss(text);
     text = stylizeCriticalText(text);
 
     critReport += `
@@ -1138,6 +1156,8 @@ if (realCritToApply > 0 && lastCritLocation){
 
   if (text){
     text = await rollInlineDice(text);
+    pendingStunnedRounds += extractStunnedRounds(text);
+    pendingBloodLoss = pendingBloodLoss || textMentionsBloodLoss(text);
     text = stylizeCriticalText(text);
 
     critReport += `
@@ -1149,6 +1169,43 @@ if (realCritToApply > 0 && lastCritLocation){
     ${text}
     `;
   }
+}
+
+if (pendingStunnedRounds > 0) {
+  const existingStunned = actor.effects.find(effect => {
+    const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+    const ids = statuses.map(status => String(status ?? "").toLowerCase());
+    const coreStatus = String(effect.flags?.core?.statusId ?? "").toLowerCase();
+    const dfredsId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
+    const name = String(effect.name ?? "").toLowerCase();
+    return ids.includes(STUNNED_EFFECT_ID) || coreStatus === STUNNED_EFFECT_ID || dfredsId === STUNNED_EFFECT_ID || name === STUNNED_EFFECT_NAME.toLowerCase();
+  });
+
+  const existingCounter = Number(
+    existingStunned?.flags?.statuscounter?.counter?.value
+    ?? existingStunned?.flags?.statuscounter?.counter
+    ?? existingStunned?.flags?.statusIconCounters?.value
+    ?? existingStunned?.flags?.statusIconCounters?.counter
+    ?? existingStunned?.flags?.["status-icon-counters"]?.value
+    ?? existingStunned?.flags?.["status-icon-counters"]?.counter
+    ?? existingStunned?.flags?.["status-icon-counter"]?.value
+    ?? existingStunned?.flags?.["status-icon-counter"]?.counter
+    ?? 0
+  );
+  const existingStacks = existingStunned ? (existingCounter > 0 ? existingCounter : 1) : 0;
+
+  await applyConvenientEffect(actor, {
+    effectId: STUNNED_EFFECT_ID,
+    effectName: STUNNED_EFFECT_NAME,
+    counter: existingStacks + pendingStunnedRounds
+  });
+}
+
+if (pendingBloodLoss) {
+  await applyConvenientEffect(actor, {
+    effectId: BLOOD_LOSS_EFFECT_ID,
+    effectName: BLOOD_LOSS_EFFECT_NAME
+  });
 }
 
   const corrosiveSummary = hasCorrosive

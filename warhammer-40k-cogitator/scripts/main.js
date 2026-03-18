@@ -27,12 +27,12 @@ const REACTION_FLAG = "reactionUsedForDefense";
 const REACTION_COUNT_FLAG = "reactionUsedForDefenseCount";
 const REACTION_EFFECT_NAME = "Reaction Used";
 const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
-const USED_EVASION_EFFECT_ID = "ce-used-evasion";
+const USED_EVASION_EFFECT_ID = "ce-(whc)-used-evasion";
 const DEVASTATING_ASSAULT_EFFECT_ID = "ce-devastating-assault";
 const DEVASTATING_ASSAULT_EFFECT_NAME = "Devastating Assault";
 const DOUBLE_TAP_EFFECT_ID = "ce-double-tap";
 const DOUBLE_TAP_EFFECT_NAME = "Double Tap";
-const WEAPON_RECHARGING_EFFECT_ID = "weapon-recharging";
+const WEAPON_RECHARGING_EFFECT_ID = "ce-(whc)-weapon-recharging";
 const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
 let cogitatorSocket = null;
 let pendingDefenseContext = null;
@@ -366,9 +366,12 @@ async function removeUsedEvasionEffect(actor) {
 
   const actorEffectsToDelete = actor.effects
     .filter(effect => {
-      const statusId = String(effect.statuses?.first?.() ?? effect.flags?.core?.statusId ?? "").toLowerCase();
+      const statusValues = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+      const statusIds = statusValues.map(status => String(status ?? "").toLowerCase());
+      const coreStatus = String(effect.flags?.core?.statusId ?? "").toLowerCase();
+      const effectId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
       const effectName = String(effect.name ?? "").toLowerCase();
-      return statusId === USED_EVASION_EFFECT_ID || effectName.includes("used evasion") || effectName === USED_EVASION_EFFECT_ID;
+      return statusIds.includes(USED_EVASION_EFFECT_ID) || coreStatus === USED_EVASION_EFFECT_ID || effectId === USED_EVASION_EFFECT_ID || effectName.includes("used evasion") || effectName === USED_EVASION_EFFECT_ID;
     })
     .map(effect => effect.id)
     .filter(Boolean);
