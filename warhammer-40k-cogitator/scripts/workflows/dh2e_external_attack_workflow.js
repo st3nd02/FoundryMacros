@@ -739,6 +739,18 @@ const runAttackWorkflow = async setup => {
     modifierNotes.push("Defensive -10");
   }
 
+  if (t.precisionMelee && isMelee && setup.modeKey === "called") {
+    sharedMod += 20;
+    talentModifier.attack.attackRoll += 20;
+    talentModifier.attack.notes.push("Precision Killer (Melee) +20 (ignores Called Shot penalty)");
+    selectedTalents.push("Precision Killer (Melee) (ignore Called Shot penalty)");
+  }
+  if (t.precisionRanged && !isMelee && setup.modeKey === "called") {
+    sharedMod += 20;
+    talentModifier.attack.attackRoll += 20;
+    talentModifier.attack.notes.push("Precision Killer (Ranged) +20 (ignores Called Shot penalty)");
+    selectedTalents.push("Precision Killer (Ranged) (ignore Called Shot penalty)");
+  }
   if (t.deadeye && !isMelee && setup.modeKey === "called") {
     sharedMod += 10;
     talentModifier.attack.attackRoll += 10;
@@ -773,6 +785,7 @@ const runAttackWorkflow = async setup => {
   if (t.flesh && isMelee) selectedTalents.push("Flesh Render");
   if (t.raptor) selectedTalents.push("Raptor");
   if (t.forceChannel) selectedTalents.push("Force Channeling");
+  if (t.nowhereToHide) selectedTalents.push("Nowhere to Hide (auto)");
   const inescapableApplies = !!(
     (
       isMelee &&
@@ -1207,6 +1220,7 @@ const showAttackDialog = async () => {
             <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
             <label class="talent-toggle talent-auto" data-needle="flesh render"><input type="checkbox" id="talent_flesh" disabled/> Flesh Render (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="inescapable attack (melee)"><input type="checkbox" id="talent_inescapable_melee" disabled/> Inescapable Attack (Melee) (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="precision killer (melee)"><input type="checkbox" id="talent_precision_melee" disabled/> Precision Killer (Melee) (auto)</label>
             <label class="talent-toggle" data-needle="raptor"><input type="checkbox" id="talent_raptor"/> Raptor</label>
             <label class="talent-toggle" data-needle="whirlwind"><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
           </div>
@@ -1221,6 +1235,8 @@ const showAttackDialog = async () => {
             <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (ranged)"><input type="checkbox" id="talent_twm_ranged" disabled/> Two-Weapon Wielder (Ranged) (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="two weapon master"><input type="checkbox" id="talent_master" disabled/> Two Weapon Master (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="inescapable attack (ranged)"><input type="checkbox" id="talent_inescapable_ranged" disabled/> Inescapable Attack (Ranged) (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="precision killer (ranged)"><input type="checkbox" id="talent_precision_ranged" disabled/> Precision Killer (Ranged) (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="nowhere to hide"><input type="checkbox" id="talent_nowhere_to_hide" disabled/> Nowhere to Hide (auto)</label>
           </div>
         </div>
         <hr><h3>Targets</h3>
@@ -1267,7 +1283,10 @@ const showAttackDialog = async () => {
             talent_flesh: hasTalent(attacker, "flesh render") && isMelee && isTearingWeapon,
             talent_raptor: hasTalent(attacker, "raptor") && isMelee && modeKey === "charge",
             talent_inescapable_melee: hasTalent(attacker, "inescapable attack (melee)") && isMelee && ["standard", "called", "charge", "allout"].includes(modeKey),
-            talent_inescapable_ranged: hasTalent(attacker, "inescapable attack (ranged)") && !isMelee && ["single", "called"].includes(modeKey)
+            talent_inescapable_ranged: hasTalent(attacker, "inescapable attack (ranged)") && !isMelee && ["single", "called"].includes(modeKey),
+            talent_precision_melee: hasTalent(attacker, "precision killer (melee)") && isMelee && modeKey === "called",
+            talent_precision_ranged: hasTalent(attacker, "precision killer (ranged)") && !isMelee && modeKey === "called",
+            talent_nowhere_to_hide: hasTalent(attacker, "nowhere to hide")
           };
 
           const showById = {
@@ -1373,6 +1392,9 @@ const showAttackDialog = async () => {
           html.find("#talent_raptor").prop("checked", !!pt.raptor);
           html.find("#talent_inescapable_melee").prop("checked", !!pt.inescapableMelee);
           html.find("#talent_inescapable_ranged").prop("checked", !!pt.inescapableRanged);
+          html.find("#talent_precision_melee").prop("checked", !!pt.precisionMelee);
+          html.find("#talent_precision_ranged").prop("checked", !!pt.precisionRanged);
+          html.find("#talent_nowhere_to_hide").prop("checked", !!pt.nowhereToHide);
           html.find("#talent_force_channel").prop("checked", !!pt.forceChannel);
         }
 
@@ -1438,6 +1460,9 @@ const showAttackDialog = async () => {
                 raptor: html.find("#talent_raptor")[0].checked,
                 inescapableMelee: html.find("#talent_inescapable_melee")[0].checked,
                 inescapableRanged: html.find("#talent_inescapable_ranged")[0].checked,
+                precisionMelee: html.find("#talent_precision_melee")[0].checked,
+                precisionRanged: html.find("#talent_precision_ranged")[0].checked,
+                nowhereToHide: html.find("#talent_nowhere_to_hide")[0].checked,
                 forceChannel: html.find("#talent_force_channel")[0].checked
               },
               detectedItems: detectWeaponItems(attacker, attacker.items.get(html.find("#weaponId").val()))

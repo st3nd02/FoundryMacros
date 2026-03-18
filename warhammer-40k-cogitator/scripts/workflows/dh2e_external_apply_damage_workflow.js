@@ -662,6 +662,20 @@ dmg.talentModifier = dmg.talentModifier ?? {
 dmg.talentModifier.applyDamage.notes.push("Apply Damage workflow resolved.");
 
 let coverRemaining = coverStart;
+const selectedTalents = Array.isArray(dmg.selectedTalents) ? dmg.selectedTalents : [];
+const nowhereToHideActive = !!dmg.nowhereToHideActive || selectedTalents.some((name) => String(name ?? "").toLowerCase().includes("nowhere to hide"));
+const isSprayOrBlast = !!dmg.spray?.resolved || (Array.isArray(dmg.properties) && dmg.properties.some((property) => {
+  const text = String(property ?? "").toLowerCase();
+  return text.includes("spray") || text.includes("blast");
+}));
+const nowhereToHideReduction = nowhereToHideActive
+  ? Math.max(0, isSprayOrBlast ? 1 : Number(dmg.dos ?? 0))
+  : 0;
+if (nowhereToHideReduction > 0) {
+  const beforeCover = coverRemaining;
+  coverRemaining = Math.max(coverRemaining - nowhereToHideReduction, 0);
+  dmg.talentModifier.applyDamage.notes.push(`Nowhere to Hide: cover ${beforeCover} -> ${coverRemaining} (reduced by ${nowhereToHideReduction}${isSprayOrBlast ? ", Spray/Blast rule" : " from DoS"})`);
+}
 
 // ===== PULL STATS (same pattern as original) =====
 const TBtotal = actor.system.characteristics.toughness.total || 0;
@@ -794,6 +808,8 @@ for (let hit of dmg.hitsData){
   <b>Wounds:</b> ${woundsBefore} → ${woundsCurrent}/${woundsMax}<br>
 
   <b>Critical Damage:</b> ${critDamage} (${critCurrent} total)
+
+  ${hit.hit === 1 && nowhereToHideReduction > 0 ? `<b>Nowhere to Hide:</b> Cover reduced by ${nowhereToHideReduction}${isSprayOrBlast ? " (Spray/Blast)" : ` (DoS ${Number(dmg.dos ?? 0)})`}<br>` : ""}
 
  <span style="
     color:gold;
