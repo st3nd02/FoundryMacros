@@ -11,6 +11,8 @@ try {
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const DOUBLE_TAP_TARGET_FLAG = "doubleTapEligibleTargetUuid";
+const WEAPON_RECHARGING_EFFECT_ID = "ce-(whc)-weapon-recharging";
+const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
 
 const createTalentModifierState = () => ({
   attack: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
@@ -177,6 +179,21 @@ const parseWeaponTraits = weapon =>
   (weapon.system.special ?? "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
 const hasTrait = (traits, key) => traits.some(t => t.includes(key));
 const hasWeaponSpecial = (weapon, keyword) => String(weapon?.system?.special ?? "").toLowerCase().includes(String(keyword).toLowerCase());
+const actorHasEffect = (actorDoc, { effectId = "", effectName = "" }) => {
+  if (!actorDoc) return false;
+  const effectIdLc = String(effectId ?? "").toLowerCase();
+  const effectNameLc = String(effectName ?? "").toLowerCase();
+  return actorDoc.effects.some(effect => {
+    const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+    const statusIds = statuses.map(status => String(status ?? "").toLowerCase());
+    const coreStatus = String(effect.flags?.core?.statusId ?? "").toLowerCase();
+    const ceId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
+    const name = String(effect.name ?? "").toLowerCase();
+    if (effectIdLc && (statusIds.includes(effectIdLc) || coreStatus === effectIdLc || ceId === effectIdLc || name === effectIdLc)) return true;
+    if (effectNameLc && name.includes(effectNameLc)) return true;
+    return false;
+  });
+};
 const parseTraitNumber = (traits, key, fallback = 0) => {
   const trait = traits.find(t => t.includes(key));
   if (!trait) return fallback;
@@ -1337,7 +1354,9 @@ const showAttackDialog = async () => {
           html.find("#weaponTraitsDisplay").text(weaponDoc?.system?.special?.trim() || "None");
 
           const wType = (weaponDoc?.system?.type ?? "").toLowerCase();
-          const availablePowerModes = POWER_MODE_OPTIONS_BY_TYPE[wType] ?? [1];
+          const basePowerModes = POWER_MODE_OPTIONS_BY_TYPE[wType] ?? [1];
+          const isRecharging = actorHasEffect(attacker, { effectId: WEAPON_RECHARGING_EFFECT_ID, effectName: WEAPON_RECHARGING_EFFECT_NAME });
+          const availablePowerModes = basePowerModes.filter(modeKey => !(isRecharging && Number(modeKey) === 3));
           const currentPowerMode = Number(html.find("#powerMode").val() || 1);
           html.find("#powerMode").html(
             availablePowerModes
@@ -1490,6 +1509,11 @@ if (setup.toggles?.whirlwind) {
 }
 const selectedWeapon = attacker.items.get(setup.weaponId);
 const setupTraits = parseWeaponTraits(selectedWeapon ?? { system: { special: "" } });
+const setupWeaponType = String(selectedWeapon?.system?.type ?? "").toLowerCase();
+if (setupWeaponType === "plasma" && Number(setup.powerModeKey ?? 1) === 3 && actorHasEffect(attacker, { effectId: WEAPON_RECHARGING_EFFECT_ID, effectName: WEAPON_RECHARGING_EFFECT_NAME })) {
+  ui.notifications.warn("Maximal cannot be used while Weapon Recharging is active.");
+  return;
+}
 const isSprayWeapon = hasTrait(setupTraits, "spray");
 const isBlastWeapon = hasTrait(setupTraits, "blast");
 const isGrenadeWeapon = hasTrait(setupTraits, "grenade");
