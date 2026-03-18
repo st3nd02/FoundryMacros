@@ -107,6 +107,7 @@ Hooks.once("ready", async () => {
     openLauncher,
     openCharacteristicTest,
     openSkillTest,
+    openMedicalTest,
     runStep,
     emitSocket,
     submitDefenseResult,
@@ -1118,6 +1119,7 @@ async function openLauncher() {
         ...(game.user.isGM ? { applyDamage: { label: "Apply Damage", callback: () => resolve("applyDamage") } } : {}),
         skill: { label: "Skill Test", callback: () => resolve("skill") },
         characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
+        medical: { label: "Medical Flow", callback: () => resolve("medical") },
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
       default: "attack"
@@ -1133,6 +1135,10 @@ async function openLauncher() {
     await openCharacteristicTest();
     return;
   }
+  if (choice === "medical") {
+    await openMedicalTest();
+    return;
+  }
   await runStep(choice);
 }
 
@@ -1142,7 +1148,8 @@ function getWorkflowHudButtons() {
     { id: "defense", label: "Defense", action: () => runStep("defense") },
     { id: "damage", label: "Damage", action: () => runStep("damage") },
     { id: "skill", label: "Skill", action: () => openSkillTest() },
-    { id: "characteristic", label: "Characteristic", action: () => openCharacteristicTest() }
+    { id: "characteristic", label: "Characteristic", action: () => openCharacteristicTest() },
+    { id: "medical", label: "Medical", action: () => openMedicalTest() }
   ];
 
   if (game.user.isGM) {
@@ -1255,7 +1262,7 @@ class WorkflowHud {
 
       this.element.appendChild(actionCell("characteristic", "Characteristics"));
       this.element.appendChild(actionCell("skill", "Skills"));
-      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(actionCell("medical", "Medical"));
       this.element.appendChild(comingSoonCell());
 
       this.element.appendChild(comingSoonCell());
@@ -1275,7 +1282,7 @@ class WorkflowHud {
 
       this.element.appendChild(actionCell("characteristic", "Characteristics"));
       this.element.appendChild(actionCell("skill", "Skills"));
-      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(actionCell("medical", "Medical"));
 
       this.element.appendChild(emptyCell());
     }
@@ -2115,6 +2122,394 @@ Roll:
 
       html.find("select").on("change", updateSelectedSkill);
       updateSelectedSkill();
+    }
+  }).render(true);
+}
+
+async function openMedicalTest() {
+  const token = canvas.tokens.controlled[0];
+  if (!token) {
+    ui.notifications.warn("Select your healer first.");
+    return;
+  }
+
+  if (!game.user.targets.size) {
+    ui.notifications.warn("Target a patient.");
+    return;
+  }
+
+  const actor = token.actor;
+  const patient = [...game.user.targets][0].actor;
+  const skills = actor.system.skills;
+
+  const hasMaster = actor.items.some(i => /master chirurgeon/i.test(i.name));
+  const hasSuperior = actor.items.some(i => /superior chirurgeon/i.test(i.name));
+  const hasHardy = patient.items.some(i => /hardy/i.test(i.name));
+
+  const sutureItem = actor.items.find(i => /field suture/i.test(i.name));
+  const hasSutureItem = !!sutureItem;
+
+  const difficulties = [
+    { value: 60, label: "Trivial (+60)" },
+    { value: 50, label: "Elementary (+50)" },
+    { value: 40, label: "Simple (+40)" },
+    { value: 30, label: "Easy (+30)" },
+    { value: 20, label: "Routine (+20)" },
+    { value: 10, label: "Ordinary (+10)" },
+    { value: 0, label: "Challenging (+0)" },
+    { value: -10, label: "Difficult (-10)" },
+    { value: -20, label: "Hard (-20)" },
+    { value: -30, label: "Very Hard (-30)" },
+    { value: -40, label: "Arduous (-40)" },
+    { value: -50, label: "Punishing (-50)" },
+    { value: -60, label: "Hellish (-60)" }
+  ];
+
+  const difficultyOptions = difficulties
+    .map(d => `<option value="${d.value}" ${d.value === 0 ? "selected" : ""}>${d.label}</option>`)
+    .join("");
+
+  async function askForFate() {
+    const fateCurrent = actor.system.fate?.value ?? 0;
+    if (fateCurrent <= 0) return false;
+
+    return new Promise(resolve => {
+      new Dialog({
+        title: "Spend Fate?",
+        content: `<p><b>Test Failed!</b><br> Spend 1 Fate Point to reroll?<br>Remaining: <b>${fateCurrent}</b></p>`,
+        buttons: {
+          yes: { label: "Spend Fate (-1)", callback: () => resolve(true) },
+          no: { label: "Keep Result", callback: () => resolve(false) }
+        },
+        default: "no"
+      }).render(true);
+    });
+  }
+
+  const wounds = patient.system.wounds;
+  const tb =
+    (patient.system.characteristics.toughness?.bonus ?? 0) +
+    (patient.system.characteristics.toughness?.unnatural ?? 0);
+
+  let state = "Lightly Wounded";
+  if (!hasHardy) {
+    if ((wounds?.critical ?? 0) > 0) state = "Critically Wounded";
+    else if ((wounds?.value ?? 0) > tb * 2) state = "Heavily Wounded";
+  }
+
+  new Dialog({
+    title: "Medicae Test",
+    content: `
+<style>
+.grid2{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:6px 18px;
+}
+.grid2 label{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+</style>
+
+<form>
+<h3>State the nature of your medical emergency:</h3>
+<div class="grid2">
+  <label><input type="radio" name="mode" value="first" checked> First Aid</label>
+  <label><input type="radio" name="mode" value="extended"> Extended Care</label>
+  <label><input type="radio" name="mode" value="diagnose"> Diagnose</label>
+  <label><input type="radio" name="mode" value="staunch"> Staunch Blood Loss</label>
+</div>
+
+<hr>
+
+<h3>Diagnose Skill</h3>
+<div class="grid2">
+<select id="diagSkill" disabled style="opacity:.5">
+  <option value="medicae">Medicae</option>
+  <option value="awareness">Awareness</option>
+</select>
+</div>
+
+<hr>
+
+<div class="grid2">
+  <div>
+    <h3>Difficulty</h3>
+    <select id="difficulty">${difficultyOptions}</select>
+  </div>
+  <div>
+    <h3>Modifier</h3>
+    <input id="mod" type="number" value="0">
+  </div>
+</div>
+
+<hr>
+
+<h3>Talents</h3>
+<div class="grid2">
+  <label><input type="checkbox" id="master" ${hasMaster ? "checked" : ""}> Master Chirurgeon</label>
+  <label><input type="checkbox" id="superior" ${hasSuperior ? "checked" : ""}> Superior Chirurgeon</label>
+  <label><input type="checkbox" id="apoth"> Space Marine Apothecary</label>
+</div>
+
+<hr>
+
+<h3>Items</h3>
+<div class="grid2">
+  <label><input type="checkbox" id="narthecium"> Narthecium +20</label>
+  <label><input type="checkbox" id="diagnostor"> Diagnostor +20</label>
+  <label><input type="checkbox" id="suture" ${hasSutureItem ? "" : "disabled style='opacity:.5'"}> Field Suture +30</label>
+  <label><input type="checkbox" id="medikit"> Medi-kit +10</label>
+</div>
+</form>
+`,
+    render: html => {
+      const sel = html.find("#diagSkill");
+      const toggle = () => {
+        const isDiag = html.find("input[name='mode'][value='diagnose']").is(":checked");
+        sel.prop("disabled", !isDiag);
+        sel.css("opacity", isDiag ? "1" : ".5");
+      };
+
+      html.find("input[name='mode']").on("change", toggle);
+      toggle();
+    },
+    buttons: {
+      roll: {
+        label: "Roll",
+        callback: async html => {
+          const mode = html.find("input[name='mode']:checked").val();
+
+          const modeNames = {
+            first: "First Aid",
+            extended: "Extended Care",
+            diagnose: "Diagnose",
+            staunch: "Staunch Blood Loss"
+          };
+          const actionName = modeNames[mode];
+
+          const skillName = mode === "diagnose"
+            ? html.find("#diagSkill").val()
+            : "medicae";
+
+          const difficultyMod = Number(html.find("#difficulty").val());
+          const difficultyLabel = html.find("#difficulty option:selected").text();
+          const baseSkill = skills?.[skillName]?.total ?? 0;
+          let target = baseSkill + difficultyMod + Number(html.find("#mod").val());
+
+          const notes = [];
+          let usedSuture = false;
+
+          if (html.find("#master").is(":checked")) {
+            target += 10;
+            notes.push("Master +10");
+          }
+          if (html.find("#superior").is(":checked")) {
+            target += 20;
+            notes.push("Superior +20");
+          }
+          if (html.find("#narthecium").is(":checked")) {
+            target += 20;
+            notes.push("Narthecium +20");
+          }
+          if (html.find("#medikit").is(":checked")) {
+            target += 10;
+            notes.push("Medi-kit +10");
+          }
+          if (html.find("#diagnostor").is(":checked") && mode === "diagnose") {
+            target += 20;
+            notes.push("Diagnostor +20");
+          }
+          if (html.find("#suture").is(":checked") && mode === "staunch" && hasSutureItem) {
+            target += 30;
+            notes.push("Field Suture +30");
+            usedSuture = true;
+          }
+          if (mode === "staunch") {
+            target -= 10;
+            notes.push("Staunch Blood Loss -10");
+          }
+
+          target = Math.max(1, target);
+          const baseTarget = target;
+
+          const roll = await new Roll("1d100").roll({ async: true });
+          const rollVal = roll.total;
+          const success =
+            rollVal === 1 ? true :
+            rollVal === 100 ? false :
+            rollVal <= target;
+          const degrees = Math.floor(Math.abs(target - rollVal) / 10) + 1;
+
+          async function calcHeal(deg) {
+            const intBonus =
+              (actor.system.characteristics.intelligence?.bonus ?? 0) +
+              Math.floor((actor.system.characteristics.intelligence?.unnatural ?? 0) / 2);
+
+            let heal = deg + intBonus;
+
+            if (html.find("#apoth").is(":checked")) {
+              const apothRoll = await new Roll("1d5").roll({ async: true });
+              heal += apothRoll.total;
+              notes.push(`Apothecary +${apothRoll.total}`);
+            }
+
+            if (html.find("#master").is(":checked")) heal += 2;
+            return heal;
+          }
+
+          let healText = "";
+          if (success && (mode === "first" || mode === "extended")) {
+            const heal = await calcHeal(degrees);
+            healText = `
+  <div style="margin-top:6px;font-weight:bold;font-size:1.2em;">
+  Heals <span style="color:#ff2a2a;text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;">${heal}</span> wounds
+  </div>`;
+          }
+
+          const successColor = success ? "#1aff1a" : "#ff2a2a";
+
+          roll.toMessage({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            flavor: `
+<div style="font-size:1.0em; text-align:center; color: #000000;">
+<div style="font-style:italic;font-size:1.2em;"><b>${actor.name}</b> treats <b>${patient.name}</b></div><hr>
+<div style="font-size:1.2em; text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black; color: #ff0000;">
+<b>${actionName}</b></div>
+${mode === "diagnose" ? `<b>Skill:</b> <i>${skillName.charAt(0).toUpperCase() + skillName.slice(1)}</i><br>` : ""}
+ <b>${(mode === "first" || mode === "extended") ? `</b><hr>
+ <b>State:</b> <b>${state}</b><br>` : ""}
+${difficultyLabel ? `
+<span style="font-size:1.1em;">
+<b>Difficulty: </b><i>${difficultyLabel}</i>
+</span>` : ""}
+<hr>
+<div style="margin-top:6px;font-size:1.1em;"><b>Target: </b><span style="
+  color:#ffad55;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${target}</span></div>
+<div style="font-size:1.2em;"><b>Roll:</b><span style="
+  color:#bd7548;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${rollVal}</span><hr>
+${notes.length ? `<div style="font-size:1.0em;font-style:italic">${notes.join(" | ")}</div>` : ""}
+<div style="text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black; font-weight:bold;color:${successColor}">
+${success ? `${degrees} DoS` : `${degrees} DoF`}
+</div>
+${healText}
+</div>`
+          });
+
+          if (!success && (actor.system.fate?.value ?? 0) > 0) {
+            const useFate = await askForFate();
+            if (!useFate) return;
+
+            await actor.update({ "system.fate.value": actor.system.fate.value - 1 });
+
+            const fateRoll = await new Roll("1d100").roll({ async: true });
+            const fateVal = fateRoll.total;
+            const fateSuccess =
+              fateVal === 1 ? true :
+              fateVal === 100 ? false :
+              fateVal <= baseTarget;
+            const fateDegrees = Math.floor(Math.abs(baseTarget - fateVal) / 10) + 1;
+
+            let fateHealText = "";
+            if (fateSuccess && (mode === "first" || mode === "extended")) {
+              const heal = await calcHeal(fateDegrees);
+              fateHealText = `
+      <div style="margin-top:6px;font-weight:bold;font-size:1.3em;"> Heals <span style=" color:#ff2a2a; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;">${heal}</span> wounds </div>`;
+            }
+
+            fateRoll.toMessage({
+              speaker: ChatMessage.getSpeaker({ actor }),
+              flavor: `
+      <div style="font-size:1.2em;text-align:center; color: #000000;"> <div> <b style="
+  color:gold;
+  font-style:italic;
+  font-size:1.1em;
+   text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">✦ ${actor.name} spends Fate and rerolls! ✦
+</b></div><hr>
+<div style="font-style:italic;font-size:1.2em;"><b>${actor.name}</b> treats <b>${patient.name}</b></div><hr>
+<div style="font-size:1.2em; text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black; color: #ff0000;">
+<b>${actionName}</b></div>
+${mode === "diagnose" ? `<b>Skill:</b> <i>${skillName.charAt(0).toUpperCase() + skillName.slice(1)}</i><br>` : ""}
+ <b>${(mode === "first" || mode === "extended") ? `</b><hr>
+ <b>State:</b> <b>${state}</b><br>` : ""}
+${difficultyLabel ? `
+<span style="font-size:1.1em;">
+<b>Difficulty: </b><i>${difficultyLabel}</i>
+</span>` : ""}
+<hr>
+<div style="margin-top:6px;font-size:1.1em;"><b>Target: </b><span style="
+  color:#ffad55;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${baseTarget}</span></div>
+<div style="font-size:1.2em;"><b>Roll:</b><span style="
+  color:#bd7548;
+  font-weight:bold;
+  text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black;
+">${fateVal}</span><hr>
+${notes.length ? `<div style="font-size:1.0em;font-style:italic">${notes.join(" | ")}</div>` : ""}
+<div style="text-shadow:
+    0 0 1px black,
+    0 0 2px black,
+    1px 1px 0 black,
+   -1px -1px 0 black; font-weight:bold;color:${successColor}">
+${fateSuccess ? `${fateDegrees} DoS` : `${fateDegrees} DoF`}
+</div>
+${fateHealText}
+</div>`
+            });
+          }
+
+          if (usedSuture && sutureItem) {
+            await sutureItem.delete();
+          }
+        }
+      }
     }
   }).render(true);
 }
