@@ -622,8 +622,8 @@ if (dmg.horde?.active) {
   const hordeSummary = `
 <div style="text-align:center;">
 
-<span style="font-weight:700;color:#000;">Damage done:</span> <span style="font-weight:700;color:#000;">${inflicted}</span><br>
-<b>Horde Magnitude Damage:</b> ${currentWounds} -> ${newWounds}${Number.isFinite(maxWounds) && maxWounds >= 0 ? ` / ${maxWounds}` : ""}<br>
+<span style="font-weight:700;color:#000;">Magnitude done:</span> <span style="font-weight:700;color:#000;">${inflicted}</span><br>
+<b>Magnitude:</b> ${currentWounds} -> ${newWounds}${Number.isFinite(maxWounds) && maxWounds >= 0 ? ` / ${maxWounds}` : ""}<br>
 ${(dmg.properties ?? []).length ? `${(dmg.properties ?? []).map(p => p === "Horde Target" ? `<b>${p}</b>` : p).join(", ")}<br>` : ""}
 <i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i>
 </div>`;

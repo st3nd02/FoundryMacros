@@ -258,6 +258,11 @@ const getSizeModifier = targetActor => {
   return { mod: data.mod, label: data.label, ignored: false, sizeValue: Number(match[1]) };
 };
 
+const hasHordeTrait = actorDoc => {
+  const traits = actorDoc?.items?.filter(i => i.type === "trait")?.map(i => String(i.name ?? "").toLowerCase()) ?? [];
+  return traits.some(t => t.includes("horde"));
+};
+
 const getNormalRangeForWeapon = weapon => {
   const isMelee = (weapon.system.class ?? "").toLowerCase() === "melee";
   if (isMelee) return 1;
@@ -1048,9 +1053,45 @@ const runAttackWorkflow = async setup => {
 
   const awaitingDefense = state.targets.some(tg => String(tg.defenseOutcome ?? "").toLowerCase().includes("awaiting target owner"));
 
-  // For grenades, damage already exploded/resolved above; skip weapon damage prompt.
+  if (state.horde?.active) {
+    state.targets = state.targets.map(tg => {
+      if ((tg.allocatedHits ?? 0) <= 0) return tg;
+      const magnitudeHits = Math.max(0, Number(tg.hordeHitsPreview ?? tg.allocatedHits ?? 0));
+      tg.damageRolls = [{ total: magnitudeHits, loc: "Horde" }];
+      tg.damageSummary = `<div style="text-align:center; color:#000;"><div><b>Magnitude Damage</b></div><div><span style="font-weight:700;color:#000;">Damage done:</span> <span style="font-weight:700;color:#000;">${magnitudeHits}</span></div><div style="margin-top:6px;"><b>Properties:</b> Horde Target</div><div><i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i></div></div>`;
+      tg.damageResolved = true;
+      tg.damageApplied = false;
+      tg.applySummary = null;
+      tg.damageApplicationData = {
+        attacker: state.attackerName,
+        target: tg.name,
+        targetTokenUuid: tg.tokenUuid ?? tg.targetTokenUuid,
+        weapon: state.weaponName,
+        modeKey: state.modeKey ?? null,
+        modeLabel: state.modeLabel ?? null,
+        damageType: String(state.weaponType ?? "impact").toLowerCase(),
+        penetration: Number(state.weaponPen ?? 0),
+        hits: 1,
+        hitsData: [{ hit: 1, location: "Horde", damage: magnitudeHits, fury: null }],
+        dos: Number(state.dos ?? 0),
+        fury: [],
+        properties: ["Horde Target"],
+        horde: {
+          active: true,
+          magnitudeHits
+        }
+      };
+      return tg;
+    });
+    await chatMessage.update({
+      content: buildWorkflowHtml(state),
+      flags: { [WORKFLOW_NS]: { [WORKFLOW_KEY]: state } }
+    });
+  }
+
+  // For grenades and hordes, damage workflow is skipped.
   // Also skip damage while any target is still awaiting owner defense resolution.
-  if (!isGrenade && !awaitingDefense) {
+  if (!isGrenade && !state.horde?.active && !awaitingDefense) {
     await openDamageWorkflow(state, chatMessage);
   } else if (awaitingDefense) {
     await chatMessage.update({
@@ -1160,7 +1201,11 @@ const showAttackDialog = async () => {
         <table style="width:100%;"><thead><tr><th>Target</th><th>Distance</th><th>Range</th></tr></thead><tbody id="targetsBody"></tbody></table>
       </form>`,
       render: html => {
+        const hasHordeTarget = () => targetTokens.some(t => hasHordeTrait(t.actor));
         const syncHordeBonus = () => {
+          const forcedHorde = hasHordeTarget();
+          html.find("#horde").prop("checked", forcedHorde ? true : !!html.find("#horde")[0]?.checked);
+          html.find("#horde").prop("disabled", forcedHorde);
           const isHorde = html.find("#horde")[0]?.checked;
           const hordeInput = html.find("#hordeBonus");
           hordeInput.prop("readonly", !!isHorde);
@@ -1390,9 +1435,14 @@ const selectedWeapon = attacker.items.get(setup.weaponId);
 const setupTraits = parseWeaponTraits(selectedWeapon ?? { system: { special: "" } });
 const isSprayWeapon = hasTrait(setupTraits, "spray");
 const isBlastWeapon = hasTrait(setupTraits, "blast");
+const isGrenadeWeapon = hasTrait(setupTraits, "grenade");
 const singleTargetModes = ["single","called","standard"];
 if (!setup.toggles?.whirlwind && !isSprayWeapon && !isBlastWeapon && singleTargetModes.includes(setup.modeKey) && setup.targetConfigs.length > 1) {
   ui.notifications.warn("Selected attack type can only target one opponent.");
+  return;
+}
+if (setup.isHorde && !isSprayWeapon && !isBlastWeapon && !isGrenadeWeapon && setup.targetConfigs.length > 1) {
+  ui.notifications.warn("Horde attacks can only target one opponent unless the weapon has Blast, Spray, or Grenade.");
   return;
 }
 await runAttackWorkflow(setup);
