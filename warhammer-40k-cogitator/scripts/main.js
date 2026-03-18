@@ -1236,6 +1236,7 @@ class WorkflowHud {
 
     const iconCell = this.createIconCell();
     const comingSoonCell = (colSpan = 1) => this.createComingSoonCell(colSpan);
+    const emptyCell = (colSpan = 1) => this.createEmptyCell(colSpan);
     const actionCell = (id, fallbackLabel = "Coming soon") => this.createActionCell(buttonMap.get(id), fallbackLabel);
 
     if (game.user.isGM) {
@@ -1258,6 +1259,8 @@ class WorkflowHud {
       this.element.appendChild(comingSoonCell());
       this.element.appendChild(comingSoonCell());
       this.element.appendChild(comingSoonCell());
+
+      this.element.appendChild(emptyCell());
     } else {
       this.element.appendChild(actionCell("attack", "Attack"));
       this.element.appendChild(actionCell("defense", "Defense"));
@@ -1270,6 +1273,8 @@ class WorkflowHud {
       this.element.appendChild(actionCell("characteristic", "Characteristics"));
       this.element.appendChild(actionCell("skill", "Skills"));
       this.element.appendChild(comingSoonCell());
+
+      this.element.appendChild(emptyCell());
     }
 
     const lockButton = document.createElement("button");
@@ -1283,9 +1288,11 @@ class WorkflowHud {
       event.stopPropagation();
       await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudLocked, !this.locked);
     });
-    lockButton.style.gridColumn = game.user.isGM ? "4" : "3";
-    lockButton.style.gridRow = game.user.isGM ? "4" : "3";
+    lockButton.style.gridColumn = game.user.isGM ? "span 2" : "2";
+    lockButton.style.gridRow = game.user.isGM ? "5" : "4";
     this.element.appendChild(lockButton);
+
+    this.element.appendChild(emptyCell());
 
     const { clampedX, clampedY } = this.getClampedPosition(x, y);
     this.element.style.left = `${Math.round(clampedX)}px`;
@@ -1328,6 +1335,13 @@ class WorkflowHud {
     cell.style.border = "1px dashed rgba(206, 206, 206, 0.35)";
     cell.style.borderRadius = "4px";
     cell.style.color = "rgba(230, 230, 230, 0.9)";
+    if (colSpan > 1) cell.style.gridColumn = `span ${colSpan}`;
+    return cell;
+  }
+
+  createEmptyCell(colSpan = 1) {
+    const cell = document.createElement("div");
+    cell.style.minHeight = "36px";
     if (colSpan > 1) cell.style.gridColumn = `span ${colSpan}`;
     return cell;
   }
