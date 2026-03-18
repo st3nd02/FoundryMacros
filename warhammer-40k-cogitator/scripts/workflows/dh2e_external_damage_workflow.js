@@ -688,6 +688,8 @@ ${furyHtml}
           sprayJam,
           force: traitTests.force,
           talentModifier: entry.state?.talentModifier ?? null,
+          selectedTalents: entry.state?.selectedTalents ?? [],
+          nowhereToHideActive: !!entry.state?.toggles?.nowhereToHide,
           damageSummary
         };
 
