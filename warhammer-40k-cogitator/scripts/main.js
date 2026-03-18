@@ -1207,7 +1207,7 @@ class WorkflowHud {
       this.element = document.createElement("div");
       this.element.id = "warhammer40k-cogitator-workflow-hud";
       this.element.style.position = "fixed";
-      this.element.style.display = "flex";
+      this.element.style.display = "grid";
       this.element.style.gap = "6px";
       this.element.style.padding = "8px";
       this.element.style.borderRadius = "8px";
@@ -1230,19 +1230,46 @@ class WorkflowHud {
 
     this.element.innerHTML = "";
 
-    for (const button of buttons) {
-      const buttonEl = document.createElement("button");
-      buttonEl.type = "button";
-      buttonEl.dataset.role = "workflow-action";
-      buttonEl.textContent = button.label;
-      buttonEl.style.padding = "4px 8px";
-      buttonEl.style.fontSize = "12px";
-      buttonEl.style.cursor = "pointer";
-      buttonEl.addEventListener("click", async event => {
-        event.stopPropagation();
-        await button.action();
-      });
-      this.element.appendChild(buttonEl);
+    const buttonMap = new Map(buttons.map(button => [button.id, button]));
+    const gridColumns = game.user.isGM ? 4 : 3;
+    this.element.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(110px, 1fr))`;
+
+    const iconCell = this.createIconCell();
+    const comingSoonCell = (colSpan = 1) => this.createComingSoonCell(colSpan);
+    const actionCell = (id, fallbackLabel = "Coming soon") => this.createActionCell(buttonMap.get(id), fallbackLabel);
+
+    if (game.user.isGM) {
+      this.element.appendChild(actionCell("attack", "Attack"));
+      this.element.appendChild(actionCell("defense", "Defense"));
+      this.element.appendChild(actionCell("damage", "Damage"));
+      this.element.appendChild(actionCell("applyDamage", "Apply Damage"));
+
+      this.element.appendChild(comingSoonCell());
+      iconCell.style.gridColumn = "span 2";
+      this.element.appendChild(iconCell);
+      this.element.appendChild(comingSoonCell());
+
+      this.element.appendChild(actionCell("characteristic", "Characteristics"));
+      this.element.appendChild(actionCell("skill", "Skills"));
+      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(comingSoonCell());
+
+      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(comingSoonCell());
+    } else {
+      this.element.appendChild(actionCell("attack", "Attack"));
+      this.element.appendChild(actionCell("defense", "Defense"));
+      this.element.appendChild(actionCell("damage", "Damage"));
+
+      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(iconCell);
+      this.element.appendChild(comingSoonCell());
+
+      this.element.appendChild(actionCell("characteristic", "Characteristics"));
+      this.element.appendChild(actionCell("skill", "Skills"));
+      this.element.appendChild(comingSoonCell());
     }
 
     const lockButton = document.createElement("button");
@@ -1256,6 +1283,8 @@ class WorkflowHud {
       event.stopPropagation();
       await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudLocked, !this.locked);
     });
+    lockButton.style.gridColumn = game.user.isGM ? "4" : "3";
+    lockButton.style.gridRow = game.user.isGM ? "4" : "3";
     this.element.appendChild(lockButton);
 
     const { clampedX, clampedY } = this.getClampedPosition(x, y);
@@ -1264,6 +1293,64 @@ class WorkflowHud {
 
     this.persistPositionIfChanged(clampedX, clampedY, x, y);
     this.element.style.cursor = this.locked ? "default" : "move";
+  }
+
+  createActionCell(button, fallbackLabel) {
+    const buttonEl = document.createElement("button");
+    buttonEl.type = "button";
+    buttonEl.dataset.role = "workflow-action";
+    buttonEl.textContent = button?.label ?? fallbackLabel;
+    buttonEl.style.padding = "6px 8px";
+    buttonEl.style.fontSize = "12px";
+    buttonEl.style.minHeight = "36px";
+    buttonEl.style.cursor = button ? "pointer" : "default";
+    if (!button) {
+      buttonEl.disabled = true;
+      buttonEl.style.opacity = "0.7";
+    } else {
+      buttonEl.addEventListener("click", async event => {
+        event.stopPropagation();
+        await button.action();
+      });
+    }
+    return buttonEl;
+  }
+
+  createComingSoonCell(colSpan = 1) {
+    const cell = document.createElement("div");
+    cell.textContent = "Coming soon";
+    cell.style.display = "flex";
+    cell.style.alignItems = "center";
+    cell.style.justifyContent = "center";
+    cell.style.minHeight = "36px";
+    cell.style.padding = "6px 8px";
+    cell.style.fontSize = "12px";
+    cell.style.border = "1px dashed rgba(206, 206, 206, 0.35)";
+    cell.style.borderRadius = "4px";
+    cell.style.color = "rgba(230, 230, 230, 0.9)";
+    if (colSpan > 1) cell.style.gridColumn = `span ${colSpan}`;
+    return cell;
+  }
+
+  createIconCell() {
+    const cell = document.createElement("div");
+    cell.style.display = "flex";
+    cell.style.alignItems = "center";
+    cell.style.justifyContent = "center";
+    cell.style.minHeight = "36px";
+    cell.style.padding = "4px";
+    cell.style.border = "1px solid rgba(206, 206, 206, 0.35)";
+    cell.style.borderRadius = "4px";
+
+    const icon = document.createElement("img");
+    icon.src = `modules/${COGITATOR_ID}/WH40k Cogitator Icon.png`;
+    icon.alt = "Warhammer 40k Cogitator";
+    icon.style.maxHeight = "28px";
+    icon.style.maxWidth = "100%";
+    icon.style.objectFit = "contain";
+    cell.appendChild(icon);
+
+    return cell;
   }
 
   attachToDom() {
