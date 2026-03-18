@@ -198,6 +198,10 @@ if (!entry) return ui.notifications.warn("Selected workflow no longer available.
 let base = pick.type === "parry" ? parryBase : dodgeBase;
 const notes = [];
 let actionText = pick.type === "parry" ? "Parry" : "Dodge";
+const inescapableAttackPenalty = Math.max(0, Number(entry?.target?.inescapableAttackPenalty ?? 0));
+if (inescapableAttackPenalty > 0) {
+  notes.push(`Inescapable Attack -${inescapableAttackPenalty}`);
+}
 
 if (pick.type === "skip") {
   const targetState = entry.state.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === token.document.uuid);
@@ -257,7 +261,7 @@ if (pick.type === "parry") {
   }
 }
 
-let target = Math.max(1, base + pick.difficultyMod + pick.manualMod);
+let target = Math.max(1, base + pick.difficultyMod + pick.manualMod - inescapableAttackPenalty);
 let roll = await rollWithDiceSoNice("1d100");
 
 const postResult = ({ usedFate }) => {

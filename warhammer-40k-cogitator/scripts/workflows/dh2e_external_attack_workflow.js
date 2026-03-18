@@ -773,6 +773,21 @@ const runAttackWorkflow = async setup => {
   if (t.flesh && isMelee) selectedTalents.push("Flesh Render");
   if (t.raptor) selectedTalents.push("Raptor");
   if (t.forceChannel) selectedTalents.push("Force Channeling");
+  const inescapableApplies = !!(
+    (
+      isMelee &&
+      t.inescapableMelee &&
+      ["standard", "called", "charge", "allout"].includes(setup.modeKey)
+    ) ||
+    (
+      !isMelee &&
+      t.inescapableRanged &&
+      ["single", "called"].includes(setup.modeKey)
+    )
+  );
+  if (inescapableApplies) {
+    selectedTalents.push("Inescapable Attack (auto)");
+  }
 
 
   const doubleTapEligibleTargetUuid = attacker.getFlag(WORKFLOW_NS, DOUBLE_TAP_TARGET_FLAG) ?? null;
@@ -800,6 +815,7 @@ const runAttackWorkflow = async setup => {
     sizeIgnored: conf.sizeIgnored,
     targetNumber: Math.max(1, baseSkill + sharedMod + effectiveRangeMod + scatterPointBlankBonus + conf.sizeMod),
     allocatedHits: 0,
+    inescapableAttackPenalty: 0,
     defenseRoll: null,
     defenseOutcome: null,
     damageRolls: [],
@@ -941,6 +957,14 @@ const runAttackWorkflow = async setup => {
   state.attackRoll = result;
   state.dos = dos;
   state.attackDegrees = success ? dos : -Math.max(1, 1 + Math.floor((result - bestTN) / 10));
+  const inescapablePenalty = (success && inescapableApplies) ? Math.max(0, dos * 10) : 0;
+  if (inescapablePenalty > 0) {
+    state.extraText = [state.extraText, `Inescapable Attack: Defender Dodge/Parry -${inescapablePenalty}`].filter(Boolean).join(" | ");
+  }
+  state.targets = state.targets.map(tg => ({
+    ...tg,
+    inescapableAttackPenalty: (tg.allocatedHits ?? 0) > 0 ? inescapablePenalty : 0
+  }));
   if (state.horde?.active) {
     state.targets = state.targets.map(tg => ({
       ...tg,
@@ -1182,6 +1206,7 @@ const showAttackDialog = async () => {
             <label class="talent-toggle talent-auto" data-needle="berserk charge"><input type="checkbox" id="talent_berserk" disabled/> Berserk Charge (auto)</label>
             <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
             <label class="talent-toggle talent-auto" data-needle="flesh render"><input type="checkbox" id="talent_flesh" disabled/> Flesh Render (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="inescapable attack (melee)"><input type="checkbox" id="talent_inescapable_melee" disabled/> Inescapable Attack (Melee) (auto)</label>
             <label class="talent-toggle" data-needle="raptor"><input type="checkbox" id="talent_raptor"/> Raptor</label>
             <label class="talent-toggle" data-needle="whirlwind"><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
           </div>
@@ -1195,6 +1220,7 @@ const showAttackDialog = async () => {
             <label class="talent-toggle talent-auto" data-needle="ambidextrous"><input type="checkbox" id="talent_ambi" disabled/> Ambidextrous (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (ranged)"><input type="checkbox" id="talent_twm_ranged" disabled/> Two-Weapon Wielder (Ranged) (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="two weapon master"><input type="checkbox" id="talent_master" disabled/> Two Weapon Master (auto)</label>
+            <label class="talent-toggle talent-auto" data-needle="inescapable attack (ranged)"><input type="checkbox" id="talent_inescapable_ranged" disabled/> Inescapable Attack (Ranged) (auto)</label>
           </div>
         </div>
         <hr><h3>Targets</h3>
@@ -1239,7 +1265,9 @@ const showAttackDialog = async () => {
             talent_ambi: hasTalent(attacker, "ambidextrous") && twoWeaponAttack,
             talent_master: hasTalent(attacker, "two weapon master") && twoWeaponAttack,
             talent_flesh: hasTalent(attacker, "flesh render") && isMelee && isTearingWeapon,
-            talent_raptor: hasTalent(attacker, "raptor") && isMelee && modeKey === "charge"
+            talent_raptor: hasTalent(attacker, "raptor") && isMelee && modeKey === "charge",
+            talent_inescapable_melee: hasTalent(attacker, "inescapable attack (melee)") && isMelee && ["standard", "called", "charge", "allout"].includes(modeKey),
+            talent_inescapable_ranged: hasTalent(attacker, "inescapable attack (ranged)") && !isMelee && ["single", "called"].includes(modeKey)
           };
 
           const showById = {
@@ -1343,6 +1371,8 @@ const showAttackDialog = async () => {
           html.find("#talent_hammer").prop("checked", !!pt.hammer);
           html.find("#talent_flesh").prop("checked", !!pt.flesh);
           html.find("#talent_raptor").prop("checked", !!pt.raptor);
+          html.find("#talent_inescapable_melee").prop("checked", !!pt.inescapableMelee);
+          html.find("#talent_inescapable_ranged").prop("checked", !!pt.inescapableRanged);
           html.find("#talent_force_channel").prop("checked", !!pt.forceChannel);
         }
 
@@ -1406,6 +1436,8 @@ const showAttackDialog = async () => {
                 hammer: html.find("#talent_hammer")[0].checked,
                 flesh: html.find("#talent_flesh")[0].checked,
                 raptor: html.find("#talent_raptor")[0].checked,
+                inescapableMelee: html.find("#talent_inescapable_melee")[0].checked,
+                inescapableRanged: html.find("#talent_inescapable_ranged")[0].checked,
                 forceChannel: html.find("#talent_force_channel")[0].checked
               },
               detectedItems: detectWeaponItems(attacker, attacker.items.get(html.find("#weaponId").val()))

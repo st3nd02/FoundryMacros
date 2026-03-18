@@ -143,6 +143,28 @@
     "specialRules": []
   },
   {
+    "name": "Inescapable Attack (Melee)",
+    "notes": "Auto: on Standard, Called Shot, Charge, or All Out melee attacks, target suffers -10 per attack DoS on Dodge/Parry.",
+    "weaponType": "melee",
+    "attackType": ["standard", "called", "charge", "allout"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": ["Defense penalty equals attack Degrees of Success × 10 and is applied automatically."]
+  },
+  {
+    "name": "Inescapable Attack (Ranged)",
+    "notes": "Auto: on Single Shot or Called Shot ranged attacks, target suffers -10 per attack DoS on Dodge/Parry.",
+    "weaponType": "ranged",
+    "attackType": ["single", "called"],
+    "attackDialog": { "text": "normal", "checkbox": "auto-greyed", "default": true },
+    "stats": { "attackRoll": 0, "penetration": 0, "damage": 0, "defense": 0 },
+    "addsWeaponQualities": false,
+    "weaponQualities": [],
+    "specialRules": ["Defense penalty equals attack Degrees of Success × 10 and is applied automatically."]
+  },
+  {
     "name": "Ambidextrous",
     "notes": "Two-weapon setup mitigation contributor.",
     "weaponType": "any",
