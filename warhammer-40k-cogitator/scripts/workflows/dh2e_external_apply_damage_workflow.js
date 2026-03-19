@@ -390,30 +390,31 @@ const buildWorkflowHtml = state => {
   };
   const buildDescription = () => {
     const appliedTargets = joinedTargets(t => t.damageApplied || t.damageResolved);
-    const appliedHits = (state.targets ?? [])
-      .filter(t => t.damageApplied || t.damageResolved)
-      .reduce((sum, t) => sum + Number(t.allocatedHits ?? 0), 0);
-    return `<b>${appliedTargets}</b> receives <b>${Math.max(1, appliedHits)}</b> damage from <b>${state.attackerName}</b>'s attack.`;
+    const targetNames = joinedTargets();
+    const hitWord = Number(state.totalHits ?? 0) === 1 ? "hit" : "hits";
+    const missWord = Number(state.totalHits ?? 0) > 0 ? `${state.totalHits} ${hitWord}` : "misses";
+    return `<b>${state.attackerName}</b> attacks <b>${targetNames}</b> with <b>${state.weaponName}</b> and ${missWord}. <b>${appliedTargets}</b> receives damage from <b>${state.attackerName}</b>.`;
   };
 
   const cards = (state.targets ?? []).map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
     const shownHits = state.horde?.active ? (t.hordeHitsPreview ?? t.allocatedHits ?? 0) : (t.allocatedHits ?? 0);
     const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
-    const damageSummary = t.damageSummary
-      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}${t.applySummary ? `<hr>${t.applySummary}` : ""}</div>`
-      : `<div style="text-align:center;"><b>Damage</b><div>—</div></div>`;
+    const damageSummary = t.applySummary
+      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.applySummary}</div>`
+      : (t.damageSummary
+        ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
+        : "");
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
       <div><b>Distance:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel}</div>
       <div><b>Size:</b> ${sizeTxt}</div>
       <div><b>Target:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")}</div>
-      ${t.defenseAction
-        ? `<div><b>Defense (T vs R):</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseAction} — ${t.defenseOutcome ?? "—"})</div>`
-        : `<div><b>Defense (T vs R):</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseOutcome ?? "—"})</div>`}
+      <div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
+      <div style="color:#000;font-style:italic;text-align:center;">(${t.defenseAction ? `${t.defenseAction} — ` : ""}${t.defenseOutcome ?? "—"})</div>
       <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))} | <b>${hitsLabel}:</b> ${shownHits}</div>
-      <div style="text-align:center;"><b>Result:</b> ${styledDegrees(t)}</div>
+      <div style="text-align:center;">${styledDegrees(t)}</div>
       ${damageSummary}
     </div>`;
   }).join("");
@@ -431,7 +432,7 @@ const buildWorkflowHtml = state => {
     <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Target:</b> ${outlined(state.bestTarget ?? Math.max(...(state.targets ?? []).map(t => Number(t.targetNumber ?? 0))), "#3aa0ff")}</div>
     <div><b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))} | <b>Total ${state.horde?.active ? "Hits vs Horde" : "Hits"}:</b> ${state.totalHits ?? 0}</div>
     ${styledAttackDegrees()}
-    <hr>${cards}
+    ${cards}
   </div>`;
 };
 
@@ -823,6 +824,7 @@ for (let hit of dmg.hitsData){
   font-size:1.1em;
   text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;
 ">${baseDamage}${extra?` + ${extra}`:""}</span><br>
+  ${hit.keptDisplay ? `<span style="font-style:italic;color:#000;">${hit.keptDisplay}</span><br>` : ""}
 
   ${corrosiveHitHtml}
   <b>Soak:</b> ${soak}<br>
@@ -1249,6 +1251,7 @@ if (selectedEntry.msg && selectedEntry.state) {
     const tgt = latest.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === dmg.targetTokenUuid);
     if (tgt) {
       tgt.damageApplied = true;
+      tgt.damageSummary = null;
       tgt.applySummary = applySummary;
     }
 

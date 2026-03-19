@@ -36,11 +36,10 @@ const buildWorkflowHtml = state => {
     const defended = (state.targets ?? []).find(t => t.defenseAction && !String(t.defenseOutcome ?? "").toLowerCase().includes("awaiting"));
     if (!defended) return "";
     const action = String(defended.defenseAction ?? "defend").toLowerCase();
-    const managed = defended.defenseSuccess ? "manages" : "attempts";
     const outcome = defended.defenseSuccess
-      ? (Number(defended.defenseDegrees ?? 0) > 1 ? "succeeds totally" : "succeeds partially")
-      : (Number(defended.defenseDegrees ?? 0) > 1 ? "fails totally" : "fails partially");
-    return `<b>${defended.name}</b> ${managed} to <b>${action}</b> the attack and ${outcome}.`;
+      ? (Number(defended.defenseDegrees ?? 0) > 1 ? "totally succeeds" : "partially succeeds")
+      : (Number(defended.defenseDegrees ?? 0) > 1 ? "totally fails" : "partially fails");
+    return `<b>${defended.name}</b> attempts to <b>${action}</b> against <b>${state.attackerName}</b> and ${outcome}.`;
   };
   const styledDegrees = target => {
     const value = Number(target.defenseDegrees ?? 0);
@@ -57,10 +56,7 @@ const buildWorkflowHtml = state => {
   const buildDescription = () => {
     if (hasDamageResolution) {
       const appliedTargets = joinedTargets(t => t.damageResolved || t.damageApplied);
-      const appliedHits = (state.targets ?? [])
-        .filter(t => t.damageResolved || t.damageApplied)
-        .reduce((sum, t) => sum + Number(t.allocatedHits ?? 0), 0);
-      return `<b>${appliedTargets}</b> receives <b>${Math.max(1, appliedHits)}</b> damage from <b>${state.attackerName}</b>'s attack.`;
+      return `<b>${appliedTargets}</b> receives damage from <b>${state.attackerName}</b>.`;
     }
     if (remainingHitsAfterDefense > 0) {
       return `<b>${state.attackerName}</b> manages <b>${remainingHitsAfterDefense}</b> hit(s) on <b>${targetNames}</b>.`;
@@ -71,9 +67,8 @@ const buildWorkflowHtml = state => {
 
   const cards = (state.targets ?? []).map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
-    const defenseSummary = t.defenseAction
-      ? `<div><b>Defense (T vs R):</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseAction} — ${t.defenseOutcome ?? "—"})</div>`
-      : `<div><b>Defense (T vs R):</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseOutcome ?? "—"})</div>`;
+    const defenseSummary = `<div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
+      <div style="color:#000;font-style:italic;text-align:center;">(${t.defenseAction ? `${t.defenseAction} — ` : ""}${t.defenseOutcome ?? "—"})</div>`;
     const shownHits = state.horde?.active ? (t.hordeHitsPreview ?? t.allocatedHits ?? 0) : (t.allocatedHits ?? 0);
     const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
     const damageSummary = t.damageSummary
@@ -87,7 +82,7 @@ const buildWorkflowHtml = state => {
       <div><b>Target:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")}</div>
       ${defenseSummary}
       <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))} | <b>${hitsLabel}:</b> ${shownHits}</div>
-      <div style="text-align:center;"><b>Result:</b> ${styledDegrees(t)}</div>
+      <div style="text-align:center;">${styledDegrees(t)}</div>
       ${damageSummary}
     </div>`;
   }).join("");
@@ -105,7 +100,7 @@ const buildWorkflowHtml = state => {
     <div><b>Attack Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")} | <b>Target:</b> ${outlined(state.bestTarget ?? Math.max(...(state.targets ?? []).map(t => Number(t.targetNumber ?? 0))), "#3aa0ff")}</div>
     <div><b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))} | <b>Total ${state.horde?.active ? "Hits vs Horde" : "Hits"}:</b> ${state.totalHits ?? 0}</div>
     ${styledAttackDegrees()}
-    <hr>${cards}
+    ${cards}
   </div>`;
 };
 
@@ -464,9 +459,17 @@ new Dialog({
             if (primitive) modDice[minActive] = Math.min(modDice[minActive], primitiveVal);
           }
           const total = modDice.reduce((a, b) => a + b, 0) + flatBonus;
+          const rolledDiceDisplay = dice.join(",");
+          const dosReplaced = !spray && activeIndexes.length;
+          const replacedValue = dosReplaced
+            ? Math.max(dos, proven ? provenVal : 0)
+            : null;
+          const keptDisplay = dosReplaced
+            ? `[ ${rolledDiceDisplay}${replacedValue != null ? ` (<b>${replacedValue}</b>)` : ""} ]`
+            : `[ ${rolledDiceDisplay} ]`;
 
           damageResults.push(total);
-          hitsData.push({ hit: h, location: hitLocations[h - 1], damage: total, fury: null });
+          hitsData.push({ hit: h, location: hitLocations[h - 1], damage: total, fury: null, keptDisplay });
 
           const dieMax = Number(dieType);
           const furyNumbers = spray ? [dieMax] : (gauss && dieMax === 10 ? [9, 10] : [dieMax]);
@@ -654,11 +657,12 @@ new Dialog({
           ? `<hr><div style="color:gold;font-size:1.1em;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">✦ RIGHTEOUS FURY ✦</div>${furyResults.map((f, i) => `<div>${i + 1}. <b>Location:</b> <i>${f.location}</i> — Righteous Fury: <b>${f.result}</b></div>`).join("")}`
           : "";
 
+        const formulaInline = `${formula}${flat >= 0 ? `+${flat}` : `${flat}`}`;
         const damageSummary = `<div style="text-align:center; color:#000;">
 <div><b>Damage</b></div>
-<div>—</div>
+<div><i style="color:#000;">(${formulaInline})</i></div>
 <div><b>Penetration:</b> ${pen}</div>
-${damageResults.map((d, i) => `<div><span style="font-weight:700;color:#000;">Damage done:</span> <span style="font-weight:700;color:#000;">${d}</span> <i style="font-weight:400;">${hitLocations[i]}</i></div>`).join("")}
+${damageResults.map((d, i) => `<div><span style="font-weight:700;color:#000;">Damage done:</span> <span style="color:#bd7548;font-weight:900;font-size:1.1em;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${d}</span> <i style="font-weight:400;color:#000;">${hitLocations[i]}</i></div>`).join("")}
 <div style="margin-top:6px;"><b>Properties:</b> ${properties.join(", ") || "None"}</div>
 ${testSummary}${hallucinogenicSummary}${forceSummary}${sprayJamHtml}
 ${furyHtml}

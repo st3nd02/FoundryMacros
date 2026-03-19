@@ -701,24 +701,52 @@ function buildWorkflowHtml(state) {
     if (target.defenseSuccess) return outlined(`${value} Degrees of Success`, "#1aff1a");
     return outlined(`${value} Degrees of Failure`, "#ff2a2a");
   };
+  const joinedTargets = (predicate = null) => {
+    const targets = (state.targets ?? []).filter(t => !predicate || predicate(t)).map(t => t.name);
+    return targets.length ? targets.join(", ") : "the target";
+  };
+  const hasResolvableDefense = (state.targets ?? []).some(t => t.defenseAction && !String(t.defenseOutcome ?? "").toLowerCase().includes("awaiting"));
+  const hasDamageResolution = (state.targets ?? []).some(t => t.damageResolved || t.damageApplied);
+  const defenseStory = () => {
+    const defended = (state.targets ?? []).find(t => t.defenseAction && !String(t.defenseOutcome ?? "").toLowerCase().includes("awaiting"));
+    if (!defended) return "";
+    const action = String(defended.defenseAction ?? "defend").toLowerCase();
+    const outcome = defended.defenseSuccess
+      ? (Number(defended.defenseDegrees ?? 0) > 1 ? "totally succeeds" : "partially succeeds")
+      : (Number(defended.defenseDegrees ?? 0) > 1 ? "totally fails" : "partially fails");
+    return `<b>${defended.name}</b> attempts to <b>${action}</b> against <b>${state.attackerName}</b> and ${outcome}.`;
+  };
+  const buildDescription = () => {
+    const targetNames = joinedTargets();
+    const hitWord = Number(state.totalHits ?? 0) === 1 ? "hit" : "hits";
+    const missWord = Number(state.totalHits ?? 0) > 0 ? `${state.totalHits} ${hitWord}` : "misses";
+    const attackLine = `<b>${state.attackerName}</b> attacks <b>${targetNames}</b> with <b>${state.weaponName}</b> and ${missWord}.`;
+    if (hasDamageResolution) {
+      const appliedTargets = joinedTargets(t => t.damageResolved || t.damageApplied);
+      return `${attackLine} <b>${appliedTargets}</b> receives damage from <b>${state.attackerName}</b>.`;
+    }
+    if (hasResolvableDefense) return defenseStory();
+    return attackLine;
+  };
 
   const cards = (state.targets ?? []).map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
-    const dmgTxt = (t.damageRolls ?? []).map(d => `${d.total} ${d.loc}`).join(", ") || "—";
     const defenseSummary = t.defenseAction
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">
-          <div style="font-style:italic;"><b>${t.name}</b> attempts <b>${t.defenseAction}</b> against <b>${state.attackerName}</b> with <b>${state.weaponName}</b>.</div>
           <div><b>Incoming Hits:</b> ${t.incomingHits ?? t.allocatedHits ?? 0}</div>
           <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
-          <div><b>Defense (T vs R):</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseAction} — ${t.defenseOutcome ?? "—"})</div>
+          <div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
+          <div style="color:#000;font-style:italic;text-align:center;">(${t.defenseAction} — ${t.defenseOutcome ?? "—"})</div>
           ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
-          <div><b>Result:</b> ${styledDegrees(t)}</div>
+          <div>${styledDegrees(t)}</div>
         </div>`
-      : `<div><b>Defense (T vs R):</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseOutcome ?? "—"})</div>`;
+      : `<div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div><div style="color:#000;font-style:italic;text-align:center;">(${t.defenseOutcome ?? "—"})</div>`;
 
-    const damageSummary = t.damageSummary
-      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
-      : `<div><b>Damage:</b> ${dmgTxt}</div>`;
+    const damageSummary = t.applySummary
+      ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.applySummary}</div>`
+      : (t.damageSummary
+        ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
+        : ``);
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
@@ -730,7 +758,7 @@ function buildWorkflowHtml(state) {
   }).join("");
 
   return `<div data-workflow-id="${state.id}">
-    <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;"><b>${state.attackerName}</b> attacks with <b>${state.weaponName}</b></div>
+    <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;">${buildDescription()}</div>
     <div><b>Mode:</b> ${state.modeLabel} | <b>Power:</b> ${state.powerModeLabel} | <b>Aim:</b> ${state.aimLabel} | <b>Craftsmanship:</b> ${state.craftName}</div>
     <div><b>Modifiers:</b> ${state.modifierNotes?.join(", ") || "None"}</div>
     <div><b>Talents:</b> ${state.selectedTalents?.join(", ") || "None"}</div>
@@ -740,7 +768,7 @@ function buildWorkflowHtml(state) {
     <div style="font-size:1.1em;"><b>Total Hits:</b> ${state.totalHits ?? 0}</div>
     ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
     ${styledAttackDegrees()}
-    <hr>${cards}
+    ${cards}
   </div>`;
 }
 
