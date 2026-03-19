@@ -378,9 +378,9 @@ const buildWorkflowHtml = state => {
   };
   const styledDegrees = target => {
     const value = Number(target.defenseDegrees ?? 0);
-    if (!value) return "—";
-    if (target.defenseSuccess) return outlined(`${value} Degrees of Success`, "#1aff1a");
-    return outlined(`${value} Degrees of Failure`, "#ff2a2a");
+    if (!value) return `<div style="text-align:center;">—</div>`;
+    if (target.defenseSuccess) return `<div style="text-align:center;">${outlined(`${value} Degrees of Success`, "#1aff1a")}</div>`;
+    return `<div style="text-align:center;">${outlined(`${value} Degrees of Failure`, "#ff2a2a")}</div>`;
   };
   const styledAttackDegrees = () => {
     const value = Number(state.attackDegrees ?? 0);
@@ -410,11 +410,10 @@ const buildWorkflowHtml = state => {
       <div><b>${t.name}</b></div>
       <div><b>Distance:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel}</div>
       <div><b>Size:</b> ${sizeTxt}</div>
-      <div><b>Target:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")}</div>
       <div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
       <div style="color:#000;font-style:italic;text-align:center;">(${t.defenseAction ? `${t.defenseAction} — ` : ""}${t.defenseOutcome ?? "—"})</div>
       <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))} | <b>${hitsLabel}:</b> ${shownHits}</div>
-      <div style="text-align:center;">${styledDegrees(t)}</div>
+      ${styledDegrees(t)}
       ${damageSummary}
     </div>`;
   }).join("");
@@ -697,7 +696,7 @@ const nowhereToHideReduction = nowhereToHideActive
 if (nowhereToHideReduction > 0) {
   const beforeCover = coverRemaining;
   coverRemaining = Math.max(coverRemaining - nowhereToHideReduction, 0);
-  dmg.talentModifier.applyDamage.notes.push(`Nowhere to Hide: cover ${beforeCover} -> ${coverRemaining} (reduced by ${nowhereToHideReduction}${isSprayOrBlast ? ", Spray/Blast rule" : " from DoS"})`);
+  dmg.talentModifier.applyDamage.notes.push(`Nowhere to Hide: cover ${beforeCover} -> ${coverRemaining} (reduced by ${nowhereToHideReduction}${isSprayOrBlast ? ", Spray/Blast rule" : " from Degrees of Success"})`);
 }
 
 // ===== PULL STATS (same pattern as original) =====
@@ -835,7 +834,7 @@ for (let hit of dmg.hitsData){
 
   <b>Critical Damage:</b> ${critDamage} (${critCurrent} total)
 
-  ${hit.hit === 1 && nowhereToHideReduction > 0 ? `<b>Nowhere to Hide:</b> Cover reduced by ${nowhereToHideReduction}${isSprayOrBlast ? " (Spray/Blast)" : ` (DoS ${Number(dmg.dos ?? 0)})`}<br>` : ""}
+  ${hit.hit === 1 && nowhereToHideReduction > 0 ? `<b>Nowhere to Hide:</b> Cover reduced by ${nowhereToHideReduction}${isSprayOrBlast ? " (Spray/Blast)" : ` (${Number(dmg.dos ?? 0)} Degrees of Success)`}<br>` : ""}
 
  <span style="
     color:gold;
@@ -1012,7 +1011,7 @@ if (hasShocking && totalInflicted > 0) {
   Roll: <b>${shockingRoll.total}</b><br>
   Result: ${succeeded
     ? "<span style='color:#6EC1FF;font-weight:900;'>SUCCESS</span>"
-    : `<span style='color:#00b3ff;font-weight:900;'>FAILED</span> (DoF ${dof})`}
+    : `<span style='color:#00b3ff;font-weight:900;'>FAILED</span> (${dof} Degrees of Failure)`}
   `;
 
   if (succeeded) {
@@ -1060,8 +1059,8 @@ if (dmg.force?.resolved) {
   report += `
   <hr>
   <div style="color:#cc3333; text-shadow:0 0 2px #000,0 0 4px #000,0 0 6px #000; font-weight:900;"><b>✦ FORCE OPPOSED TEST ✦</b></div><br>
-  Attacker WP: ${dmg.force.attackerWP} Roll <b>${dmg.force.attackerRoll}</b> (DoS ${dmg.force.attackerDoS})<br>
-  Target WP: ${dmg.force.targetWP} Roll <b>${dmg.force.targetRoll}</b> (DoS ${dmg.force.targetDoS})<br>
+  Attacker WP: ${dmg.force.attackerWP} Roll <b>${dmg.force.attackerRoll}</b> (${dmg.force.attackerDoS} Degrees of Success)<br>
+  Target WP: ${dmg.force.targetWP} Roll <b>${dmg.force.targetRoll}</b> (${dmg.force.targetDoS} Degrees of Success)<br>
   `;
 
   if (dmg.force.won && Number(dmg.force.result ?? 0) > 0) {

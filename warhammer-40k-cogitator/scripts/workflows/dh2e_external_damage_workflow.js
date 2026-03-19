@@ -43,9 +43,9 @@ const buildWorkflowHtml = state => {
   };
   const styledDegrees = target => {
     const value = Number(target.defenseDegrees ?? 0);
-    if (!value) return "—";
-    if (target.defenseSuccess) return outlined(`${value} Degrees of Success`, "#1aff1a");
-    return outlined(`${value} Degrees of Failure`, "#ff2a2a");
+    if (!value) return `<div style="text-align:center;">—</div>`;
+    if (target.defenseSuccess) return `<div style="text-align:center;">${outlined(`${value} Degrees of Success`, "#1aff1a")}</div>`;
+    return `<div style="text-align:center;">${outlined(`${value} Degrees of Failure`, "#ff2a2a")}</div>`;
   };
   const styledAttackDegrees = () => {
     const value = Number(state.attackDegrees ?? 0);
@@ -79,10 +79,9 @@ const buildWorkflowHtml = state => {
       <div><b>${t.name}</b></div>
       <div><b>Distance:</b> ${t.distanceMeters}m | <b>Range:</b> ${t.rangeLabel}</div>
       <div><b>Size:</b> ${sizeTxt}</div>
-      <div><b>Target:</b> ${outlined(t.targetNumber, "#3aa0ff")} | <b>Roll:</b> ${outlined(state.attackRoll ?? "—", "#ff9f1a")}</div>
       ${defenseSummary}
       <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))} | <b>${hitsLabel}:</b> ${shownHits}</div>
-      <div style="text-align:center;">${styledDegrees(t)}</div>
+      ${styledDegrees(t)}
       ${damageSummary}
     </div>`;
   }).join("");
@@ -238,7 +237,7 @@ new Dialog({
   `Power Mode: ${entry.state.powerModeLabel ?? "Normal"}`,
   `Mode of Fire/Attack: ${entry.state.modeLabel ?? "—"}`,
   `Hits: ${attackData.hits}`,
-  `DoS: ${attackData.dos}`,
+  `Degrees of Success: ${attackData.dos}`,
   `Modifiers: ${(entry.state.modifierNotes ?? []).join(", ") || "None"}`
 ].join("\n")}</textarea>
 </form>
@@ -425,7 +424,7 @@ new Dialog({
         if (lance && dos > 0) {
           const lanceBonus = pen * dos;
           pen += lanceBonus;
-          properties.push(`Lance (+${lanceBonus} Pen from ${dos} DoS)`);
+          properties.push(`Lance (+${lanceBonus} Pen from ${dos} Degrees of Success)`);
         }
 
         if (fellingVal > 0) {
@@ -646,7 +645,7 @@ new Dialog({
           ? `<div><b>Hallucinogenic (${traitTests.hallucinogenic.value}) Toughness Test</b> (Target ${traitTests.hallucinogenic.target}${traitTests.hallucinogenic.respiratorBonus ? ` = Toughness ${traitTests.hallucinogenic.target + traitTests.hallucinogenic.penalty - traitTests.hallucinogenic.respiratorBonus} - ${traitTests.hallucinogenic.penalty} + ${traitTests.hallucinogenic.respiratorBonus} (Respirator)` : ""}) Roll ${traitTests.hallucinogenic.roll}: <b>${traitTests.hallucinogenic.success ? "Target resisted the hallucinogenic effect" : `FAILED | Duration: <b>${traitTests.hallucinogenic.duration}</b> round${traitTests.hallucinogenic.duration === 1 ? "" : "s"}`}</b>${traitTests.hallucinogenic.success ? "" : `<div style="margin-top:4px;">${traitTests.hallucinogenic.resultText ?? ""}</div>${traitTests.hallucinogenic.resultInlineRolls ? `<div>${traitTests.hallucinogenic.resultInlineRolls}</div>` : ""}`}</div>`
           : "";
         const forceSummary = traitTests.force
-          ? `<div><b>Force Opposed WP</b> Attacker ${traitTests.force.attackerRoll}/${traitTests.force.attackerWP} (DoS ${traitTests.force.attackerDoS}) vs Target ${traitTests.force.targetRoll}/${traitTests.force.targetWP} (DoS ${traitTests.force.targetDoS}) → <b>${traitTests.force.won ? `Attacker Wins (${traitTests.force.dos}d10 = ${traitTests.force.result})` : "Target Resists"}</b></div>`
+          ? `<div><b>Force Opposed WP</b> Attacker ${traitTests.force.attackerRoll}/${traitTests.force.attackerWP} (${traitTests.force.attackerDoS} Degrees of Success) vs Target ${traitTests.force.targetRoll}/${traitTests.force.targetWP} (${traitTests.force.targetDoS} Degrees of Success) → <b>${traitTests.force.won ? `Attacker Wins (${traitTests.force.dos}d10 = ${traitTests.force.result})` : "Target Resists"}</b></div>`
           : "";
 
         const sprayJamHtml = sprayJam
@@ -657,7 +656,7 @@ new Dialog({
           ? `<hr><div style="color:gold;font-size:1.1em;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">✦ RIGHTEOUS FURY ✦</div>${furyResults.map((f, i) => `<div>${i + 1}. <b>Location:</b> <i>${f.location}</i> — Righteous Fury: <b>${f.result}</b></div>`).join("")}`
           : "";
 
-        const formulaInline = `${formula}${flat >= 0 ? `+${flat}` : `${flat}`}`;
+        const formulaInline = formula;
         const damageSummary = `<div style="text-align:center; color:#000;">
 <div><b>Damage</b></div>
 <div><i style="color:#000;">(${formulaInline})</i></div>

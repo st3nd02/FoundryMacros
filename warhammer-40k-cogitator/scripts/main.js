@@ -1671,7 +1671,7 @@ hr{
     text-align:center;
     font-weight:bold;
     font-size:1.1em;
-    color:#ffad55;
+    color:#3aa0ff;
     text-shadow:
     0 0 1px black,
     0 0 2px black,
@@ -1915,7 +1915,7 @@ ${!keenData ? `
 <div style="margin-top:6px;font-size:1.3em;">
 Target:
 <span style="
-  color:#ffad55;
+  color:#3aa0ff;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -1929,7 +1929,7 @@ Target:
   ${keenData ? `
   <div style="font-size:1.4em; margin-bottom:4px;">
     <b>First Roll:</b> <span style="
-  color:#bd7548;
+  color:#ff9f1a;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -1937,7 +1937,7 @@ Target:
     1px 1px 0 black,
    -1px -1px 0 black;
 ">${keenData.firstVal}</span> <i><b>vs</b></i> <span style="
-  color:#ffad55;
+  color:#3aa0ff;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -1949,7 +1949,7 @@ Target:
 
   <div style="font-size:1.4em; margin-bottom:4px;">
    <b> Keen Reroll:</b> <span style="
-  color:#bd7548;
+  color:#ff9f1a;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -1957,7 +1957,7 @@ Target:
     1px 1px 0 black,
    -1px -1px 0 black;
 ">${keenData.secondVal}</span> <i><b>vs</b></i> <span style="
-  color:#ffad55;
+  color:#3aa0ff;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -1970,7 +1970,7 @@ Target:
   <div style="font-size:1.4em;">
 Roll:
 <span style="
-  color:#bd7548;
+  color:#ff9f1a;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -2050,7 +2050,7 @@ Roll:
 <div style="margin-top:6px;font-size:1.3em;">
 Target:
 <span style="
-  color:#ffad55;
+  color:#3aa0ff;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -2063,7 +2063,7 @@ Target:
 <div style="font-size:1.4em;">
 Roll:
 <span style="
-  color:#bd7548;
+  color:#ff9f1a;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -2415,7 +2415,7 @@ ${difficultyLabel ? `
 </span>` : ""}
 <hr>
 <div style="margin-top:6px;font-size:1.1em;"><b>Target: </b><span style="
-  color:#ffad55;
+  color:#3aa0ff;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -2424,7 +2424,7 @@ ${difficultyLabel ? `
    -1px -1px 0 black;
 ">${target}</span></div>
 <div style="font-size:1.2em;"><b>Roll:</b><span style="
-  color:#bd7548;
+  color:#ff9f1a;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -2438,7 +2438,7 @@ ${notes.length ? `<div style="font-size:1.0em;font-style:italic">${notes.join(" 
     0 0 2px black,
     1px 1px 0 black,
    -1px -1px 0 black; font-weight:bold;color:${successColor}">
-${success ? `${degrees} DoS` : `${degrees} DoF`}
+${success ? `${degrees} Degrees of Success` : `${degrees} Degrees of Failure`}
 </div>
 ${healText}
 </div>`
@@ -2495,7 +2495,7 @@ ${difficultyLabel ? `
 </span>` : ""}
 <hr>
 <div style="margin-top:6px;font-size:1.1em;"><b>Target: </b><span style="
-  color:#ffad55;
+  color:#3aa0ff;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -2504,7 +2504,7 @@ ${difficultyLabel ? `
    -1px -1px 0 black;
 ">${baseTarget}</span></div>
 <div style="font-size:1.2em;"><b>Roll:</b><span style="
-  color:#bd7548;
+  color:#ff9f1a;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -2518,7 +2518,7 @@ ${notes.length ? `<div style="font-size:1.0em;font-style:italic">${notes.join(" 
     0 0 2px black,
     1px 1px 0 black,
    -1px -1px 0 black; font-weight:bold;color:${successColor}">
-${fateSuccess ? `${fateDegrees} DoS` : `${fateDegrees} DoF`}
+${fateSuccess ? `${fateDegrees} Degrees of Success` : `${fateDegrees} Degrees of Failure`}
 </div>
 ${fateHealText}
 </div>`
@@ -2654,7 +2654,7 @@ ${mod ? `<b>Modifier:</b><i> ${mod >= 0 ? "+" : ""}${mod}</i><br>` : ""}
 <div style="margin-top:6px;font-size:1.3em;">
 Target:
 <span style="
-  color:#ffad55;
+  color:#3aa0ff;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -2667,7 +2667,7 @@ Target:
 <div style="font-size:1.4em;">
 Roll:
 <span style="
-  color:#bd7548;
+  color:#ff9f1a;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -2678,13 +2678,12 @@ Roll:
 </div>
 
 ${dos ? `<div style="font-weight:bold;font-size:1.3em;">
-DoS:
-<span style="color:#0a8f0a;text-shadow:
+<span style="color:#1aff1a;text-shadow:
     0 0 1px black,
     0 0 2px black,
     1px 1px 0 black,
    -1px -1px 0 black;">
-${finalDoS}
+${finalDoS} Degrees of Success
 </span>
 ${unnaturalBonus ? `<br><span style="font-size:0.8em;color:#8fe38f; text-shadow:
     0 0 1px black,
@@ -2695,12 +2694,12 @@ ${unnaturalBonus ? `<br><span style="font-size:0.8em;color:#8fe38f; text-shadow:
 </span>` : ""}
 </div>` : ""}
 ${dof ? `<div style="font-weight:bold;font-size:1.3em;">
-DoF: <span style="color:#a00000;
+<span style="color:#ff2a2a;
 text-shadow:
     0 0 1px black,
     0 0 2px black,
     1px 1px 0 black,
-   -1px -1px 0 black;"> ${dof}</span><br>
+   -1px -1px 0 black;"> ${dof} Degrees of Failure</span><br>
 </div>` : ""}
 
 </div></div>`
@@ -2745,7 +2744,7 @@ text-shadow:
 <div style="margin-top:6px;font-size:1.3em;">
 Target:
 <span style="
-  color:#ffad55;
+  color:#3aa0ff;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -2758,7 +2757,7 @@ Target:
 <div style="font-size:1.4em;">
 Roll:
 <span style="
-  color:#bd7548;
+  color:#ff9f1a;
   font-weight:bold;
   text-shadow:
     0 0 1px black,
@@ -2769,13 +2768,12 @@ Roll:
 </div>
 
 ${dos2 ? `<div style="font-weight:bold;font-size:1.3em;">
-DoS:
-<span style="color:#0a8f0a;text-shadow:
+<span style="color:#1aff1a;text-shadow:
     0 0 1px black,
     0 0 2px black,
     1px 1px 0 black,
    -1px -1px 0 black;">
-${finalDoS2}
+${finalDoS2} Degrees of Success
 </span>
 ${unnaturalBonus2 ? `<br><span style="font-size:0.8em;color:#8fe38f; text-shadow:
     0 0 1px black,
@@ -2786,12 +2784,12 @@ ${unnaturalBonus2 ? `<br><span style="font-size:0.8em;color:#8fe38f; text-shadow
 </span>` : ""}
 </div>` : ""}
 ${dof2 ? `<div style="font-weight:bold;font-size:1.3em;">
-DoF: <span style="color:#a00000;
+<span style="color:#ff2a2a;
 text-shadow:
     0 0 1px black,
     0 0 2px black,
     1px 1px 0 black,
-   -1px -1px 0 black;"> ${dof2}</span><br>
+   -1px -1px 0 black;"> ${dof2} Degrees of Failure</span><br>
 </div>` : ""}
 
 </div>`
