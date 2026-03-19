@@ -4,7 +4,7 @@ import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js"
 import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.22";
+const COGITATOR_VERSION = "2.1.21";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -111,7 +111,6 @@ Hooks.once("ready", async () => {
     openHealingFlow,
     openFateRestore,
     openFatigueManager,
-    openAmmoReload,
     runStep,
     emitSocket,
     submitDefenseResult,
@@ -1148,7 +1147,6 @@ async function openLauncher() {
         ...(game.user.isGM ? { healing: { label: "Apply Healing", callback: () => resolve("healing") } } : {}),
         ...(game.user.isGM ? { restoreFate: { label: "Restore Fate", callback: () => resolve("restoreFate") } } : {}),
         ...(game.user.isGM ? { fatigue: { label: "Fatigue Manager", callback: () => resolve("fatigue") } } : {}),
-        ...(game.user.isGM ? { ammoReload: { label: "Ammo Reload", callback: () => resolve("ammoReload") } } : {}),
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
       default: "attack"
@@ -1180,10 +1178,6 @@ async function openLauncher() {
     await openFatigueManager();
     return;
   }
-  if (choice === "ammoReload") {
-    await openAmmoReload();
-    return;
-  }
   await runStep(choice);
 }
 
@@ -1202,7 +1196,6 @@ function getWorkflowHudButtons() {
     buttons.push({ id: "healing", label: "Apply Healing", action: () => openHealingFlow() });
     buttons.push({ id: "restoreFate", label: "Restore Fate", action: () => openFateRestore() });
     buttons.push({ id: "fatigue", label: "Fatigue Manager", action: () => openFatigueManager() });
-    buttons.push({ id: "ammoReload", label: "Ammo Reload", action: () => openAmmoReload() });
   }
 
   return buttons;
@@ -1317,7 +1310,7 @@ class WorkflowHud {
       this.element.appendChild(actionCell("healing", "Apply Healing"));
 
       this.element.appendChild(actionCell("restoreFate", "Restore Fate"));
-      this.element.appendChild(actionCell("ammoReload", "Ammo Reload"));
+      this.element.appendChild(comingSoonCell());
       this.element.appendChild(actionCell("fatigue", "Fatigue Manager"));
       this.element.appendChild(comingSoonCell());
 
@@ -2931,182 +2924,6 @@ async function openFatigueManager() {
       -1px -1px 0 black;"><b>${actor.name} falls unconscious due to fatigue damage!</b></span><br>Unconscious for <b>${unconsciousMinutes}</b> minute${unconsciousMinutes === 1 ? "" : "s"}.
       </span>`
     : ""}
-</div>
-`
-          });
-        }
-      }
-    }
-  }).render(true);
-}
-
-async function openAmmoReload() {
-  if (!game.user.isGM) {
-    ui.notifications.warn("Only the GM can use Ammo Reload.");
-    return;
-  }
-
-  if (!canvas.tokens.controlled.length) {
-    ui.notifications.warn("Select your token first.");
-    return;
-  }
-
-  const actor = canvas.tokens.controlled[0].actor;
-
-  const weapons = actor.items.filter(i =>
-    i.type === "weapon" &&
-    i.system?.clip?.max > 0
-  );
-
-  if (!weapons.length) {
-    ui.notifications.warn("No reloadable weapons found.");
-    return;
-  }
-
-  const weaponOptions = weapons.map(w =>
-    `<option value="${w.id}">
-    ${w.name} (${w.system.clip.value}/${w.system.clip.max})
-  </option>`
-  ).join("");
-
-  new Dialog({
-    title: "Reload Weapon",
-
-    content: `
-<form>
-
-<div class="form-group">
-<label><b>Weapon</b></label>
-<select id="weapon">${weaponOptions}</select>
-</div>
-
-<div class="form-group">
-<label><b>Ammo</b></label>
-<select id="ammo"></select>
-</div>
-
-<hr>
-
-<div style="
-display:grid;
-grid-template-columns: 1fr 1fr;
-gap:8px;
-align-items:center;
-">
-
-<label>
-<input type="checkbox" id="fullReload" checked>
-Full Reload
-</label>
-
-<div>
-Rounds:
-<input id="rounds" type="number" min="1" value="1" disabled style="width:60px;">
-</div>
-
-</div>
-
-</form>
-`,
-
-    render: html => {
-      html.find("#fullReload").change(ev => {
-        html.find("#rounds").prop("disabled", ev.target.checked);
-      });
-
-      function updateAmmo() {
-        const weapon = actor.items.get(html.find("#weapon").val());
-
-        const ammoItems = actor.items.filter(i =>
-          i.type === "ammunition" &&
-          (i.system?.weapon ?? "").toLowerCase().trim() === weapon.name.toLowerCase().trim()
-        );
-
-        if (!ammoItems.length) {
-          html.find("#ammo").html(`<option value="">No compatible ammo</option>`);
-          return;
-        }
-
-        const opts = ammoItems.map(a => {
-          const qty = a.system?.quantity ?? a.system?.clip?.value ?? 0;
-          return `<option value="${a.id}">${a.name} (${qty})</option>`;
-        }).join("");
-
-        html.find("#ammo").html(opts);
-      }
-
-      updateAmmo();
-      html.find("#weapon").change(updateAmmo);
-    },
-
-    buttons: {
-      reload: {
-        label: "Reload",
-
-        callback: async html => {
-          const weapon = actor.items.get(html.find("#weapon").val());
-          const ammo = actor.items.get(html.find("#ammo").val());
-
-          if (!ammo) return;
-
-          const current = weapon.system.clip.value ?? 0;
-          const max = weapon.system.clip.max ?? 0;
-
-          const ammoQty =
-            ammo.system?.quantity ??
-            ammo.system?.clip?.value ??
-            0;
-
-          if (ammoQty <= 0) {
-            ui.notifications.warn("No ammo left.");
-            return;
-          }
-
-          const fullReload = html.find("#fullReload")[0].checked;
-
-          let wanted;
-
-          if (fullReload)
-            wanted = max - current;
-          else
-            wanted = Number(html.find("#rounds").val());
-
-          if (wanted <= 0) return;
-
-          const used = Math.min(wanted, ammoQty, max - current);
-
-          if (used <= 0) {
-            ui.notifications.info("Weapon already full.");
-            return;
-          }
-
-          const newWeapon = current + used;
-          const newAmmo = ammoQty - used;
-
-          await weapon.update({
-            "system.clip.value": newWeapon
-          });
-
-          if (ammo.system?.quantity != null)
-            await ammo.update({ "system.quantity": newAmmo });
-
-          else if (ammo.system?.clip?.value != null)
-            await ammo.update({ "system.clip.value": newAmmo });
-
-          if (newAmmo <= 0)
-            await ammo.delete();
-
-          ChatMessage.create({
-            speaker: ChatMessage.getSpeaker({ actor }),
-            content: `
-<div style="text-align:center;font-style:italic; font-size:1.2em;">
-<b>${actor.name}</b> reloads <b>${weapon.name}</b><br>
-Using <b>${ammo.name}</b><br>
-<b style="color:#6EC1FF; text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;">${used}</b> rounds loaded
 </div>
 `
           });
