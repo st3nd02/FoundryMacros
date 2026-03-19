@@ -436,28 +436,24 @@ const buildWorkflowHtml = state => {
     const defended = (state.targets ?? []).find(t => t.defenseAction && !String(t.defenseOutcome ?? "").toLowerCase().includes("awaiting"));
     if (!defended) return "";
     const action = String(defended.defenseAction ?? "defend").toLowerCase();
-    const managed = defended.defenseSuccess ? "manages" : "attempts";
     const outcome = defended.defenseSuccess
-      ? (Number(defended.defenseDegrees ?? 0) > 1 ? "succeeds totally" : "succeeds partially")
-      : (Number(defended.defenseDegrees ?? 0) > 1 ? "fails totally" : "fails partially");
-    return `<b>${defended.name}</b> ${managed} to <b>${action}</b> the attack and ${outcome}.`;
+      ? (Number(defended.defenseDegrees ?? 0) > 1 ? "totally succeeds" : "partially succeeds")
+      : (Number(defended.defenseDegrees ?? 0) > 1 ? "totally fails" : "partially fails");
+    return `<b>${defended.name}</b> attempts to <b>${action}</b> against <b>${state.attackerName}</b> and ${outcome}.`;
   };
   const buildDescription = () => {
+    const attackLine = String(state.statusText ?? "").toLowerCase().includes("hit") || String(state.statusText ?? "").toLowerCase().includes("miss")
+      ? `<b>${state.attackerName}</b> attacks <b>${targetNames}</b> with <b>${state.weaponName}</b> and ${missWord}.`
+      : `<b>${state.attackerName}</b> attacks <b>${targetNames}</b> with <b>${state.weaponName}</b>.`;
     if (hasDamageResolution) {
       const appliedTargets = joinedTargets(t => t.damageResolved || t.damageApplied);
-      const appliedHits = (state.targets ?? [])
-        .filter(t => t.damageResolved || t.damageApplied)
-        .reduce((sum, t) => sum + Number(t.allocatedHits ?? 0), 0);
-      return `<b>${appliedTargets}</b> receives <b>${Math.max(1, appliedHits)}</b> damage from <b>${state.attackerName}</b>'s attack.`;
+      return `${attackLine} <b>${appliedTargets}</b> receives damage from <b>${state.attackerName}</b>.`;
     }
     if (remainingHitsAfterDefense > 0) {
       return `<b>${state.attackerName}</b> manages <b>${remainingHitsAfterDefense}</b> hit(s) on <b>${targetNames}</b>.`;
     }
     if (hasResolvableDefense) return defenseStory();
-    if (String(state.statusText ?? "").toLowerCase().includes("hit") || String(state.statusText ?? "").toLowerCase().includes("miss")) {
-      return `<b>${state.attackerName}</b> attacks <b>${targetNames}</b> with <b>${state.weaponName}</b> and ${missWord}.`;
-    }
-    return `<b>${state.attackerName}</b> attacks <b>${targetNames}</b> with <b>${state.weaponName}</b>.`;
+    return attackLine;
   };
   const styledAttackDegrees = () => {
     const value = Number(state.attackDegrees ?? 0);
@@ -478,18 +474,20 @@ const buildWorkflowHtml = state => {
     const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
     const defenseSummary = t.defenseAction
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#151515;">
-          <div><b>Defense (T vs R):</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseAction} — ${t.defenseOutcome ?? "—"})</div>
+          <div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
+          <div style="color:#000;font-style:italic;text-align:center;">(${t.defenseAction} — ${t.defenseOutcome ?? "—"})</div>
           <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))} | <b>${hitsLabel}:</b> ${shownHits}</div>
           <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
           ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
-          <div style="text-align:center;"><b>Result:</b> ${styledDegrees(t)}</div>
+          <div style="text-align:center;">${styledDegrees(t)}</div>
         </div>`
-      : `<div><b>Defense (T vs R):</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")} (${t.defenseOutcome ?? "—"})</div>
+      : `<div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
+         <div style="color:#000;font-style:italic;text-align:center;">(${t.defenseOutcome ?? "—"})</div>
          <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))} | <b>${hitsLabel}:</b> ${shownHits}</div>`;
 
     const damageSummary = t.damageSummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
-      : `<div style="text-align:center;"><b>Damage</b><div>—</div></div>`;
+      : ``;
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
@@ -515,7 +513,7 @@ const buildWorkflowHtml = state => {
     <div><b>Status:</b> ${outlined(state.statusText ?? "Pending", statusColor(state.statusText))} | <b>Total ${state.horde?.active ? "Hits vs Horde" : "Hits"}:</b> ${state.totalHits ?? 0}</div>
     ${styledAttackDegrees()}
     ${state.extraText ? `<div><b>Notes:</b> ${state.extraText}</div>` : ""}
-    <hr>${cards}
+    ${cards}
   </div>`;
 };
 
