@@ -4,7 +4,7 @@ import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js"
 import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "1.5.1";
+const COGITATOR_VERSION = "2.1.19";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -39,6 +39,7 @@ let pendingDamageContext = null;
 let pendingAttackContext = null;
 const recentDefensePromptKeys = new Map();
 let workflowHud = null;
+const healingRollHistory = [];
 
 Hooks.once("init", () => {
   console.log(`Warhammer 40k Cogitator v${COGITATOR_VERSION} | Initializing`);
@@ -1290,7 +1291,7 @@ class WorkflowHud {
       this.element.appendChild(actionCell("characteristic", "Characteristics"));
       this.element.appendChild(actionCell("skill", "Skills"));
       this.element.appendChild(actionCell("medical", "Medical"));
-      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(actionCell("healing", "Apply Healing"));
 
       this.element.appendChild(comingSoonCell());
       this.element.appendChild(comingSoonCell());
@@ -2182,7 +2183,8 @@ async function openMedicalTest() {
   }
 
   const actor = token.actor;
-  const patient = [...game.user.targets][0].actor;
+  const patientToken = [...game.user.targets][0];
+  const patient = patientToken.actor;
   const skills = actor.system.skills;
 
   const hasMaster = actor.items.some(i => /master chirurgeon/i.test(i.name));
@@ -2211,6 +2213,36 @@ async function openMedicalTest() {
   const difficultyOptions = difficulties
     .map(d => `<option value="${d.value}" ${d.value === 0 ? "selected" : ""}>${d.label}</option>`)
     .join("");
+
+  function rememberHealingRoll(amount, label) {
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    healingRollHistory.unshift({
+      amount: Math.floor(amount),
+      label: label ?? `${actor.name} → ${patient.name}`,
+      timestamp: Date.now()
+    });
+    if (healingRollHistory.length > 12) healingRollHistory.length = 12;
+  }
+
+  async function promptApplyHealing(amount, sourceLabel = "Medical Flow") {
+    if (!game.user.isGM || !Number.isFinite(amount) || amount <= 0) return;
+    new Dialog({
+      title: "Apply Healing",
+      content: `<p>Apply <b>${Math.floor(amount)}</b> healing to <b>${patient.name}</b> now?</p>`,
+      buttons: {
+        apply: {
+          label: "Apply Healing",
+          callback: async () => openHealingFlow({
+            token: patientToken,
+            prefillAmount: Math.floor(amount),
+            sourceLabel
+          })
+        },
+        later: { label: "Later" }
+      },
+      default: "apply"
+    }).render(true);
+  }
 
   async function askForFate() {
     const fateCurrent = actor.system.fate?.value ?? 0;
@@ -2403,9 +2435,12 @@ async function openMedicalTest() {
             return heal;
           }
 
+          let rolledHealAmount = 0;
           let healText = "";
           if (success && (mode === "first" || mode === "extended")) {
             const heal = await calcHeal(degrees);
+            rolledHealAmount = heal;
+            rememberHealingRoll(heal, `${actor.name} → ${patient.name} (${actionName})`);
             healText = `
   <div style="margin-top:6px;font-weight:bold;font-size:1.2em;">
   Heals <span style="color:#ff2a2a;text-shadow:
@@ -2467,6 +2502,10 @@ ${healText}
 </div>`
           });
 
+          if (success && (mode === "first" || mode === "extended") && rolledHealAmount > 0) {
+            await promptApplyHealing(rolledHealAmount, `${actor.name} ${actionName}`);
+          }
+
           if (!success && (actor.system.fate?.value ?? 0) > 0) {
             const useFate = await askForFate();
             if (!useFate) return;
@@ -2481,9 +2520,12 @@ ${healText}
               fateVal <= baseTarget;
             const fateDegrees = Math.floor(Math.abs(baseTarget - fateVal) / 10) + 1;
 
+            let fateHealAmount = 0;
             let fateHealText = "";
             if (fateSuccess && (mode === "first" || mode === "extended")) {
               const heal = await calcHeal(fateDegrees);
+              fateHealAmount = heal;
+              rememberHealingRoll(heal, `${actor.name} → ${patient.name} (${actionName} Fate)`);
               fateHealText = `
       <div style="margin-top:6px;font-weight:bold;font-size:1.3em;"> Heals <span style=" color:#ff2a2a; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;">${heal}</span> wounds </div>`;
             }
@@ -2546,6 +2588,10 @@ ${fateSuccess ? `${fateDegrees} Degrees of Success` : `${fateDegrees} Degrees of
 ${fateHealText}
 </div>`
             });
+
+            if (fateSuccess && (mode === "first" || mode === "extended") && fateHealAmount > 0) {
+              await promptApplyHealing(fateHealAmount, `${actor.name} ${actionName} (Fate)`);
+            }
           }
 
           if (usedSuture && sutureItem) {
@@ -2557,13 +2603,13 @@ ${fateHealText}
   }).render(true);
 }
 
-async function openHealingFlow() {
+async function openHealingFlow({ token: providedToken = null, prefillAmount = null, sourceLabel = "" } = {}) {
   if (!game.user.isGM) {
     ui.notifications.warn("Only GMs can apply healing.");
     return;
   }
 
-  const token = canvas.tokens.controlled[0];
+  const token = providedToken ?? canvas.tokens.controlled[0];
   if (!token) {
     ui.notifications.warn("Select a token.");
     return;
@@ -2571,6 +2617,12 @@ async function openHealingFlow() {
 
   const actor = token.actor;
   const wounds = foundry.utils.deepClone(actor.system.wounds);
+
+  const safePrefillAmount = Number.isFinite(Number(prefillAmount)) ? Math.max(0, Math.floor(Number(prefillAmount))) : 0;
+  const historyOptions = healingRollHistory
+    .map((entry, index) => `<option value="${index}" ${index === 0 ? "selected" : ""}>${entry.amount} — ${entry.label}</option>`)
+    .join("");
+  const hasHistory = healingRollHistory.length > 0;
 
   new Dialog({
     title: `Heal ${actor.name}`,
@@ -2585,11 +2637,46 @@ async function openHealingFlow() {
       <hr>
 
       <div style="display:flex; flex-direction:column; gap:6px;">
+        <label><b>Healing Roll</b></label>
+        <select id="healingSource">
+          ${hasHistory ? `<option value="history">Available Healing Rolls</option>` : ""}
+          <option value="custom" ${!hasHistory || safePrefillAmount > 0 ? "selected" : ""}>Custom</option>
+        </select>
+
+        ${hasHistory ? `
+        <select id="historyRoll" ${safePrefillAmount > 0 ? "style='display:none'" : ""}>
+          ${historyOptions}
+        </select>` : ""}
+
         <label><b>Healing Amount</b></label>
-        <input id="heal" type="number" value="0" min="0"/>
+        <input id="heal" type="number" value="${safePrefillAmount}" min="0"/>
+        ${sourceLabel ? `<div style="font-size:0.9em; opacity:0.8;">Source: ${sourceLabel}</div>` : ""}
       </div>
     </form>
   `,
+    render: html => {
+      const source = html.find("#healingSource");
+      const history = html.find("#historyRoll");
+      const amount = html.find("#heal");
+
+      const setAmountFromHistory = () => {
+        if (!history.length) return;
+        const entry = healingRollHistory[Number(history.val())];
+        if (entry) amount.val(entry.amount);
+      };
+
+      const toggleInputs = () => {
+        const mode = source.val();
+        const usingHistory = mode === "history" && history.length;
+        history.toggle(usingHistory);
+        amount.prop("readonly", usingHistory);
+        if (usingHistory) setAmountFromHistory();
+      };
+
+      source.on("change", toggleInputs);
+      history.on("change", setAmountFromHistory);
+      toggleInputs();
+    },
     buttons: {
       heal: {
         label: "Apply Healing",
