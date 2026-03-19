@@ -4,7 +4,7 @@ import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js"
 import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.20";
+const COGITATOR_VERSION = "2.1.21";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -110,6 +110,7 @@ Hooks.once("ready", async () => {
     openMedicalTest,
     openHealingFlow,
     openFateRestore,
+    openFatigueManager,
     runStep,
     emitSocket,
     submitDefenseResult,
@@ -1145,6 +1146,7 @@ async function openLauncher() {
         medical: { label: "Medical Flow", callback: () => resolve("medical") },
         ...(game.user.isGM ? { healing: { label: "Apply Healing", callback: () => resolve("healing") } } : {}),
         ...(game.user.isGM ? { restoreFate: { label: "Restore Fate", callback: () => resolve("restoreFate") } } : {}),
+        ...(game.user.isGM ? { fatigue: { label: "Fatigue Manager", callback: () => resolve("fatigue") } } : {}),
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
       default: "attack"
@@ -1172,6 +1174,10 @@ async function openLauncher() {
     await openFateRestore();
     return;
   }
+  if (choice === "fatigue") {
+    await openFatigueManager();
+    return;
+  }
   await runStep(choice);
 }
 
@@ -1189,6 +1195,7 @@ function getWorkflowHudButtons() {
     buttons.push({ id: "applyDamage", label: "Apply Damage", action: () => runStep("applyDamage") });
     buttons.push({ id: "healing", label: "Apply Healing", action: () => openHealingFlow() });
     buttons.push({ id: "restoreFate", label: "Restore Fate", action: () => openFateRestore() });
+    buttons.push({ id: "fatigue", label: "Fatigue Manager", action: () => openFatigueManager() });
   }
 
   return buttons;
@@ -1304,7 +1311,7 @@ class WorkflowHud {
 
       this.element.appendChild(actionCell("restoreFate", "Restore Fate"));
       this.element.appendChild(comingSoonCell());
-      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(actionCell("fatigue", "Fatigue Manager"));
       this.element.appendChild(comingSoonCell());
 
       this.element.appendChild(emptyCell());
@@ -2812,6 +2819,113 @@ async function openFateRestore() {
                  -1px -1px 0 black;">Bonus Fate gained</span>` : ""}
             </div>
             `
+          });
+        }
+      }
+    }
+  }).render(true);
+}
+
+async function openFatigueManager() {
+  if (!game.user.isGM) {
+    ui.notifications.warn("Only the GM can use Fatigue Manager.");
+    return;
+  }
+  if (!canvas.tokens.controlled.length) {
+    ui.notifications.warn("Select your token first.");
+    return;
+  }
+
+  const actor = canvas.tokens.controlled[0].actor;
+  if (!actor) return;
+
+  const current = actor.system.fatigue?.value ?? 0;
+  const max = actor.system.fatigue?.max ?? 0;
+  const tb = actor.system.characteristics?.toughness?.bonus ?? 0;
+  const unconsciousMinutes = Math.max(0, 10 - tb);
+
+  new Dialog({
+    title: "Apply Fatigue",
+    content: `
+<form>
+  <div style="text-align:center;margin-bottom:8px;">
+    <b>${actor.name}</b><br>
+    Fatigue: ${current}/${max}
+  </div>
+  <hr>
+  <div style="display:grid;grid-template-columns: 1fr 1fr;gap:8px;align-items:center;">
+    <label>
+      <input type="checkbox" id="reset" checked>
+      Unmodified (Reset to 0)
+    </label>
+    <div>
+      Amount:
+      <input id="amount" type="number" value="1" min="1" disabled style="width:60px;">
+    </div>
+  </div>
+</form>
+`,
+    render: html => {
+      html.find("#reset").change(ev => {
+        html.find("#amount").prop("disabled", ev.target.checked);
+      });
+    },
+    buttons: {
+      apply: {
+        label: "Apply",
+        callback: async html => {
+          const reset = html.find("#reset")[0].checked;
+
+          let newValue;
+          let fatigueAdded = 0;
+
+          if (reset) {
+            newValue = 0;
+          } else {
+            fatigueAdded = Number(html.find("#amount").val());
+            if (fatigueAdded <= 0) return;
+            newValue = current + fatigueAdded;
+          }
+
+          await actor.update({
+            "system.fatigue.value": newValue
+          });
+
+          const exceeded = newValue > max;
+          const unconscious = newValue >= max && max > 0;
+
+          await ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            content: `
+<div style="text-align:center;font-style:italic; font-size:1.2em;">
+  <b>${actor.name}</b><br>
+  ${reset
+    ? "removes all Fatigue"
+    : `gains <b style="color:#C76EFF; text-shadow:
+      0 0 1px black,
+      0 0 2px black,
+      1px 1px 0 black,
+      -1px -1px 0 black;">+${fatigueAdded}</b> Fatigue`
+  }
+  <br>
+  Now: <b>${newValue}</b> / ${max}
+  ${exceeded
+    ? `<br><span style="color:orange; font-size:1.0em; text-shadow:
+      0 0 1px black,
+      0 0 2px black,
+      1px 1px 0 black,
+      -1px -1px 0 black;">Fatigue limit exceeded</span>`
+    : ""}
+  ${unconscious
+    ? `<br><span style="color:red; font-size:1.0em; text-shadow:
+      0 0 1px black,
+      0 0 2px black,
+      1px 1px 0 black,
+      -1px -1px 0 black;"><b>${actor.name} falls unconscious due to fatigue damage!</b></span><br>Unconscious for <b>${unconsciousMinutes}</b> minute${unconsciousMinutes === 1 ? "" : "s"}.
+      </span>`
+    : ""}
+</div>
+`
           });
         }
       }
