@@ -4,7 +4,7 @@ import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js"
 import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "1.5.0";
+const COGITATOR_VERSION = "1.5.1";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -107,6 +107,7 @@ Hooks.once("ready", async () => {
     openCharacteristicTest,
     openSkillTest,
     openMedicalTest,
+    openHealingFlow,
     runStep,
     emitSocket,
     submitDefenseResult,
@@ -1140,6 +1141,7 @@ async function openLauncher() {
         skill: { label: "Skill Test", callback: () => resolve("skill") },
         characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
         medical: { label: "Medical Flow", callback: () => resolve("medical") },
+        ...(game.user.isGM ? { healing: { label: "Apply Healing", callback: () => resolve("healing") } } : {}),
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
       default: "attack"
@@ -1159,6 +1161,10 @@ async function openLauncher() {
     await openMedicalTest();
     return;
   }
+  if (choice === "healing") {
+    await openHealingFlow();
+    return;
+  }
   await runStep(choice);
 }
 
@@ -1174,6 +1180,7 @@ function getWorkflowHudButtons() {
 
   if (game.user.isGM) {
     buttons.push({ id: "applyDamage", label: "Apply Damage", action: () => runStep("applyDamage") });
+    buttons.push({ id: "healing", label: "Apply Healing", action: () => openHealingFlow() });
   }
 
   return buttons;
@@ -1509,6 +1516,18 @@ async function askForFateReroll(actor) {
       default: "no"
     }).render(true);
   });
+}
+
+async function show3dDiceRoll(roll) {
+  if (!roll) return;
+
+  try {
+    if (game.dice3d?.showForRoll) {
+      await game.dice3d.showForRoll(roll, game.user, true);
+    }
+  } catch (error) {
+    console.debug("Warhammer 40k Cogitator | Dice So Nice render skipped:", error);
+  }
 }
 
 
@@ -1900,20 +1919,22 @@ hr{
 
           const successColor = success ? "#1aff1a" : "#ff2a2a";
 
-          roll.toMessage({
-            speaker: ChatMessage.getSpeaker({ actor }),
-            flavor: `
-<div style="text-align:center; color:#000000;">
+          await show3dDiceRoll(roll);
 
-<div style="font-style:italic;font-size:1.2em;">
+          await ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            content: `
+<div style="text-align:center; color:#000000; font-size:1.1em;">
+
+<div style="font-style:italic;font-size:1.1em;">
 <b>${actor.name}</b> performs a <b>${label}</b> Test
 </div>
 
 <hr>
 
 ${!keenData ? `
-<div style="margin-top:6px;font-size:1.3em;">
-Target:
+<div style="margin-top:6px;font-size:1.2em;">
+<b>Target:</b>
 <span style="
   color:#3aa0ff;
   font-weight:bold;
@@ -1927,7 +1948,7 @@ Target:
 ` : ``}
 
   ${keenData ? `
-  <div style="font-size:1.4em; margin-bottom:4px;">
+  <div style="font-size:1.2em; margin-bottom:4px;">
     <b>First Roll:</b> <span style="
   color:#ff9f1a;
   font-weight:bold;
@@ -1947,7 +1968,7 @@ Target:
 ">${keenData.firstTarget}</span>
   </div>
 
-  <div style="font-size:1.4em; margin-bottom:4px;">
+  <div style="font-size:1.2em; margin-bottom:4px;">
    <b> Keen Reroll:</b> <span style="
   color:#ff9f1a;
   font-weight:bold;
@@ -1967,8 +1988,8 @@ Target:
 ">${keenData.secondTarget}</span>
   </div>
 ` : `
-  <div style="font-size:1.4em;">
-Roll:
+  <div style="font-size:1.2em;">
+<b>Roll:</b>
 <span style="
   color:#ff9f1a;
   font-weight:bold;
@@ -1982,12 +2003,12 @@ Roll:
 `}
 
   ${notes.length ? `
-  <div style="font-size:1.3em; font-style:italic; opacity:0.85; margin-bottom:6px;">
+  <div style="font-size:1.1em; font-style:italic; opacity:0.85; margin-bottom:6px;">
     ${notes.join(" | ")}
   </div>` : ""}
 
   <div style="
-    font-size:1.4em;
+    font-size:1.2em;
     font-weight:bold;
     color:${successColor};
    text-shadow:
@@ -2023,9 +2044,11 @@ Roll:
 
               const fateColor = fateSuccess ? "#1aff1a" : "#ff2a2a";
 
-              fateRoll.toMessage({
+              await show3dDiceRoll(fateRoll);
+
+              await ChatMessage.create({
                 speaker: ChatMessage.getSpeaker({ actor }),
-                flavor: `
+                content: `
 <div style="text-align:center;">
 
 <b style="
@@ -2039,7 +2062,7 @@ Roll:
    -1px -1px 0 black;
 ">✦ ${actor.name} spends Fate and rerolls! ✦
 </b></div><hr>
-<div style="text-align:center; color:#000000;">
+<div style="text-align:center; color:#000000; font-size:1.1em;">
 
 <div style="font-style:italic;font-size:1.1em;">
 <b>${actor.name}</b> performs a <b>${label}</b> Test
@@ -2047,8 +2070,8 @@ Roll:
 
 <hr>
 
-<div style="margin-top:6px;font-size:1.3em;">
-Target:
+<div style="margin-top:6px;font-size:1.2em;">
+<b>Target:</b>
 <span style="
   color:#3aa0ff;
   font-weight:bold;
@@ -2060,8 +2083,8 @@ Target:
 ">${target}</span>
 </div>
 
-<div style="font-size:1.4em;">
-Roll:
+<div style="font-size:1.2em;">
+<b>Roll:</b>
 <span style="
   color:#ff9f1a;
   font-weight:bold;
@@ -2074,12 +2097,12 @@ Roll:
   </div>
 
   ${notes.length ? `
-  <div style="font-size:1.3em; font-style:italic; opacity:0.85; margin-bottom:6px;">
+  <div style="font-size:1.1em; font-style:italic; opacity:0.85; margin-bottom:6px;">
     ${notes.join(" | ")}
   </div>` : ""}
 
   <div style="
-    font-size:1.4em;
+    font-size:1.2em;
     font-weight:bold;
     color:${fateColor};
     text-shadow:
@@ -2395,11 +2418,13 @@ async function openMedicalTest() {
 
           const successColor = success ? "#1aff1a" : "#ff2a2a";
 
-          roll.toMessage({
+          await show3dDiceRoll(roll);
+
+          await ChatMessage.create({
             speaker: ChatMessage.getSpeaker({ actor }),
-            flavor: `
-<div style="font-size:1.0em; text-align:center; color: #000000;">
-<div style="font-style:italic;font-size:1.2em;"><b>${actor.name}</b> treats <b>${patient.name}</b></div><hr>
+            content: `
+<div style="font-size:1.1em; text-align:center; color: #000000;">
+<div style="font-style:italic;font-size:1.1em;"><b>${actor.name}</b> treats <b>${patient.name}</b></div><hr>
 <div style="font-size:1.2em; text-shadow:
     0 0 1px black,
     0 0 2px black,
@@ -2407,13 +2432,11 @@ async function openMedicalTest() {
    -1px -1px 0 black; color: #ff0000;">
 <b>${actionName}</b></div>
 ${mode === "diagnose" ? `<b>Skill:</b> <i>${skillName.charAt(0).toUpperCase() + skillName.slice(1)}</i><br>` : ""}
- <b>${(mode === "first" || mode === "extended") ? `</b><hr>
- <b>State:</b> <b>${state}</b><br>` : ""}
+${(mode === "first" || mode === "extended") ? `<b>State:</b> <b>${state}</b><br>` : ""}
 ${difficultyLabel ? `
 <span style="font-size:1.1em;">
 <b>Difficulty: </b><i>${difficultyLabel}</i>
 </span>` : ""}
-<hr>
 <div style="margin-top:6px;font-size:1.1em;"><b>Target: </b><span style="
   color:#3aa0ff;
   font-weight:bold;
@@ -2423,7 +2446,7 @@ ${difficultyLabel ? `
     1px 1px 0 black,
    -1px -1px 0 black;
 ">${target}</span></div>
-<div style="font-size:1.2em;"><b>Roll:</b><span style="
+<div style="font-size:1.1em;"><b>Roll:</b><span style="
   color:#ff9f1a;
   font-weight:bold;
   text-shadow:
@@ -2431,7 +2454,7 @@ ${difficultyLabel ? `
     0 0 2px black,
     1px 1px 0 black,
    -1px -1px 0 black;
-">${rollVal}</span><hr>
+">${rollVal}</span>
 ${notes.length ? `<div style="font-size:1.0em;font-style:italic">${notes.join(" | ")}</div>` : ""}
 <div style="text-shadow:
     0 0 1px black,
@@ -2465,10 +2488,12 @@ ${healText}
       <div style="margin-top:6px;font-weight:bold;font-size:1.3em;"> Heals <span style=" color:#ff2a2a; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;">${heal}</span> wounds </div>`;
             }
 
-            fateRoll.toMessage({
+            await show3dDiceRoll(fateRoll);
+
+            await ChatMessage.create({
               speaker: ChatMessage.getSpeaker({ actor }),
-              flavor: `
-      <div style="font-size:1.2em;text-align:center; color: #000000;"> <div> <b style="
+              content: `
+      <div style="font-size:1.1em;text-align:center; color: #000000;"> <div> <b style="
   color:gold;
   font-style:italic;
   font-size:1.1em;
@@ -2479,7 +2504,7 @@ ${healText}
    -1px -1px 0 black;
 ">✦ ${actor.name} spends Fate and rerolls! ✦
 </b></div><hr>
-<div style="font-style:italic;font-size:1.2em;"><b>${actor.name}</b> treats <b>${patient.name}</b></div><hr>
+<div style="font-style:italic;font-size:1.1em;"><b>${actor.name}</b> treats <b>${patient.name}</b></div>
 <div style="font-size:1.2em; text-shadow:
     0 0 1px black,
     0 0 2px black,
@@ -2487,13 +2512,11 @@ ${healText}
    -1px -1px 0 black; color: #ff0000;">
 <b>${actionName}</b></div>
 ${mode === "diagnose" ? `<b>Skill:</b> <i>${skillName.charAt(0).toUpperCase() + skillName.slice(1)}</i><br>` : ""}
- <b>${(mode === "first" || mode === "extended") ? `</b><hr>
- <b>State:</b> <b>${state}</b><br>` : ""}
+${(mode === "first" || mode === "extended") ? `<b>State:</b> <b>${state}</b><br>` : ""}
 ${difficultyLabel ? `
 <span style="font-size:1.1em;">
 <b>Difficulty: </b><i>${difficultyLabel}</i>
 </span>` : ""}
-<hr>
 <div style="margin-top:6px;font-size:1.1em;"><b>Target: </b><span style="
   color:#3aa0ff;
   font-weight:bold;
@@ -2503,7 +2526,7 @@ ${difficultyLabel ? `
     1px 1px 0 black,
    -1px -1px 0 black;
 ">${baseTarget}</span></div>
-<div style="font-size:1.2em;"><b>Roll:</b><span style="
+<div style="font-size:1.1em;"><b>Roll:</b><span style="
   color:#ff9f1a;
   font-weight:bold;
   text-shadow:
@@ -2511,7 +2534,7 @@ ${difficultyLabel ? `
     0 0 2px black,
     1px 1px 0 black,
    -1px -1px 0 black;
-">${fateVal}</span><hr>
+">${fateVal}</span>
 ${notes.length ? `<div style="font-size:1.0em;font-style:italic">${notes.join(" | ")}</div>` : ""}
 <div style="text-shadow:
     0 0 1px black,
@@ -2528,6 +2551,88 @@ ${fateHealText}
           if (usedSuture && sutureItem) {
             await sutureItem.delete();
           }
+        }
+      }
+    }
+  }).render(true);
+}
+
+async function openHealingFlow() {
+  if (!game.user.isGM) {
+    ui.notifications.warn("Only GMs can apply healing.");
+    return;
+  }
+
+  const token = canvas.tokens.controlled[0];
+  if (!token) {
+    ui.notifications.warn("Select a token.");
+    return;
+  }
+
+  const actor = token.actor;
+  const wounds = foundry.utils.deepClone(actor.system.wounds);
+
+  new Dialog({
+    title: `Heal ${actor.name}`,
+    content: `
+    <form>
+      <div style="text-align:center; margin-bottom:8px;">
+        <b>Current Status</b><br>
+        Wounds: <span style="color:#ff2a2a; font-weight:bold;">${wounds.value}</span><br>
+        Critical: <span style="color:#ff2a2a; font-weight:bold;">${wounds.critical}</span>
+      </div>
+
+      <hr>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label><b>Healing Amount</b></label>
+        <input id="heal" type="number" value="0" min="0"/>
+      </div>
+    </form>
+  `,
+    buttons: {
+      heal: {
+        label: "Apply Healing",
+        callback: async html => {
+          let amount = Number(html.find("#heal").val());
+          if (!amount || amount <= 0) return;
+
+          let healedCrit = 0;
+          let healedWounds = 0;
+
+          if (wounds.critical > 0) {
+            const reduce = Math.min(amount, wounds.critical);
+            wounds.critical -= reduce;
+            amount -= reduce;
+            healedCrit = reduce;
+          }
+
+          if (amount > 0 && wounds.value > 0) {
+            const reduce = Math.min(amount, wounds.value);
+            wounds.value -= reduce;
+            healedWounds = reduce;
+          }
+
+          await actor.update({ "system.wounds": wounds });
+
+          await ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            content: `
+              <div style="text-align:center; color:#000000; font-size:1.1em;">
+                <div style="font-style:italic;font-size:1.1em;">
+                  <b>${actor.name}</b> receives treatment
+                </div>
+                <hr>
+                <div>
+                  ${healedCrit ? `Critical Damage Healed: <b>${healedCrit}</b><br>` : ""}
+                  ${healedWounds ? `Wounds Healed: <b>${healedWounds}</b><br>` : ""}
+                </div>
+                <div style="margin-top:6px;">
+                  <b>Remaining:</b> Crit <b>${wounds.critical}</b> | Wounds <b>${wounds.value}</b>
+                </div>
+              </div>
+            `
+          });
         }
       }
     }
@@ -2619,7 +2724,7 @@ ${difficultyOptions}
 
           const displayTarget = target;
           const roll = await new Roll("1d100").roll({ async: true });
-          await roll.toMessage({ speaker: ChatMessage.getSpeaker({ actor }) });
+          await show3dDiceRoll(roll);
           const result = roll.total;
 
           let dos = 0;
@@ -2641,7 +2746,7 @@ ${mod ? `<b>Modifier:</b><i> ${mod >= 0 ? "+" : ""}${mod}</i><br>` : ""}
           ChatMessage.create({
             speaker: ChatMessage.getSpeaker({ actor }),
             content: `
-<div style="text-align:center;">
+<div style="text-align:center; font-size:1.1em;">
 
 <div style="font-style:italic; font-size:1.1em;">
 <b>${actor.name}</b> performs a <b>${label}</b> Test
@@ -2651,8 +2756,8 @@ ${mod ? `<b>Modifier:</b><i> ${mod >= 0 ? "+" : ""}${mod}</i><br>` : ""}
 
 <div style="font-size:1.0em;">${modLine}</div>
 
-<div style="margin-top:6px;font-size:1.3em;">
-Target:
+<div style="margin-top:6px;font-size:1.2em;">
+<b>Target:</b>
 <span style="
   color:#3aa0ff;
   font-weight:bold;
@@ -2664,8 +2769,8 @@ Target:
 ">${displayTarget}</span>
 </div>
 
-<div style="font-size:1.4em;">
-Roll:
+<div style="font-size:1.2em;">
+<b>Roll:</b>
 <span style="
   color:#ff9f1a;
   font-weight:bold;
@@ -2712,7 +2817,7 @@ text-shadow:
               await actor.update({ "system.fate.value": actor.system.fate.value - 1 });
 
               const roll2 = await new Roll("1d100").roll({ async: true });
-              await roll2.toMessage({ speaker: ChatMessage.getSpeaker({ actor }) });
+              await show3dDiceRoll(roll2);
               const result2 = roll2.total;
 
               let dos2 = 0;
@@ -2728,7 +2833,7 @@ text-shadow:
               ChatMessage.create({
                 speaker: ChatMessage.getSpeaker({ actor }),
                 content: `
-<div style="text-align:center;">
+<div style="text-align:center; font-size:1.1em;">
 <b style="color:gold;">${actor.name} spends Fate and rerolls!</b>
 <hr>
 <div style="text-align:center;">
@@ -2741,8 +2846,8 @@ text-shadow:
 
 <div style="font-size:1.0em;">${modLine}</div>
 
-<div style="margin-top:6px;font-size:1.3em;">
-Target:
+<div style="margin-top:6px;font-size:1.2em;">
+<b>Target:</b>
 <span style="
   color:#3aa0ff;
   font-weight:bold;
@@ -2754,8 +2859,8 @@ Target:
 ">${displayTarget}</span>
 </div>
 
-<div style="font-size:1.4em;">
-Roll:
+<div style="font-size:1.2em;">
+<b>Roll:</b>
 <span style="
   color:#ff9f1a;
   font-weight:bold;
