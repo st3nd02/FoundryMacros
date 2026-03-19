@@ -4,7 +4,7 @@ import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js"
 import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.19";
+const COGITATOR_VERSION = "2.1.20";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -109,6 +109,7 @@ Hooks.once("ready", async () => {
     openSkillTest,
     openMedicalTest,
     openHealingFlow,
+    openFateRestore,
     runStep,
     emitSocket,
     submitDefenseResult,
@@ -1143,6 +1144,7 @@ async function openLauncher() {
         characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
         medical: { label: "Medical Flow", callback: () => resolve("medical") },
         ...(game.user.isGM ? { healing: { label: "Apply Healing", callback: () => resolve("healing") } } : {}),
+        ...(game.user.isGM ? { restoreFate: { label: "Restore Fate", callback: () => resolve("restoreFate") } } : {}),
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
       default: "attack"
@@ -1166,6 +1168,10 @@ async function openLauncher() {
     await openHealingFlow();
     return;
   }
+  if (choice === "restoreFate") {
+    await openFateRestore();
+    return;
+  }
   await runStep(choice);
 }
 
@@ -1182,6 +1188,7 @@ function getWorkflowHudButtons() {
   if (game.user.isGM) {
     buttons.push({ id: "applyDamage", label: "Apply Damage", action: () => runStep("applyDamage") });
     buttons.push({ id: "healing", label: "Apply Healing", action: () => openHealingFlow() });
+    buttons.push({ id: "restoreFate", label: "Restore Fate", action: () => openFateRestore() });
   }
 
   return buttons;
@@ -1295,7 +1302,7 @@ class WorkflowHud {
       this.element.appendChild(actionCell("medical", "Medical"));
       this.element.appendChild(actionCell("healing", "Apply Healing"));
 
-      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(actionCell("restoreFate", "Restore Fate"));
       this.element.appendChild(comingSoonCell());
       this.element.appendChild(comingSoonCell());
       this.element.appendChild(comingSoonCell());
@@ -2724,6 +2731,86 @@ async function openHealingFlow({ token: providedToken = null, prefillAmount = nu
                   <b>Remaining:</b> Crit <b>${wounds.critical}</b> | Wounds <b>${wounds.value}</b>
                 </div>
               </div>
+            `
+          });
+        }
+      }
+    }
+  }).render(true);
+}
+
+async function openFateRestore() {
+  if (!game.user.isGM) {
+    ui.notifications.warn("Only GMs can restore Fate.");
+    return;
+  }
+
+  if (!canvas.tokens.controlled.length) {
+    ui.notifications.warn("Select your token first.");
+    return;
+  }
+
+  const actor = canvas.tokens.controlled[0].actor;
+  const current = actor.system.fate?.value ?? 0;
+  const max = actor.system.fate?.max ?? 0;
+
+  new Dialog({
+    title: "Restore Fate",
+    content: `
+    <form>
+      <div style="text-align:center;margin-bottom:8px;">
+        <b>${actor.name}</b><br>
+        Fate: ${current}/${max}
+      </div>
+
+      <hr>
+
+      <div style="display:grid;grid-template-columns: 1fr 1fr;gap:8px;align-items:center;">
+        <label>
+          <input type="checkbox" id="fullRestore" checked>
+          Full Restore
+        </label>
+        <div>
+          Amount:
+          <input id="amount" type="number" value="1" min="1" disabled style="width:60px;">
+        </div>
+      </div>
+    </form>
+    `,
+    render: html => {
+      html.find("#fullRestore").change(event => {
+        html.find("#amount").prop("disabled", event.target.checked);
+      });
+    },
+    buttons: {
+      restore: {
+        label: "Restore",
+        callback: async html => {
+          const full = html.find("#fullRestore")[0]?.checked;
+          const restoreAmount = full ? (max - current) : Number(html.find("#amount").val());
+          if (!Number.isFinite(restoreAmount) || restoreAmount <= 0) return;
+
+          const newValue = current + restoreAmount;
+          await actor.update({ "system.fate.value": newValue });
+
+          const exceeded = newValue > max;
+          await ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            content: `
+            <div style="text-align:center;font-style:italic; font-size:1.2em;">
+              <b>${actor.name}</b> has his Fate restored by<br>
+              <b style="color:#6EC1FF; text-shadow:
+                  0 0 1px black,
+                  0 0 2px black,
+                  1px 1px 0 black,
+                 -1px -1px 0 black;">+${restoreAmount}</b><br>
+              Now: <b>${newValue}</b> / ${max}
+              ${exceeded ? `<br><span style="color:orange; text-shadow:
+                  0 0 1px black,
+                  0 0 2px black,
+                  1px 1px 0 black,
+                 -1px -1px 0 black;">Bonus Fate gained</span>` : ""}
+            </div>
             `
           });
         }
