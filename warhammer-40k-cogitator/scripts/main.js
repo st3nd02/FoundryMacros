@@ -1240,17 +1240,16 @@ class WorkflowHud {
 
   render({ locked, x, y, buttons }) {
     this.locked = Boolean(locked);
+    const hudScale = game.user.isGM ? 0.8 : 1;
+    const px = value => `${Math.round(value * hudScale)}px`;
 
     if (!this.element) {
       this.element = document.createElement("div");
       this.element.id = "warhammer40k-cogitator-workflow-hud";
       this.element.style.position = "fixed";
       this.element.style.display = "grid";
-      this.element.style.gap = "6px";
-      this.element.style.padding = "8px";
-      this.element.style.borderRadius = "8px";
-      this.element.style.background = "rgba(12, 12, 12, 0.9)";
       this.element.style.border = "1px solid rgba(206, 206, 206, 0.45)";
+      this.element.style.background = "rgba(12, 12, 12, 0.9)";
       this.element.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.45)";
       this.element.style.zIndex = "9999";
       this.element.style.alignItems = "center";
@@ -1270,12 +1269,15 @@ class WorkflowHud {
 
     const buttonMap = new Map(buttons.map(button => [button.id, button]));
     const gridColumns = game.user.isGM ? 4 : 3;
-    this.element.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(110px, 1fr))`;
+    this.element.style.gap = px(6);
+    this.element.style.padding = px(8);
+    this.element.style.borderRadius = px(8);
+    this.element.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(${px(110)}, 1fr))`;
 
-    const iconCell = this.createIconCell();
-    const comingSoonCell = (colSpan = 1) => this.createComingSoonCell(colSpan);
-    const emptyCell = (colSpan = 1) => this.createEmptyCell(colSpan);
-    const actionCell = (id, fallbackLabel = "Coming soon") => this.createActionCell(buttonMap.get(id), fallbackLabel);
+    const iconCell = this.createIconCell(hudScale);
+    const comingSoonCell = (colSpan = 1) => this.createComingSoonCell(hudScale, colSpan);
+    const emptyCell = (colSpan = 1) => this.createEmptyCell(hudScale, colSpan);
+    const actionCell = (id, fallbackLabel = "Coming soon") => this.createActionCell(hudScale, buttonMap.get(id), fallbackLabel);
 
     if (game.user.isGM) {
       this.element.appendChild(actionCell("attack", "Attack"));
@@ -1319,8 +1321,8 @@ class WorkflowHud {
     lockButton.type = "button";
     lockButton.textContent = this.locked ? "🔒" : "🔓";
     lockButton.title = this.locked ? "Unlock bar" : "Lock bar";
-    lockButton.style.padding = "4px 8px";
-    lockButton.style.fontSize = "12px";
+    lockButton.style.padding = `${px(4)} ${px(8)}`;
+    lockButton.style.fontSize = px(12);
     lockButton.style.cursor = "pointer";
     lockButton.addEventListener("click", async event => {
       event.stopPropagation();
@@ -1340,14 +1342,15 @@ class WorkflowHud {
     this.element.style.cursor = this.locked ? "default" : "move";
   }
 
-  createActionCell(button, fallbackLabel) {
+  createActionCell(hudScale, button, fallbackLabel) {
+    const px = value => `${Math.round(value * hudScale)}px`;
     const buttonEl = document.createElement("button");
     buttonEl.type = "button";
     buttonEl.dataset.role = "workflow-action";
     buttonEl.textContent = button?.label ?? fallbackLabel;
-    buttonEl.style.padding = "6px 8px";
-    buttonEl.style.fontSize = "12px";
-    buttonEl.style.minHeight = "36px";
+    buttonEl.style.padding = `${px(6)} ${px(8)}`;
+    buttonEl.style.fontSize = px(12);
+    buttonEl.style.minHeight = px(36);
     buttonEl.style.cursor = button ? "pointer" : "default";
     if (!button) {
       buttonEl.disabled = true;
@@ -1361,43 +1364,46 @@ class WorkflowHud {
     return buttonEl;
   }
 
-  createComingSoonCell(colSpan = 1) {
+  createComingSoonCell(hudScale, colSpan = 1) {
+    const px = value => `${Math.round(value * hudScale)}px`;
     const cell = document.createElement("div");
     cell.textContent = "Coming soon";
     cell.style.display = "flex";
     cell.style.alignItems = "center";
     cell.style.justifyContent = "center";
-    cell.style.minHeight = "36px";
-    cell.style.padding = "6px 8px";
-    cell.style.fontSize = "12px";
+    cell.style.minHeight = px(36);
+    cell.style.padding = `${px(6)} ${px(8)}`;
+    cell.style.fontSize = px(12);
     cell.style.border = "1px dashed rgba(206, 206, 206, 0.35)";
-    cell.style.borderRadius = "4px";
+    cell.style.borderRadius = px(4);
     cell.style.color = "rgba(230, 230, 230, 0.9)";
     if (colSpan > 1) cell.style.gridColumn = `span ${colSpan}`;
     return cell;
   }
 
-  createEmptyCell(colSpan = 1) {
+  createEmptyCell(hudScale, colSpan = 1) {
+    const px = value => `${Math.round(value * hudScale)}px`;
     const cell = document.createElement("div");
-    cell.style.minHeight = "36px";
+    cell.style.minHeight = px(36);
     if (colSpan > 1) cell.style.gridColumn = `span ${colSpan}`;
     return cell;
   }
 
-  createIconCell() {
+  createIconCell(hudScale) {
+    const px = value => `${Math.round(value * hudScale)}px`;
     const cell = document.createElement("div");
     cell.style.display = "flex";
     cell.style.alignItems = "center";
     cell.style.justifyContent = "center";
-    cell.style.minHeight = "36px";
-    cell.style.padding = "4px";
+    cell.style.minHeight = px(36);
+    cell.style.padding = px(4);
     cell.style.border = "1px solid rgba(206, 206, 206, 0.35)";
-    cell.style.borderRadius = "4px";
+    cell.style.borderRadius = px(4);
 
     const icon = document.createElement("img");
     icon.src = `modules/${COGITATOR_ID}/WH40k Cogitator Icon.png`;
     icon.alt = "Warhammer 40k Cogitator";
-    icon.style.maxHeight = "28px";
+    icon.style.maxHeight = px(28);
     icon.style.maxWidth = "100%";
     icon.style.objectFit = "contain";
     cell.appendChild(icon);
