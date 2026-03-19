@@ -4,6 +4,7 @@ import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js"
 import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
+const COGITATOR_VERSION = "1.5.0";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -25,8 +26,6 @@ const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const REACTION_FLAG = "reactionUsedForDefense";
 const REACTION_COUNT_FLAG = "reactionUsedForDefenseCount";
-const REACTION_EFFECT_NAME = "Reaction Used";
-const REACTION_EFFECT_ICON = "icons/svg/lightning.svg";
 const USED_EVASION_EFFECT_ID = "ce-(whc)-used-evasion";
 const DEVASTATING_ASSAULT_EFFECT_ID = "ce-devastating-assault";
 const DEVASTATING_ASSAULT_EFFECT_NAME = "Devastating Assault";
@@ -42,7 +41,7 @@ const recentDefensePromptKeys = new Map();
 let workflowHud = null;
 
 Hooks.once("init", () => {
-  console.log("Warhammer 40k Cogitator | Initializing");
+  console.log(`Warhammer 40k Cogitator v${COGITATOR_VERSION} | Initializing`);
 
   game.settings.registerMenu(COGITATOR_ID, "workflowHudResetMenu", {
     name: "Reset Workflow HUD Position",
@@ -140,7 +139,7 @@ Hooks.once("ready", async () => {
   Hooks.on("canvasTearDown", () => removeWorkflowHud());
   refreshWorkflowHud();
 
-  console.log("Warhammer 40k Cogitator | Ready");
+  console.log(`Warhammer 40k Cogitator v${COGITATOR_VERSION} | Ready`);
 });
 
 function registerCombatHooks() {
@@ -319,24 +318,9 @@ async function consumeDefenseReaction(actor) {
 
   const nextUsed = Math.min(maxReactions, alreadyUsed + 1);
 
-  const existing = actor.effects.find(e => e.getFlag(COGITATOR_ID, REACTION_FLAG));
-  const effectName = `${REACTION_EFFECT_NAME} (${nextUsed}/${maxReactions})`;
-  if (!existing) {
-    await actor.createEmbeddedDocuments("ActiveEffect", [{
-      name: effectName,
-      img: REACTION_EFFECT_ICON,
-      icon: REACTION_EFFECT_ICON,
-      transfer: false,
-      disabled: false,
-      flags: { [COGITATOR_ID]: { [REACTION_FLAG]: true } }
-    }]);
-  } else {
-    await existing.update({ name: effectName });
-  }
-
   await actor.setFlag(COGITATOR_ID, REACTION_COUNT_FLAG, nextUsed);
   await actor.setFlag(COGITATOR_ID, REACTION_FLAG, true);
-  await applyUsedEvasionEffect(actor, nextUsed);
+  await applyUsedEvasionEffect(actor, Math.max(1, nextUsed - alreadyUsed));
 }
 
 async function clearDefenseReaction(actor) {
@@ -357,9 +341,17 @@ async function clearDefenseReaction(actor) {
   await removeUsedEvasionEffect(actor);
 }
 
-async function applyUsedEvasionEffect(actor, counter = null) {
+async function applyUsedEvasionEffect(actor, stacks = 1) {
   if (!actor) return;
-  await addConvenientEffectToActor({ actorUuid: actor.uuid, effectId: USED_EVASION_EFFECT_ID, effectName: "Used Evasion", counter });
+  const stackCount = Math.max(1, Number(stacks) || 1);
+  for (let i = 0; i < stackCount; i += 1) {
+    await addConvenientEffectToActor({
+      actorUuid: actor.uuid,
+      effectId: USED_EVASION_EFFECT_ID,
+      effectName: "Used Evasion",
+      allowDuplicates: true
+    });
+  }
 }
 
 async function removeUsedEvasionEffect(actor) {
@@ -460,7 +452,7 @@ async function addConvenientEffectToActor(payload) {
   return cogitatorSocket.executeAsGM("socketAddConvenientEffect", payload);
 }
 
-async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName, counter = null }) {
+async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName, counter = null, allowDuplicates = false }) {
   const actor = await resolveActorFromUuid(actorUuid);
   if (!actor) return false;
 
@@ -486,7 +478,7 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
   }
 
   if (!applied && canModifyActorEffects(actor)) {
-    const existing = findActorEffect(actor, effectId, effectName);
+    const existing = allowDuplicates ? null : findActorEffect(actor, effectId, effectName);
     if (!existing) {
       await actor.createEmbeddedDocuments("ActiveEffect", [{
         name: effectName || effectId || "Status Effect",
