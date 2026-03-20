@@ -67,8 +67,10 @@ const buildWorkflowHtml = state => {
 
   const cards = (state.targets ?? []).map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
-    const defenseSummary = `<div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
-      <div style="color:#000;font-style:italic;text-align:center;">(${t.defenseAction ? `${t.defenseAction} — ` : ""}${t.defenseOutcome ?? "—"})</div>`;
+    const forceFieldSummary = t.forceFieldChecked
+      ? `<div><b>Force Field:</b> ${outlined(t.forceFieldName ?? "—", "#ffad55")} | <b>Protection:</b> ${outlined(t.forceFieldProtection ?? "—", "#ffad55")} | <b>Overload:</b> ${outlined(t.forceFieldOverload ?? "—", "#ffad55")} | <b>Roll:</b> ${outlined(t.forceFieldRoll ?? "—", "#bd7548")}</div><div><b>Force Field Result:</b> ${outlined(t.forceFieldOutcome ?? "—", statusColor(t.forceFieldOutcome))}</div>`
+      : "";
+    const defenseSummary = `<div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>`;
     const shownHits = state.horde?.active ? (t.hordeHitsPreview ?? t.allocatedHits ?? 0) : (t.allocatedHits ?? 0);
     const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
     const damageSummary = t.damageSummary
@@ -81,6 +83,7 @@ const buildWorkflowHtml = state => {
       <div><b>Size:</b> ${sizeTxt}</div>
       ${defenseSummary}
       <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))} | <b>${hitsLabel}:</b> ${shownHits}</div>
+      ${forceFieldSummary}
       ${styledDegrees(t)}
       ${damageSummary}
     </div>`;
@@ -470,11 +473,11 @@ new Dialog({
           const total = modDice.reduce((a, b) => a + b, 0) + flatBonus;
           const rolledDiceDisplay = dice.join(",");
           const dosReplaced = !spray && activeIndexes.length;
-          const replacedValue = dosReplaced
-            ? Math.max(dos, proven ? provenVal : 0)
-            : null;
+          const replacedValue = dosReplaced ? modDice[activeIndexes.reduce((best, idx) => (dice[idx] < dice[best] ? idx : best), activeIndexes[0])] : null;
+          const originalValue = dosReplaced ? dice[activeIndexes.reduce((best, idx) => (dice[idx] < dice[best] ? idx : best), activeIndexes[0])] : null;
+          const replacementApplied = dosReplaced && replacedValue !== originalValue;
           const keptDisplay = dosReplaced
-            ? `[ ${rolledDiceDisplay}${replacedValue != null ? ` (<b>${replacedValue}</b>)` : ""} ]`
+            ? `[ ${rolledDiceDisplay}${replacedValue != null ? ` (${replacementApplied ? `<b>${replacedValue}</b>` : `${replacedValue}`})` : ""} ]`
             : `[ ${rolledDiceDisplay} ]`;
 
           damageResults.push(total);

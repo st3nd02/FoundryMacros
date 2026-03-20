@@ -13,6 +13,8 @@ const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const DOUBLE_TAP_TARGET_FLAG = "doubleTapEligibleTargetUuid";
 const WEAPON_RECHARGING_EFFECT_ID = "ce-(whc)-weapon-recharging";
 const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
+const JAM_EFFECT_ID = "ce-(whc)-jam";
+const JAM_EFFECT_NAME = "Jam";
 
 const createTalentModifierState = () => ({
   attack: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
@@ -179,6 +181,10 @@ const parseWeaponTraits = weapon =>
   (weapon.system.special ?? "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
 const hasTrait = (traits, key) => traits.some(t => t.includes(key));
 const hasWeaponSpecial = (weapon, keyword) => String(weapon?.system?.special ?? "").toLowerCase().includes(String(keyword).toLowerCase());
+const weaponBlockedByRecharging = weaponDoc => {
+  const special = String(weaponDoc?.system?.special ?? "").toLowerCase();
+  return special.includes("recharge") || special.includes("maximal");
+};
 const actorHasEffect = (actorDoc, { effectId = "", effectName = "" }) => {
   if (!actorDoc) return false;
   const effectIdLc = String(effectId ?? "").toLowerCase();
@@ -478,7 +484,6 @@ const buildWorkflowHtml = state => {
     const defenseSummary = t.defenseAction
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#151515;">
           <div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
-          <div style="color:#000;font-style:italic;text-align:center;">(${t.defenseAction} — ${t.defenseOutcome ?? "—"})</div>
           <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))} | <b>${hitsLabel}:</b> ${shownHits}</div>
           <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
           ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
@@ -486,7 +491,6 @@ const buildWorkflowHtml = state => {
           ${styledDegrees(t)}
         </div>`
       : `<div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
-         <div style="color:#000;font-style:italic;text-align:center;">(${t.defenseOutcome ?? "—"})</div>
          <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))} | <b>${hitsLabel}:</b> ${shownHits}</div>
          ${forceFieldSummary}${styledDegrees(t)}`;
 
@@ -695,6 +699,10 @@ const runAttackWorkflow = async setup => {
     if (!infiniteAmmo && !isGrenade && clipValue != null && clipValue <= 0) {
       return ui.notifications.warn("OUT OF AMMO");
     }
+  }
+
+  if (setup.modeKey === "allout" && !setup.skipAllOutReactionConsume) {
+    await game.warhammer40kCogitator?.consumeDefenseReaction?.(attacker);
   }
 
   const bs = attacker.system.characteristics.ballisticSkill?.total ?? 0;
@@ -1019,6 +1027,13 @@ const runAttackWorkflow = async setup => {
   if ((jam || isMaximal) && !isMelee && game.warhammer40kCogitator?.applyWeaponRechargingEffect) {
     await game.warhammer40kCogitator.applyWeaponRechargingEffect(attacker);
   }
+  if (jam) {
+    await game.warhammer40kCogitator?.addConvenientEffectToActor?.({
+      actorUuid: attacker.uuid,
+      effectId: JAM_EFFECT_ID,
+      effectName: JAM_EFFECT_NAME
+    });
+  }
 
   state.devastatingFollowUp = {
     available: !!(setup.toggles?.devastating && setup.modeKey === "allout" && state.totalHits > 0),
@@ -1082,20 +1097,30 @@ const runAttackWorkflow = async setup => {
     const targetDoc = await fromUuid(tg.tokenUuid);
     const targetActor = targetDoc?.actor;
 
-    const forceFieldCheck = await game.warhammer40kCogitator?.resolveForceFieldIntercept?.({ tokenUuid: tg.tokenUuid, postToChat: false });
-    if (forceFieldCheck && !forceFieldCheck.skipped) {
-      tg.forceFieldChecked = true;
-      tg.forceFieldOutcome = forceFieldCheck.outcome;
-      tg.forceFieldRoll = forceFieldCheck.result;
-      tg.forceFieldProtection = forceFieldCheck.protection;
-      tg.forceFieldOverload = forceFieldCheck.overload;
-      tg.forceFieldName = forceFieldCheck.fieldName;
-      if (forceFieldCheck.protectedHit) {
-        tg.allocatedHits = 0;
-        tg.defenseRoll = "—";
-        tg.defenseOutcome = "Success (Blocked by Force Field)";
-        continue;
+    try {
+      const forceFieldCheck = await game.warhammer40kCogitator?.resolveForceFieldIntercept?.({ tokenUuid: tg.tokenUuid, postToChat: false });
+      if (forceFieldCheck && !forceFieldCheck.skipped) {
+        tg.forceFieldChecked = true;
+        tg.forceFieldOutcome = forceFieldCheck.outcome;
+        tg.forceFieldRoll = forceFieldCheck.result;
+        tg.forceFieldProtection = forceFieldCheck.protection;
+        tg.forceFieldOverload = forceFieldCheck.overload;
+        tg.forceFieldName = forceFieldCheck.fieldName;
+        if (forceFieldCheck.protectedHit) {
+          tg.allocatedHits = 0;
+          tg.defenseRoll = "—";
+          tg.defenseOutcome = "Success (Blocked by Force Field)";
+          continue;
+        }
       }
+    } catch (err) {
+      console.error("Force field intercept failed", err);
+      tg.forceFieldChecked = true;
+      tg.forceFieldOutcome = "Error";
+      tg.forceFieldRoll = "—";
+      tg.forceFieldProtection = "—";
+      tg.forceFieldOverload = "—";
+      tg.forceFieldName = "Force Field";
     }
 
     if (isSpray) {
@@ -1186,7 +1211,11 @@ const runAttackWorkflow = async setup => {
 };
 
 const showAttackDialog = async () => {
-  const weaponOptions = weapons.map(w => `<option value="${w.id}">${w.name}</option>`).join("");
+  const attackerIsRecharging = actorHasEffect(attacker, { effectId: WEAPON_RECHARGING_EFFECT_ID, effectName: WEAPON_RECHARGING_EFFECT_NAME });
+  const weaponOptions = weapons.map(w => {
+    const disabled = attackerIsRecharging && weaponBlockedByRecharging(w);
+    return `<option value="${w.id}" ${disabled ? "disabled" : ""}>${w.name}${disabled ? " (Recharging)" : ""}</option>`;
+  }).join("");
 
   const buildModeOptions = weaponDoc => {
     const isMelee = (weaponDoc?.system.class ?? "").toLowerCase() === "melee";
@@ -1322,6 +1351,7 @@ const showAttackDialog = async () => {
             talent_twm_ranged: hasTalent(attacker, "two-weapon wielder (ranged)") && !isMelee && twoWeaponAttack,
             talent_ambi: hasTalent(attacker, "ambidextrous") && twoWeaponAttack,
             talent_master: hasTalent(attacker, "two weapon master") && twoWeaponAttack,
+            talent_doubletap: hasTalent(attacker, "double tap") && twoWeaponAttack,
             talent_flesh: hasTalent(attacker, "flesh render") && isMelee && isTearingWeapon,
             talent_raptor: hasTalent(attacker, "raptor") && isMelee && modeKey === "charge",
             talent_inescapable_melee: hasTalent(attacker, "inescapable attack (melee)") && isMelee && ["standard", "called", "charge", "allout"].includes(modeKey),
@@ -1362,9 +1392,26 @@ const showAttackDialog = async () => {
         };
 
         const refresh = () => {
-          const weaponDoc = attacker.items.get(html.find("#weaponId").val());
+          let weaponDoc = attacker.items.get(html.find("#weaponId").val());
+          if (!weaponDoc || (attackerIsRecharging && weaponBlockedByRecharging(weaponDoc))) {
+            const fallbackId = html.find("#weaponId option:not([disabled])").first().val();
+            if (fallbackId) {
+              html.find("#weaponId").val(fallbackId);
+              weaponDoc = attacker.items.get(fallbackId);
+            }
+          }
           const mode = html.find("#modeKey");
           mode.html(buildModeOptions(weaponDoc));
+          const selectedWeaponValue = html.find("#weaponId").val();
+          if (!selectedWeaponValue || html.find(`#weaponId option[value="${selectedWeaponValue}"]`).prop("disabled")) {
+            const firstEnabledWeapon = html.find("#weaponId option:not([disabled])").first().val();
+            if (firstEnabledWeapon) {
+              html.find("#weaponId").val(firstEnabledWeapon);
+            } else {
+              ui.notifications.warn("No eligible weapon can be used while Weapon Recharging is active.");
+            }
+          }
+
           const firstEnabled = mode.find("option:not([disabled])").first().val();
           if (firstEnabled) mode.val(firstEnabled);
           html.find("#targetsBody").html(targetRows(weaponDoc));
