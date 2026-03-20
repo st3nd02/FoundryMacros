@@ -1269,15 +1269,34 @@ class WorkflowHud {
       this.element.id = "warhammer40k-cogitator-workflow-hud";
       this.element.style.position = "fixed";
       this.element.style.display = "grid";
-      this.element.style.border = "1px solid rgba(206, 206, 206, 0.45)";
-      this.element.style.background = "rgba(12, 12, 12, 0.9)";
-      this.element.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.45)";
+      this.element.style.border = "1px solid var(--wh-brass-dark)";
+      this.element.style.background = "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 18%, rgba(0,0,0,0.16) 100%), linear-gradient(145deg, var(--wh-metal-light) 0%, var(--wh-metal) 38%, var(--wh-metal-dark) 100%)";
+      this.element.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -2px 8px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.45)";
       this.element.style.zIndex = "9999";
       this.element.style.alignItems = "center";
       this.element.style.userSelect = "none";
       this.element.style.pointerEvents = "all";
       this.element.style.opacity = "1";
       this.element.style.visibility = "visible";
+      this.element.style.fontFamily = "\"IM Fell English SC\", \"Times New Roman\", serif";
+      this.element.style.setProperty("--wh-metal-dark", "#1c1f22");
+      this.element.style.setProperty("--wh-metal", "#2a2f34");
+      this.element.style.setProperty("--wh-metal-light", "#3a4046");
+      this.element.style.setProperty("--wh-edge", "#6e747a");
+      this.element.style.setProperty("--wh-brass-dark", "#5e4a1f");
+      this.element.style.setProperty("--wh-brass", "#8a6b2e");
+      this.element.style.setProperty("--wh-brass-light", "#b08d3c");
+      this.element.style.setProperty("--wh-red-dark", "#3f0505");
+      this.element.style.setProperty("--wh-red", "#7b0f0f");
+      this.element.style.setProperty("--wh-red-bright", "#a61b1b");
+      this.element.style.setProperty("--wh-parchment-dark", "#b7a982");
+      this.element.style.setProperty("--wh-parchment", "#d8c9a3");
+      this.element.style.setProperty("--wh-ink", "#2b2416");
+      this.element.style.setProperty("--wh-yellow-dirty", "#9a7f00");
+      this.element.style.setProperty("--wh-yellow", "#c7a300");
+      this.element.style.setProperty("--wh-text", "#e6dcc5");
+      this.element.style.setProperty("--wh-shadow", "rgba(0, 0, 0, 0.65)");
+      this.element.style.setProperty("--wh-shadow-deep", "rgba(0, 0, 0, 0.85)");
 
       this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
     }
@@ -1292,7 +1311,7 @@ class WorkflowHud {
     const gridColumns = game.user.isGM ? 4 : 3;
     this.element.style.gap = px(6);
     this.element.style.padding = px(8);
-    this.element.style.borderRadius = px(8);
+    this.element.style.borderRadius = px(6);
     this.element.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(${px(110)}, 1fr))`;
 
     const iconCell = this.createIconCell(hudScale, this.locked);
@@ -1353,14 +1372,42 @@ class WorkflowHud {
     buttonEl.style.padding = `${px(6)} ${px(8)}`;
     buttonEl.style.fontSize = px(12);
     buttonEl.style.minHeight = px(36);
+    buttonEl.style.background = "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.10) 100%), linear-gradient(145deg, #31373d 0%, #23282d 55%, #1b1f23 100%)";
+    buttonEl.style.border = "1px solid var(--wh-brass-dark)";
+    buttonEl.style.borderRadius = px(4);
+    buttonEl.style.color = "var(--wh-text)";
+    buttonEl.style.fontFamily = "\"IM Fell English SC\", \"Times New Roman\", serif";
+    buttonEl.style.textTransform = "uppercase";
+    buttonEl.style.letterSpacing = "0.06em";
+    buttonEl.style.textShadow = "0 1px 1px rgba(0,0,0,0.7)";
+    buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
     buttonEl.style.cursor = button ? "pointer" : "default";
+    buttonEl.style.transition = "border-color 120ms ease, color 120ms ease, box-shadow 120ms ease";
+    if (button?.id === "medical" || button?.id === "healing" || button?.id === "restoreFate") {
+      buttonEl.style.background = "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%), linear-gradient(145deg, #cfc09b 0%, #b7a982 100%)";
+      buttonEl.style.color = "var(--wh-ink)";
+      buttonEl.style.textShadow = "0 1px 0 rgba(255,255,255,0.2)";
+    }
     if (!button) {
       buttonEl.disabled = true;
-      buttonEl.style.opacity = "0.7";
+      buttonEl.style.opacity = "0.82";
+      buttonEl.style.color = "rgba(230, 220, 197, 0.55)";
+      buttonEl.style.borderStyle = "dashed";
+      buttonEl.style.background = "linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.22) 100%), repeating-linear-gradient(45deg, rgba(0,0,0,0) 0 8px, rgba(0,0,0,0) 8px 10px, rgba(199,163,0,0.25) 10px 16px, rgba(0,0,0,0) 16px 18px), linear-gradient(145deg, #262a2e 0%, #1a1d20 100%)";
     } else {
       buttonEl.addEventListener("click", async event => {
         event.stopPropagation();
         await button.action();
+      });
+      buttonEl.addEventListener("mouseenter", () => {
+        buttonEl.style.borderColor = "var(--wh-brass-light)";
+        buttonEl.style.color = button?.id === "medical" || button?.id === "healing" || button?.id === "restoreFate" ? "#1f1a10" : "#f2ead8";
+        buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -3px 6px rgba(0,0,0,0.35), 0 0 6px rgba(122,15,15,0.18)";
+      });
+      buttonEl.addEventListener("mouseleave", () => {
+        buttonEl.style.borderColor = "var(--wh-brass-dark)";
+        buttonEl.style.color = button?.id === "medical" || button?.id === "healing" || button?.id === "restoreFate" ? "var(--wh-ink)" : "var(--wh-text)";
+        buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
       });
     }
     return buttonEl;
@@ -1376,9 +1423,14 @@ class WorkflowHud {
     cell.style.minHeight = px(36);
     cell.style.padding = `${px(6)} ${px(8)}`;
     cell.style.fontSize = px(12);
-    cell.style.border = "1px dashed rgba(206, 206, 206, 0.35)";
+    cell.style.border = "1px dashed rgba(176, 141, 60, 0.35)";
     cell.style.borderRadius = px(4);
-    cell.style.color = "rgba(230, 230, 230, 0.9)";
+    cell.style.color = "rgba(230, 220, 197, 0.65)";
+    cell.style.fontFamily = "\"IM Fell English SC\", \"Times New Roman\", serif";
+    cell.style.textTransform = "uppercase";
+    cell.style.letterSpacing = "0.05em";
+    cell.style.textShadow = "0 1px 1px rgba(0,0,0,0.7)";
+    cell.style.background = "linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.22) 100%), repeating-linear-gradient(45deg, rgba(0,0,0,0) 0 8px, rgba(0,0,0,0) 8px 10px, rgba(199,163,0,0.20) 10px 16px, rgba(0,0,0,0) 16px 18px), linear-gradient(145deg, #262a2e 0%, #1a1d20 100%)";
     if (colSpan > 1) cell.style.gridColumn = `span ${colSpan}`;
     return cell;
   }
@@ -1399,10 +1451,13 @@ class WorkflowHud {
     cell.style.justifyContent = "center";
     cell.style.minHeight = px(36);
     cell.style.padding = px(4);
-    cell.style.border = "1px solid rgba(206, 206, 206, 0.35)";
+    cell.style.border = "1px solid var(--wh-brass-dark)";
     cell.style.borderRadius = px(4);
     cell.style.cursor = "pointer";
-    cell.style.background = locked ? "" : "#6f0000";
+    cell.style.background = locked
+      ? "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.15) 100%), linear-gradient(145deg, #31373d 0%, #23282d 55%, #1b1f23 100%)"
+      : "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.15) 100%), repeating-linear-gradient(45deg, rgba(0,0,0,0) 0 8px, rgba(0,0,0,0) 8px 10px, rgba(199,163,0,0.25) 10px 16px, rgba(0,0,0,0) 16px 18px), linear-gradient(145deg, #5b1010 0%, #3f0505 100%)";
+    cell.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
     cell.title = locked ? "Unlock bar" : "Lock bar";
     cell.addEventListener("pointerdown", event => event.stopPropagation());
     cell.addEventListener("click", async event => {
