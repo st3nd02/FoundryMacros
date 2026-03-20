@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.32";
+const COGITATOR_VERSION = "2.1.33";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -1347,10 +1347,10 @@ class WorkflowHud {
 
     if (game.user.isGM) {
       this.element.appendChild(actionCell("attack", "Attack"));
-      this.element.appendChild(actionCell("psychic", "Psychic Powers"));
       this.element.appendChild(actionCell("defense", "Defense"));
       this.element.appendChild(actionCell("damage", "Damage"));
       this.element.appendChild(actionCell("applyDamage", "Apply Damage"));
+      this.element.appendChild(actionCell("psychic", "Psychic Powers"));
 
       iconCell.style.gridColumn = "span 2";
       this.element.appendChild(iconCell);
@@ -1368,9 +1368,9 @@ class WorkflowHud {
 
     } else {
       this.element.appendChild(actionCell("attack", "Attack"));
-      this.element.appendChild(actionCell("psychic", "Psychic Powers"));
       this.element.appendChild(actionCell("defense", "Defense"));
       this.element.appendChild(actionCell("damage", "Damage"));
+      this.element.appendChild(actionCell("psychic", "Psychic Powers"));
 
       this.element.appendChild(iconCell);
       this.element.appendChild(actionCell("fear", "Fear"));

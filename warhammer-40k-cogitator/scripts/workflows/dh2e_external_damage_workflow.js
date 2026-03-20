@@ -187,11 +187,13 @@ const parseVal = (txt, name, dflt = 0) => {
   return m ? Number(m[1]) : dflt;
 };
 
-const special = String(weapon.system.special ?? "").toLowerCase();
-const dmg = String(weapon.system.damage ?? "1d10+0");
-const penBase = getWeaponPenetration(weapon);
-const m = dmg.match(/(\d+)d(\d+)([+-]\d+)?/i);
-const damageType = String(weapon.system.damageType ?? "").toLowerCase();
+const isPsychicWorkflow = String(entry.state?.modeKey ?? "") === "psychic";
+const special = String((isPsychicWorkflow ? entry.state?.weaponSpecial : weapon.system.special) ?? "").toLowerCase();
+const dmg = String((isPsychicWorkflow ? entry.state?.weaponDamage : weapon.system.damage) ?? "1d10+0");
+const penBase = Number(isPsychicWorkflow ? (entry.state?.weaponPen ?? 0) : getWeaponPenetration(weapon));
+const m = dmg.match(/^(\d+)d(\d+)(.*)$/i);
+const defaultFlatExpr = m ? String(m[3] ?? "") : "+0";
+const damageType = String((isPsychicWorkflow ? entry.state?.weaponType : weapon.system.damageType) ?? "").toLowerCase();
 
 const buildHitLocations = (first, hits) => {
   const otherArm = first === "Left Arm" ? "Right Arm" : "Left Arm";
@@ -223,7 +225,7 @@ new Dialog({
 <input type="number" id="diceCount" value="${m ? Number(m[1]) : 1}" style="width:60px">
 <label><input type="radio" name="dieType" value="10" ${(m ? m[2] : "10") === "10" ? "checked" : ""}>d10</label>
 <label><input type="radio" name="dieType" value="5" ${(m ? m[2] : "10") === "5" ? "checked" : ""}>d5</label>
-+ <input type="number" id="flat" value="${m ? Number(m[3] || 0) : 0}" style="width:70px">
++ <input type="text" id="flat" value="${defaultFlatExpr}" style="width:90px">
 <br><br>
 <div style="columns:2; column-gap:20px;">
 <label><b>Penetration</b><br>
@@ -256,14 +258,20 @@ new Dialog({
         const diceCount = Number(html.find("#diceCount").val());
         const dieType = html.find('input[name="dieType"]:checked').val();
         let properties = [];
-        let flat = Number(html.find("#flat").val());
+        let flatExpr = String(html.find("#flat").val() ?? "").trim() || "+0";
+        let flat = Number((flatExpr.match(/[+-]\d+$/) || [0])[0]);
         const craftsmanship = String(weapon.system.craftsmanship ?? "").toLowerCase();
         const meleeBestCraft = craftsmanship === "best" && String(weapon.system.class || "").toLowerCase() === "melee";
         if (meleeBestCraft) { flat += 1; properties.push("Best Craftsmanship +1"); }
+        if (isPsychicWorkflow) {
+          // Psychic formulas can include arithmetic like +2*PR already resolved into state.weaponDamage.
+          const parsed = Number((flatExpr || "").replace(/^\+/, ""));
+          if (Number.isFinite(parsed)) flat = parsed;
+        }
         let pen = Number(html.find("#pen").val());
         const dos = Number(html.find("#dos").val());
         const isHordeTarget = !!entry.state?.horde?.active;
-        const traitsText = String(weapon.system.special ?? "").toLowerCase();
+        const traitsText = String(special ?? "").toLowerCase();
         const traitList = traitsText
           .split(",")
           .map(t => t.trim().toLowerCase())
@@ -427,7 +435,11 @@ new Dialog({
           }
         }
 
-        formula += ` + ${flat}`;
+        formula += ` + (${flat})`;
+        if (isPsychicWorkflow) {
+          const suffix = String(flatExpr || "").trim();
+          formula = `${diceCount}d${dieType}${suffix ? ` ${suffix.startsWith("+") || suffix.startsWith("-") ? suffix : `+ ${suffix}`}` : ""}`;
+        }
 
         if (razor && dos >= 3) {
           pen *= 2;

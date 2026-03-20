@@ -110,6 +110,33 @@ for (const msg of game.messages.contents) {
 
 if (!pending.length) return ui.notifications.warn("No pending defense found for this token.");
 
+if (reactionAlreadyUsed && requestedDefense?.chatMessageId) {
+  const requestedEntry = pending.find(p => p.msg.id === requestedDefense.chatMessageId);
+  if (requestedEntry) {
+    const targetState = requestedEntry.state.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === token.document.uuid);
+    if (targetState) {
+      await game.warhammer40kCogitator.submitDefenseResult({
+        chatMessageId: requestedEntry.msg.id,
+        targetTokenUuid: token.document.uuid,
+        defenseRoll: null,
+        defenseOutcome: "Skipped (failed defense: reaction used)",
+        allocatedHits: targetState.allocatedHits ?? 0,
+        defenseDetails: {
+          actionText: "Skipped",
+          incomingHits: targetState.allocatedHits ?? 0,
+          difficultyLabel: "—",
+          targetNumber: null,
+          notes: ["Reaction already used"],
+          degrees: 0,
+          success: false
+        }
+      });
+      ui.notifications.info("Reaction already used; defense step skipped.");
+      return;
+    }
+  }
+}
+
 const dodgeBase = actor.system.skills?.dodge?.total ?? 0;
 const parryBase = actor.system.skills?.parry?.total ?? 0;
 const meleeWeapons = actor.items.filter(i => i.type === "weapon" && ["me", "melee"].includes((i.system.class ?? "").toLowerCase()));

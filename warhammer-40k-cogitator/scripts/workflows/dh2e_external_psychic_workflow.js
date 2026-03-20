@@ -1,6 +1,7 @@
 export async function runPsychicPowerWorkflow() {
   const WORKFLOW_NS = "warhammer-40k-cogitator";
   const WORKFLOW_KEY = "dh2eExternalWorkflow";
+  const SUSTAINING_EFFECT_ID = "ce-(whc)-sustaining-psychic-power";
 
   if (!canvas.tokens.controlled.length) {
     return ui.notifications.warn("Select your token first.");
@@ -12,14 +13,14 @@ export async function runPsychicPowerWorkflow() {
 
   const actorTalents = actor.items.filter(i => i.type === "talent");
   const hasTalent = name => actorTalents.some(t => t.name.toLowerCase().trim() === name.toLowerCase());
+  const actorHasWarpSense = hasTalent("Warp Sense");
+  const actorHasFavoredWarp = hasTalent("Favored of the Warp");
 
   const psychicPowers = actor.items
     .filter(i => i.type === "psychicPower")
     .filter(p => !p.name.startsWith("**"));
 
-  if (!psychicPowers.length) {
-    return ui.notifications.warn("No usable Psychic Powers found.");
-  }
+  if (!psychicPowers.length) return ui.notifications.warn("No usable Psychic Powers found.");
 
   const getStatValue = (a, type) => {
     switch (type) {
@@ -79,9 +80,9 @@ export async function runPsychicPowerWorkflow() {
       InfB: bonuses.influence?.bonus ?? 0
     };
 
-    let replaced = expr;
+    let replaced = String(expr);
     for (const [key, value] of Object.entries(statMap)) {
-      replaced = replaced.replace(new RegExp(key, "gi"), value);
+      replaced = replaced.replace(new RegExp(key, "gi"), String(value));
     }
     return replaced;
   };
@@ -98,9 +99,7 @@ export async function runPsychicPowerWorkflow() {
 
   const rollWithDice = async formula => {
     const roll = await new Roll(formula).evaluate({ async: true });
-    if (game.dice3d?.showForRoll) {
-      await game.dice3d.showForRoll(roll, game.user, true);
-    }
+    if (game.dice3d?.showForRoll) await game.dice3d.showForRoll(roll, game.user, true);
     return roll;
   };
 
@@ -122,6 +121,27 @@ export async function runPsychicPowerWorkflow() {
     const targetDoc = await fromUuid(targetState.tokenUuid);
     const targetActor = targetDoc?.actor;
     if (!targetActor) return false;
+
+    const reactionAlreadyUsed = !!game.warhammer40kCogitator?.hasDefenseReaction?.(targetActor);
+    if (reactionAlreadyUsed) {
+      await game.warhammer40kCogitator.submitDefenseResult({
+        chatMessageId: chatMessage.id,
+        targetTokenUuid: targetState.tokenUuid,
+        defenseRoll: null,
+        defenseOutcome: "Skipped (failed defense: reaction used)",
+        allocatedHits: targetState.allocatedHits ?? 0,
+        defenseDetails: {
+          actionText: "Skipped",
+          incomingHits: targetState.allocatedHits ?? 0,
+          difficultyLabel: "—",
+          targetNumber: null,
+          notes: ["Reaction already used"],
+          degrees: 0,
+          success: false
+        }
+      });
+      return true;
+    }
 
     const recipientUsers = game.warhammer40kCogitator?.getDefenseRecipients
       ? game.warhammer40kCogitator.getDefenseRecipients(targetDoc ?? targetActor)
@@ -204,46 +224,182 @@ export async function runPsychicPowerWorkflow() {
     return `Annihilation: The psyker is immediately and irrevocably destroyed.`;
   };
 
-  const powerOptions = psychicPowers.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
-  const defaultPower = psychicPowers[0];
+  const powerOptions = `<option value="">Choose Psychic Power</option>${psychicPowers.map(p => `<option value="${p.id}">${p.name}</option>`).join("")}`;
+  const psychicStrengthOptions = Array.from({ length: 15 }, (_, idx) => idx - 9)
+    .map(i => `<option value="${i}" ${i === 0 ? "selected" : ""}>${i > 0 ? `+${i}` : i}</option>`).join("");
+  const sustainingOptions = Array.from({ length: 11 }, (_, i) => `<option value="${i}">${i}</option>`).join("");
 
   const pick = await new Promise(resolve => {
+    const focusTestOptions = `
+      <option value="willpower">Willpower</option>
+      <option value="perception">Perception</option>
+      <option value="psyniscience">Psyniscience</option>
+      <option value="corruption">Corruption</option>`;
+
+    const psyClass = String(actor.system.psy?.class ?? "—");
+    const corruption = Number(actor.system.corruption ?? 0);
+    const psyRating = Number(actor.system.psy?.rating ?? 0);
+    const psyniscience = Number(actor.system.skills?.psyniscience?.total ?? 0);
+    const perception = Number(actor.system.characteristics?.perception?.total ?? 0);
+    const willpower = Number(actor.system.characteristics?.willpower?.total ?? 0);
+
+    let content = `<style>
+.top-panel { display:flex; align-items:center; font-size:1.15rem; font-weight:bold; margin-bottom:12px; }
+.top-left { min-width:150px; text-align:left; }
+.top-center { flex:1; text-align:center; }
+.top-right { min-width:160px; text-align:right; }
+.selection-row { display:flex; align-items:center; gap:15px; margin-bottom:10px; background:rgba(0,0,0,0.1); padding:8px; border-radius:4px; }
+.opposed-inline { color:orange; font-weight:bold; text-align:right; text-shadow:1px 1px 0px black; display:none; }
+.power-select-container { flex:2; }
+.checkbox-container { flex:0; white-space:nowrap; display:flex; align-items:center; gap:5px; }
+.sustaining-container { flex:1; display:flex; align-items:center; gap:8px; }
+.section-title { font-weight:bold; margin-top:8px; }
+.psychic-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-top:8px; }
+.field-block { display:flex; flex-direction:column; }
+.full-width { grid-column:1 / span 3; }
+.big-box { width:100%; min-height:180px; height:220px; resize:vertical; }
+</style>
+<h2 style="text-align:center;"><b>${actor.name}</b></h2>
+<div class="top-panel">
+  <div class="top-left">${psyClass}<label style="margin-left:8px;"><input type="checkbox" id="blackCrusadeToggle"> BC</label></div>
+  <div class="top-center">PR: ${psyRating} | <b>WP:</b> ${willpower} | <b>Per:</b> ${perception} | <b>Psyniscience:</b> ${psyniscience} | <b>Corruption:</b> ${corruption}</div>
+  <div class="top-right"><select id="psyMode"><option value="fettered">Fettered</option><option value="unfettered" selected>Unfettered</option><option value="push">Push</option></select></div>
+</div><hr>
+<div class="selection-row">
+  <div class="power-select-container"><label style="font-weight:bold; white-space:nowrap;">Select Power: </label><select id="powerSelect">${powerOptions}</select></div>
+  <div class="sustaining-container"><label style="font-weight:bold; white-space:nowrap;">Psychic Strength:</label><select id="psychicStrength">${psychicStrengthOptions}</select></div>
+  <div class="checkbox-container"><input type="checkbox" id="powerFocus"><label for="powerFocus" style="font-weight:bold;">Psy Focus (+10)</label></div>
+  <div class="sustaining-container"><label style="font-weight:bold; white-space:nowrap;">Sustaining Powers:</label><select id="sustainingCount">${sustainingOptions}</select></div>
+</div>
+<hr><div class="section-title"><h3>Talents</h3></div>
+<div style="display:flex; gap:20px; margin-bottom:10px;">
+  <label><input type="checkbox" id="talentWarpSense" ${actorHasWarpSense ? "checked" : ""}> Warp Sense</label>
+  <label><input type="checkbox" id="talentFavoredWarp" ${actorHasFavoredWarp ? "checked" : ""}> Favored of the Warp</label>
+</div><hr>
+<div class="psychic-grid">
+  <div class="field-block"><div class="section-title">Action</div><input id="action" type="text"></div>
+  <div class="field-block"><div class="section-title">Subtype</div><input id="subtype" type="text"></div>
+  <div class="field-block"><div class="section-title">Sustained?</div><input id="sustained" type="text"></div>
+  <div class="field-block"><div class="section-title">Range</div><input id="range" type="text"></div>
+  <div class="field-block"><div class="section-title">Focus Power</div><input id="difficulty" type="number"></div>
+  <div class="field-block"><div class="section-title">Focus Test</div><select id="focusTest">${focusTestOptions}</select></div>
+  <div class="field-block"><div class="section-title">Damage</div><input id="damageFormula" type="text"></div>
+  <div class="field-block"><div class="section-title">Damage Type</div><input id="damageType" type="text"></div>
+  <div class="field-block"><div class="section-title">Pen</div><input id="penetration" type="text"></div>
+  <div class="field-block"><div class="section-title">Power Shape</div><input id="damageZone" type="text"></div>
+  <div class="field-block"><div class="section-title">Modifier</div><input id="rollModifier" type="number" value="0"></div>
+  <div class="field-block"><div class="section-title">&nbsp;</div><div id="opposedNote" class="opposed-inline">Opposed Power</div></div>
+  <div class="field-block full-width"><div class="section-title">Special Traits</div><input id="damageSpecial" type="text"></div>
+</div><hr><div class="section-title">Effect</div><textarea id="effect" class="big-box" style="font-family:monospace;"></textarea>`;
+
     new Dialog({
-      title: "Psychic Powers",
-      content: `<form>
-        <div class="form-group"><label><b>Power</b></label><select id="powerId">${powerOptions}</select></div>
-        <div class="form-group"><label><b>Mode</b></label><select id="mode"><option value="fettered">Fettered</option><option value="unfettered" selected>Unfettered</option><option value="push">Push</option></select></div>
-        <div class="form-group"><label><b>Psychic Strength</b></label><input id="strength" type="number" value="0" min="-9" max="5"/></div>
-        <div class="form-group"><label><b>Sustaining Powers</b></label><input id="sustain" type="number" value="0" min="0" max="10"/></div>
-        <div class="form-group"><label><b>Modifier</b></label><input id="mod" type="number" value="0"/></div>
-        <div class="form-group"><label><input id="focus" type="checkbox"/> Psy Focus (+10)</label></div>
-        <div class="form-group"><label><input id="bc" type="checkbox"/> Black Crusade mode</label></div>
-        <div class="form-group"><label><input id="warpSense" type="checkbox" ${hasTalent("Warp Sense") ? "checked" : ""}/> Warp Sense</label></div>
-        <div class="form-group"><label><input id="favored" type="checkbox" ${hasTalent("Favored of the Warp") ? "checked" : ""}/> Favored of the Warp</label></div>
-      </form>`,
+      title: "Psychic Power Handler",
+      content,
+      render: html => {
+        const powerSelect = html.find("#powerSelect");
+        const focusSelect = html.find("#focusTest");
+        const opposedBox = html.find("#opposedNote");
+        const psyModeSelect = html.find("#psyMode");
+        const bcToggle = html.find("#blackCrusadeToggle");
+
+        function updatePsychicStrengthOptions() {
+          const mode = psyModeSelect.val();
+          const isBC = bcToggle.is(":checked");
+          const basePR = actor.system.psy?.rating ?? 1;
+          const psyClassRaw = (actor.system.psy?.class || "").toLowerCase();
+          let psyClassType = "bound";
+          if (psyClassRaw.includes("unbound")) psyClassType = "unbound";
+          if (psyClassRaw.includes("daemon")) psyClassType = "daemon";
+
+          let min = 0;
+          let max = 0;
+          if (mode === "unfettered") {
+            max = 0;
+            const maxReduction = basePR - 1;
+            min = maxReduction > 0 ? -maxReduction : 0;
+          }
+          if (mode === "push") {
+            min = 0;
+            if (psyClassType === "bound") max = isBC ? 3 : 2;
+            if (psyClassType === "unbound") max = isBC ? 5 : 4;
+            if (psyClassType === "daemon") max = isBC ? 4 : 3;
+          }
+
+          const current = parseInt(html.find("#psychicStrength").val()) || 0;
+          const select = html.find("#psychicStrength");
+          select.empty();
+          for (let i = min; i <= max; i++) {
+            select.append(`<option value="${i}">${i > 0 ? `+${i}` : i}</option>`);
+          }
+          select.val(current >= min && current <= max ? current : 0);
+        }
+
+        function updatePsyModes() {
+          const isBC = bcToggle.is(":checked");
+          const current = psyModeSelect.val();
+          psyModeSelect.empty();
+          if (isBC) psyModeSelect.append(`<option value="fettered">Fettered</option>`);
+          psyModeSelect.append(`<option value="unfettered">Unfettered</option>`);
+          psyModeSelect.append(`<option value="push">Push</option>`);
+          if (psyModeSelect.find(`option[value="${current}"]`).length) psyModeSelect.val(current);
+        }
+
+        function populateFields(powerId) {
+          if (!powerId) return;
+          const power = actor.items.get(powerId);
+          if (!power) return;
+          const data = power.system;
+          const focusPower = data.focusPower ?? {};
+          const rawTest = focusPower.test ?? focusPower.characteristic ?? "";
+
+          html.find("#action").val(data.action ?? "");
+          html.find("#difficulty").val(data.focusPower?.difficulty ?? 0);
+          html.find("#range").val(data.range ?? "");
+          html.find("#sustained").val(data.sustained ?? "");
+          html.find("#subtype").val(data.subtype ?? "");
+          html.find("#damageZone").val(data.damage?.zone ?? "");
+          html.find("#damageType").val(data.damage?.type ?? "");
+          html.find("#damageFormula").val(data.damage?.formula ?? "");
+          html.find("#penetration").val(data.damage?.penetration ?? "");
+          html.find("#damageSpecial").val(data.damage?.special ?? "");
+          html.find("#effect").val(stripHTML(data.effect ?? data.description ?? ""));
+
+          const normalized = normalizeFocusTest(rawTest);
+          if (normalized) focusSelect.val(normalized);
+          if (isOpposedPower(rawTest)) opposedBox.show(); else opposedBox.hide();
+        }
+
+        psyModeSelect.on("change", updatePsychicStrengthOptions);
+        bcToggle.on("change", () => {
+          updatePsyModes();
+          updatePsychicStrengthOptions();
+        });
+        powerSelect.on("change", ev => populateFields(ev.target.value));
+        updatePsyModes();
+        updatePsychicStrengthOptions();
+      },
       buttons: {
         use: {
           label: "Use Power",
           callback: html => resolve({
-            powerId: html.find("#powerId").val(),
-            mode: html.find("#mode").val(),
-            psychicStrength: Number(html.find("#strength").val() || 0),
-            sustainingCount: Number(html.find("#sustain").val() || 0),
-            rollModifier: Number(html.find("#mod").val() || 0),
-            hasFocus: html.find("#focus").is(":checked"),
-            isBlackCrusade: html.find("#bc").is(":checked"),
-            hasFavored: html.find("#favored").is(":checked")
+            powerId: html.find("#powerSelect").val(),
+            mode: html.find("#psyMode").val(),
+            psychicStrength: Number(html.find("#psychicStrength").val() || 0),
+            sustainingCount: Number(html.find("#sustainingCount").val() || 0),
+            rollModifier: Number(html.find("#rollModifier").val() || 0),
+            hasFocus: html.find("#powerFocus").is(":checked"),
+            isBlackCrusade: html.find("#blackCrusadeToggle").is(":checked"),
+            hasFavored: html.find("#talentFavoredWarp").is(":checked")
           })
         },
         cancel: { label: "Cancel", callback: () => resolve(null) }
-      },
-      default: "use"
-    }).render(true, { width: 520 });
+      }
+    }, { width: 800 }).render(true);
   });
 
-  if (!pick) return;
+  if (!pick || !pick.powerId) return;
 
-  const power = actor.items.get(pick.powerId) ?? defaultPower;
+  const power = actor.items.get(pick.powerId);
   if (!power) return ui.notifications.warn("Choose a Psychic Power.");
 
   const data = power.system ?? {};
@@ -256,9 +412,7 @@ export async function runPsychicPowerWorkflow() {
   const targetToken = targets[0] ?? null;
   const targetActor = targetToken?.actor ?? null;
 
-  if ((hasDamage || opposed) && !targetToken) {
-    return ui.notifications.warn("Select a target for this psychic power.");
-  }
+  if (hasDamage && !targetToken) return ui.notifications.warn("This power requires a target.");
 
   const basePR = Number(actor.system.psy?.rating ?? 1);
   const psyClassRaw = String(actor.system.psy?.class ?? "").toLowerCase();
@@ -266,22 +420,21 @@ export async function runPsychicPowerWorkflow() {
   if (psyClassRaw.includes("unbound")) psyClassType = "unbound";
   if (psyClassRaw.includes("daemon")) psyClassType = "daemon";
 
-  if (psyClassType === "daemon" && pick.mode === "fettered") {
-    return ui.notifications.error("Daemons cannot use Fettered.");
-  }
+  if (psyClassType === "daemon" && pick.mode === "fettered") return ui.notifications.error("Daemons cannot use Fettered!");
 
-  let effectivePR = basePR;
-  if (pick.mode === "fettered") effectivePR = Math.ceil(basePR / 2);
-
+  let effectivePR = pick.mode === "fettered" ? Math.ceil(basePR / 2) : basePR;
   let appliedStrength = pick.psychicStrength;
   let maxRaise = 0;
+  let canLower = true;
+
+  if (pick.mode === "unfettered") maxRaise = 0;
   if (pick.mode === "push") {
     if (psyClassType === "bound") maxRaise = pick.isBlackCrusade ? 3 : 2;
     if (psyClassType === "unbound") maxRaise = pick.isBlackCrusade ? 5 : 4;
     if (psyClassType === "daemon") maxRaise = pick.isBlackCrusade ? 4 : 3;
   }
-  if (pick.mode === "fettered" && appliedStrength !== 0) appliedStrength = 0;
-  if (pick.mode === "unfettered" && appliedStrength > 0) appliedStrength = 0;
+  if (pick.mode === "fettered") { canLower = false; maxRaise = 0; }
+  if (!canLower && appliedStrength < 0) appliedStrength = 0;
   if (appliedStrength > maxRaise) appliedStrength = maxRaise;
 
   let testModifierFromStrength = 0;
@@ -290,11 +443,11 @@ export async function runPsychicPowerWorkflow() {
     effectivePR += appliedStrength;
   }
   if (appliedStrength > 0) {
-    testModifierFromStrength = -appliedStrength * 10;
+    testModifierFromStrength = appliedStrength * -10;
     effectivePR += appliedStrength;
   }
-  effectivePR -= Number(pick.sustainingCount ?? 0);
-  effectivePR = Math.max(1, effectivePR);
+
+  effectivePR = Math.max(1, effectivePR - Number(pick.sustainingCount ?? 0));
 
   const baseStat = getStatValue(actor, focusTestType);
   const focusDifficulty = Number(data.focusPower?.difficulty ?? 0);
@@ -311,10 +464,7 @@ export async function runPsychicPowerWorkflow() {
       new Dialog({
         title: "Spend Fate?",
         content: `<p><b>Focus Power Test Failed!</b><br>Spend 1 Fate Point to reroll?</p>`,
-        buttons: {
-          yes: { label: "Spend Fate (-1)", callback: () => resolve(true) },
-          no: { label: "Keep Result", callback: () => resolve(false) }
-        },
+        buttons: { yes: { label: "Spend Fate (-1)", callback: () => resolve(true) }, no: { label: "Keep Result", callback: () => resolve(false) } },
         default: "no"
       }).render(true);
     });
@@ -328,18 +478,12 @@ export async function runPsychicPowerWorkflow() {
   }
 
   const resolvedRangeText = resolveFormula(String(data.range ?? ""), effectivePR).trim();
-  const rangeLower = resolvedRangeText.toLowerCase();
-
-  if (rangeLower === "self") {
-    if (targetToken && targetToken.id !== token.id) {
-      return ui.notifications.warn("This power is Self range. Target yourself.");
-    }
-  } else if ((hasDamage || opposed) && targetToken) {
+  if ((hasDamage || opposed) && targetToken) {
     const rangeValue = Number((resolvedRangeText.match(/\d+(?:\.\d+)?/) || [NaN])[0]);
     if (Number.isFinite(rangeValue)) {
       const dist = measureDistanceMeters(token, targetToken);
       if (Number.isFinite(dist) && dist > rangeValue) {
-        return ui.notifications.warn(`Target too far (${Math.round(dist)}m > ${rangeValue}m).`);
+        return ui.notifications.warn(`Target too far (${Number(dist).toFixed(2)}m > ${rangeValue}m).`);
       }
     }
   }
@@ -347,12 +491,10 @@ export async function runPsychicPowerWorkflow() {
   const isDouble = manifestRoll % 11 === 0;
   let triggersPhenomena = false;
   let phenomenaModifier = Number(pick.sustainingCount ?? 0) * 10;
-
   if (pick.mode === "unfettered" && isDouble) {
     triggersPhenomena = true;
     if (psyClassType !== "bound") phenomenaModifier += 10;
   }
-
   if (pick.mode === "push" && !isDouble) {
     triggersPhenomena = true;
     if (psyClassType === "unbound") phenomenaModifier += appliedStrength * 5;
@@ -366,14 +508,7 @@ export async function runPsychicPowerWorkflow() {
     const defSuccess = defRoll !== 100 && defRoll <= defTarget;
     const defDoS = calcDoS(defTarget, defRoll);
     const attackerWins = manifestDoS >= 1 && (!defSuccess || manifestDoS > defDoS);
-
-    opposedResult = {
-      target: defTarget,
-      roll: defRoll,
-      success: defSuccess,
-      dos: defDoS,
-      attackerWins
-    };
+    opposedResult = { target: defTarget, roll: defRoll, success: defSuccess, dos: defDoS, attackerWins };
   }
 
   const shape = String(data.damage?.zone ?? "").toLowerCase();
@@ -394,6 +529,7 @@ export async function runPsychicPowerWorkflow() {
   const rawPen = String(data.damage?.penetration ?? "0");
   const rawSpecial = String(data.damage?.special ?? "");
 
+  const finalFormula = resolveFormula(rawFormula, effectivePR);
   const finalPen = resolveFormula(rawPen, effectivePR);
   const finalSpecial = resolveFormula(rawSpecial, effectivePR);
   const hitLocation = getHitLocation(manifestRoll);
@@ -401,9 +537,17 @@ export async function runPsychicPowerWorkflow() {
   const hitsData = [];
   if (manifestSuccess && hits > 0 && hasDamage) {
     for (let i = 1; i <= hits; i++) {
-      const dmgRoll = await new Roll(resolveFormula(rawFormula, effectivePR)).evaluate({ async: true });
+      const dmgRoll = await new Roll(finalFormula).evaluate({ async: true });
       hitsData.push({ hit: i, location: hitLocation, damage: dmgRoll.total, fury: null });
     }
+  }
+
+  if (manifestSuccess && String(data.sustained ?? "").trim().toLowerCase() !== "no") {
+    await game.warhammer40kCogitator?.addConvenientEffectToActor?.({
+      actorUuid: actor.uuid,
+      effectId: SUSTAINING_EFFECT_ID,
+      effectName: "Sustaining Psychic Power"
+    });
   }
 
   let phenomenaText = "";
@@ -425,36 +569,24 @@ export async function runPsychicPowerWorkflow() {
     phenomenaText = allResults.join("<hr>");
   }
 
-  const effectText = stripHTML(data.effect ?? data.description ?? "");
-  const manifestResultText = manifestSuccess
-    ? `<span style="color:#1aff1a;font-weight:bold;">Success (${manifestDoS} DoS)</span>`
-    : `<span style="color:#ff3b3b;font-weight:bold;">Failure (${manifestDoS} DoF)</span>`;
-
-  const opposedText = opposedResult
-    ? `<div><b>Opposed:</b> Attacker ${manifestRoll}/${targetNumber} (${manifestDoS} DoS) vs Target ${opposedResult.roll}/${opposedResult.target} (${opposedResult.dos} ${opposedResult.success ? "DoS" : "DoF"}) → <b>${opposedResult.attackerWins ? "Attacker Wins" : "Defender Wins"}</b></div>`
-    : "";
-
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor, token: token.document }),
-    content: `<div>
-      <h3 style="margin:0 0 6px 0;">${actor.name} manifests ${power.name}${targetToken ? ` against ${targetToken.name}` : ""}</h3>
+    content: `<div><h3 style="margin:0 0 6px 0;">${actor.name} manifests ${power.name}${targetToken ? ` against ${targetToken.name}` : ""}</h3>
       <div><b>Mode:</b> ${pick.mode} | <b>Psy Rating:</b> ${effectivePR} | <b>Range:</b> ${resolvedRangeText || "—"}</div>
-      <div><b>Focus Test (${focusTestType}):</b> ${targetNumber} vs ${manifestRoll} → ${manifestResultText}</div>
-      <div><b>Description:</b> ${effectText || "—"}</div>
-      ${opposedText}
-      ${hasDamage ? `<div><b>Damage:</b> ${resolveFormula(rawFormula, effectivePR)} | <b>Type:</b> ${rawType} | <b>Pen:</b> ${finalPen} | <b>Shape:</b> ${shape || "—"} | <b>Hits:</b> ${hits}</div>` : ""}
+      <div><b>Focus Test (${focusTestType}):</b> ${targetNumber} vs ${manifestRoll} → ${manifestSuccess ? `<span style="color:#1aff1a;font-weight:bold;">Success (${manifestDoS} DoS)</span>` : `<span style="color:#ff3b3b;font-weight:bold;">Failure (${manifestDoS} DoF)</span>`}</div>
+      <div><b>Description:</b> ${stripHTML(data.effect ?? data.description ?? "") || "—"}</div>
+      ${opposedResult ? `<div><b>Opposed:</b> Attacker ${manifestRoll}/${targetNumber} (${manifestDoS} DoS) vs Target ${opposedResult.roll}/${opposedResult.target} (${opposedResult.dos} ${opposedResult.success ? "DoS" : "DoF"}) → <b>${opposedResult.attackerWins ? "Attacker Wins" : "Defender Wins"}</b></div>` : ""}
+      ${hasDamage ? `<div><b>Damage:</b> ${finalFormula} | <b>Type:</b> ${rawType} | <b>Pen:</b> ${finalPen} | <b>Shape:</b> ${shape || "—"} | <b>Hits:</b> ${hits}</div>` : ""}
       <div><b>Phenomena:</b> ${triggersPhenomena ? `YES (${phenomenaModifier >= 0 ? "+" : ""}${phenomenaModifier})` : "No"}</div>
       ${phenomenaText ? `<div style="margin-top:6px;">${phenomenaText}</div>` : ""}
     </div>`
   });
 
   if (!manifestSuccess || !hasDamage || hits <= 0) return;
-
   if (opposed && opposedResult && !opposedResult.attackerWins) return;
-
   if (!targetToken || !targetActor) return;
 
-  const distanceMeters = measureDistanceMeters(token, targetToken) ?? 0;
+  const distanceMeters = Number((measureDistanceMeters(token, targetToken) ?? 0).toFixed(2));
   const state = {
     id: foundry.utils.randomID(),
     attackerActorId: actor.id,
@@ -462,37 +594,19 @@ export async function runPsychicPowerWorkflow() {
     attackerTokenUuid: token.document.uuid,
     weaponId: power.id,
     weaponName: power.name,
-    weaponDamage: resolveFormula(rawFormula, effectivePR),
+    weaponDamage: finalFormula,
     weaponPen: finalPen,
     weaponType: rawType,
     weaponSpecial: `${finalSpecial}${finalSpecial ? ", " : ""}InfaAmmo`,
     weaponTraits: `${finalSpecial}${finalSpecial ? ", " : ""}InfaAmmo`,
-    meleeBestDamageBonus: 0,
     modeKey: "psychic",
     modeLabel: `Psychic ${shape || "Power"}`,
     powerModeLabel: pick.mode,
-    powerMultiplier: 1,
-    aimLabel: "—",
-    craftName: "—",
-    modifierNotes: [
-      `Focus Power ${focusDifficulty >= 0 ? "+" : ""}${focusDifficulty}`,
-      `Psychic Strength ${appliedStrength >= 0 ? "+" : ""}${appliedStrength}`,
-      `Manual ${pick.rollModifier >= 0 ? "+" : ""}${pick.rollModifier}`
-    ],
-    selectedTalents: [pick.hasFocus ? "Psy Focus" : null, pick.hasFavored ? "Favored of the Warp" : null].filter(Boolean),
-    attackTalentsUsed: [],
-    weaponItems: [],
-    forceChanneling: false,
     attackRoll: manifestRoll,
     attackDegrees: manifestSuccess ? manifestDoS : -manifestDoS,
     dos: manifestDoS,
     totalHits: hits,
     statusText: manifestSuccess ? "Hit" : "Miss",
-    extraText: opposed ? "Opposed power" : "",
-    grenade: { isGrenade: false, scatter: null, damage: null },
-    horde: { active: false },
-    whirlwind: { active: false, wsBonus: 0 },
-    setupSnapshot: {},
     talentModifier: 0,
     toggles: {},
     targets: [{
