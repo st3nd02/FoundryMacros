@@ -1082,7 +1082,7 @@ const runAttackWorkflow = async setup => {
     const targetDoc = await fromUuid(tg.tokenUuid);
     const targetActor = targetDoc?.actor;
 
-    const forceFieldCheck = await game.warhammer40kCogitator?.resolveForceFieldIntercept?.({ tokenUuid: tg.tokenUuid, postToChat: true });
+    const forceFieldCheck = await game.warhammer40kCogitator?.resolveForceFieldIntercept?.({ tokenUuid: tg.tokenUuid, postToChat: false });
     if (forceFieldCheck && !forceFieldCheck.skipped) {
       tg.forceFieldChecked = true;
       tg.forceFieldOutcome = forceFieldCheck.outcome;
