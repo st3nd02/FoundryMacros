@@ -1390,7 +1390,8 @@ class WorkflowHud {
     buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
     buttonEl.style.cursor = button ? "pointer" : "default";
     buttonEl.style.transition = "border-color 120ms ease, color 120ms ease, box-shadow 120ms ease";
-    if (button?.id === "medical" || button?.id === "healing" || button?.id === "restoreFate") {
+    const highlightedActionIds = new Set(["medical", "healing", "restoreFate", "skill", "characteristic"]);
+    if (highlightedActionIds.has(button?.id)) {
       buttonEl.style.background = "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%), linear-gradient(145deg, #cfc09b 0%, #b7a982 100%)";
       buttonEl.style.color = "var(--wh-ink)";
       buttonEl.style.textShadow = "0 1px 0 rgba(255,255,255,0.2)";
@@ -1408,12 +1409,12 @@ class WorkflowHud {
       });
       buttonEl.addEventListener("mouseenter", () => {
         buttonEl.style.borderColor = "var(--wh-brass-light)";
-        buttonEl.style.color = button?.id === "medical" || button?.id === "healing" || button?.id === "restoreFate" ? "#1f1a10" : "#f2ead8";
+        buttonEl.style.color = highlightedActionIds.has(button?.id) ? "#1f1a10" : "#f2ead8";
         buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -3px 6px rgba(0,0,0,0.35), 0 0 6px rgba(122,15,15,0.18)";
       });
       buttonEl.addEventListener("mouseleave", () => {
         buttonEl.style.borderColor = "var(--wh-brass-dark)";
-        buttonEl.style.color = button?.id === "medical" || button?.id === "healing" || button?.id === "restoreFate" ? "var(--wh-ink)" : "var(--wh-text)";
+        buttonEl.style.color = highlightedActionIds.has(button?.id) ? "var(--wh-ink)" : "var(--wh-text)";
         buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
       });
     }
