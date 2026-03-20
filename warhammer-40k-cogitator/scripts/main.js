@@ -1473,7 +1473,7 @@ class WorkflowHud {
     });
 
     const icon = document.createElement("img");
-    icon.src = `modules/${COGITATOR_ID}/WH40k Cogitator Icon.png`;
+    icon.src = `modules/${COGITATOR_ID}/Warhammer-40k-cogitator-button.png`;
     icon.alt = "Warhammer 40k Cogitator";
     icon.style.maxHeight = px(28);
     icon.style.maxWidth = "100%";
