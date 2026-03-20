@@ -472,6 +472,9 @@ const buildWorkflowHtml = state => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
     const shownHits = state.horde?.active ? (t.hordeHitsPreview ?? t.allocatedHits ?? 0) : (t.allocatedHits ?? 0);
     const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
+    const forceFieldSummary = t.forceFieldChecked
+      ? `<div><b>Force Field:</b> ${outlined(t.forceFieldName ?? "—", "#ffad55")} | <b>Protection:</b> ${outlined(t.forceFieldProtection ?? "—", "#ffad55")} | <b>Overload:</b> ${outlined(t.forceFieldOverload ?? "—", "#ffad55")} | <b>Roll:</b> ${outlined(t.forceFieldRoll ?? "—", "#bd7548")}</div><div><b>Force Field Result:</b> ${outlined(t.forceFieldOutcome ?? "—", statusColor(t.forceFieldOutcome))}</div>`
+      : "";
     const defenseSummary = t.defenseAction
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;background:#151515;">
           <div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
@@ -479,12 +482,13 @@ const buildWorkflowHtml = state => {
           <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))} | <b>${hitsLabel}:</b> ${shownHits}</div>
           <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
           ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
+          ${forceFieldSummary}
           ${styledDegrees(t)}
         </div>`
       : `<div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
          <div style="color:#000;font-style:italic;text-align:center;">(${t.defenseOutcome ?? "—"})</div>
          <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))} | <b>${hitsLabel}:</b> ${shownHits}</div>
-         ${styledDegrees(t)}`;
+         ${forceFieldSummary}${styledDegrees(t)}`;
 
     const damageSummary = t.damageSummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
@@ -846,6 +850,12 @@ const runAttackWorkflow = async setup => {
     inescapableAttackPenalty: 0,
     defenseRoll: null,
     defenseOutcome: null,
+    forceFieldChecked: false,
+    forceFieldOutcome: null,
+    forceFieldRoll: null,
+    forceFieldProtection: null,
+    forceFieldOverload: null,
+    forceFieldName: null,
     damageRolls: [],
     damageResolved: false
   });
@@ -1071,6 +1081,23 @@ const runAttackWorkflow = async setup => {
 
     const targetDoc = await fromUuid(tg.tokenUuid);
     const targetActor = targetDoc?.actor;
+
+    const forceFieldCheck = await game.warhammer40kCogitator?.resolveForceFieldIntercept?.({ tokenUuid: tg.tokenUuid, postToChat: true });
+    if (forceFieldCheck && !forceFieldCheck.skipped) {
+      tg.forceFieldChecked = true;
+      tg.forceFieldOutcome = forceFieldCheck.outcome;
+      tg.forceFieldRoll = forceFieldCheck.result;
+      tg.forceFieldProtection = forceFieldCheck.protection;
+      tg.forceFieldOverload = forceFieldCheck.overload;
+      tg.forceFieldName = forceFieldCheck.fieldName;
+      if (forceFieldCheck.protectedHit) {
+        tg.allocatedHits = 0;
+        tg.defenseRoll = "—";
+        tg.defenseOutcome = "Success (Blocked by Force Field)";
+        continue;
+      }
+    }
+
     if (isSpray) {
       const sprayDefense = await rollAgilityEvasionTest(targetActor);
       tg.defenseRoll = sprayDefense.roll;

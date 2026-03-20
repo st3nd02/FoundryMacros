@@ -4,7 +4,7 @@ import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js"
 import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.26";
+const COGITATOR_VERSION = "2.1.27";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -33,6 +33,10 @@ const DOUBLE_TAP_EFFECT_ID = "ce-double-tap";
 const DOUBLE_TAP_EFFECT_NAME = "Double Tap";
 const WEAPON_RECHARGING_EFFECT_ID = "ce-(whc)-weapon-recharging";
 const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
+const FORCE_FIELD_ACTIVE_EFFECT_ID = "ce-(whc)-force-field-active";
+const FORCE_FIELD_OVERLOADED_EFFECT_ID = "ce-(whc)-force-field-overloaded";
+const FORCE_FIELD_ACTIVE_EFFECT_NAME = "Force Field Active";
+const FORCE_FIELD_OVERLOADED_EFFECT_NAME = "Force Field Overloaded";
 let cogitatorSocket = null;
 let pendingDefenseContext = null;
 let pendingDamageContext = null;
@@ -113,6 +117,8 @@ Hooks.once("ready", async () => {
     openFateRestore,
     openFatigueManager,
     openAmmoReload,
+    openForceFieldCheck,
+    resolveForceFieldIntercept,
     runStep,
     emitSocket,
     submitDefenseResult,
@@ -1151,6 +1157,7 @@ async function openLauncher() {
         ...(game.user.isGM ? { restoreFate: { label: "Restore Fate", callback: () => resolve("restoreFate") } } : {}),
         ...(game.user.isGM ? { fatigue: { label: "Fatigue Manager", callback: () => resolve("fatigue") } } : {}),
         ...(game.user.isGM ? { ammoReload: { label: "Ammo Reload", callback: () => resolve("ammoReload") } } : {}),
+        ...(game.user.isGM ? { forceField: { label: "Force Field", callback: () => resolve("forceField") } } : {}),
         cancel: { label: "Cancel", callback: () => resolve(null) }
       },
       default: "attack"
@@ -1190,6 +1197,10 @@ async function openLauncher() {
     await openAmmoReload();
     return;
   }
+  if (choice === "forceField") {
+    await openForceFieldCheck();
+    return;
+  }
   await runStep(choice);
 }
 
@@ -1210,6 +1221,7 @@ function getWorkflowHudButtons() {
     buttons.push({ id: "restoreFate", label: "Restore Fate", action: () => openFateRestore() });
     buttons.push({ id: "fatigue", label: "Fatigue Manager", action: () => openFatigueManager() });
     buttons.push({ id: "ammoReload", label: "Ammo Reload", action: () => openAmmoReload() });
+    buttons.push({ id: "forceField", label: "Force Field", action: () => openForceFieldCheck() });
   }
 
   return buttons;
@@ -1345,7 +1357,7 @@ class WorkflowHud {
       this.element.appendChild(actionCell("restoreFate", "Restore Fate"));
       this.element.appendChild(actionCell("ammoReload", "Ammo Reload"));
       this.element.appendChild(actionCell("fatigue", "Fatigue Manager"));
-      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(actionCell("forceField", "Force Field"));
 
     } else {
       this.element.appendChild(actionCell("attack", "Attack"));
@@ -1390,7 +1402,7 @@ class WorkflowHud {
     buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
     buttonEl.style.cursor = button ? "pointer" : "default";
     buttonEl.style.transition = "border-color 120ms ease, color 120ms ease, box-shadow 120ms ease";
-    const highlightedActionIds = new Set(["medical", "healing", "restoreFate", "skill", "characteristic"]);
+    const highlightedActionIds = new Set(["medical", "healing", "restoreFate", "skill", "characteristic", "forceField"]);
     if (highlightedActionIds.has(button?.id)) {
       buttonEl.style.background = "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%), linear-gradient(145deg, #cfc09b 0%, #b7a982 100%)";
       buttonEl.style.color = "var(--wh-ink)";
@@ -3656,6 +3668,163 @@ ${insanityBlock}
   }).render(true);
 }
 
+
+function hasActorEffectByIdOrName(actor, { effectId = "", effectName = "" } = {}) {
+  if (!actor) return false;
+  const effectIdLc = String(effectId ?? "").toLowerCase();
+  const effectNameLc = String(effectName ?? "").toLowerCase();
+  return actor.effects.some(effect => {
+    const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+    const statusIds = statuses.map(status => String(status ?? "").toLowerCase());
+    const coreStatus = String(effect.flags?.core?.statusId ?? "").toLowerCase();
+    const ceId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
+    const name = String(effect.name ?? "").toLowerCase();
+    if (effectIdLc && (statusIds.includes(effectIdLc) || coreStatus === effectIdLc || ceId === effectIdLc || name === effectIdLc)) return true;
+    if (effectNameLc && name.includes(effectNameLc)) return true;
+    return false;
+  });
+}
+
+function buildForceFieldOutlined(value, color) {
+  return `<span style="color:${color};font-weight:900;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${value}</span>`;
+}
+
+function getPreferredForceField(actor) {
+  const fields = actor?.items?.filter(i => i.type === "forceField") ?? [];
+  if (!fields.length) return null;
+  return fields
+    .slice()
+    .sort((a, b) => Number(b?.system?.protectionRating ?? 0) - Number(a?.system?.protectionRating ?? 0))[0];
+}
+
+async function evaluateForceFieldForActor({ actor, token = null, field = null, postToChat = true, reason = "workflow" } = {}) {
+  if (!actor) return { skipped: true, reason: "no-actor" };
+
+  const overloaded = hasActorEffectByIdOrName(actor, { effectId: FORCE_FIELD_OVERLOADED_EFFECT_ID, effectName: FORCE_FIELD_OVERLOADED_EFFECT_NAME });
+  if (overloaded) return { skipped: true, reason: "overloaded" };
+
+  const active = hasActorEffectByIdOrName(actor, { effectId: FORCE_FIELD_ACTIVE_EFFECT_ID, effectName: FORCE_FIELD_ACTIVE_EFFECT_NAME });
+  if (!active) return { skipped: true, reason: "inactive" };
+
+  const selectedField = field ?? getPreferredForceField(actor);
+  if (!selectedField) return { skipped: true, reason: "no-force-field" };
+
+  const protection = Number(selectedField.system?.protectionRating ?? 0);
+  const overload = Number(selectedField.system?.overloadChance ?? 0);
+  const roll = await new Roll("1d100").roll({ async: true });
+  await show3dDiceRoll(roll);
+  const result = Number(roll.total ?? 0);
+
+  const overloadedNow = result <= overload;
+  const protectedHit = !overloadedNow && result <= protection;
+
+  let text = "❌ FAILED";
+  let color = "#ff2a2a";
+  if (overloadedNow) {
+    text = "⚡ OVERLOADED";
+    color = "#ffad55";
+  } else if (protectedHit) {
+    text = "🛡 PROTECTED";
+    color = "#1aff1a";
+  }
+
+  if (overloadedNow) {
+    await removeConvenientEffectFromActor({
+      actorUuid: actor.uuid,
+      effectId: FORCE_FIELD_ACTIVE_EFFECT_ID,
+      effectName: FORCE_FIELD_ACTIVE_EFFECT_NAME
+    });
+    await addConvenientEffectToActor({
+      actorUuid: actor.uuid,
+      effectId: FORCE_FIELD_OVERLOADED_EFFECT_ID,
+      effectName: FORCE_FIELD_OVERLOADED_EFFECT_NAME
+    });
+  }
+
+  const tokenName = token?.name || actor.name;
+  if (postToChat) {
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor, token }),
+      content: `
+<div style="text-align:center; color:#000; font-size:1.05em;">
+  <div style="font-style:italic; font-size:1.2em;"><b>${tokenName}</b>'s <b>${selectedField.name}</b> force field check.</div>
+  <hr>
+  <div><b>Protection:</b> ≤ ${buildForceFieldOutlined(protection, "#ffad55")}</div>
+  <div><b>Overload:</b> ≤ ${buildForceFieldOutlined(overload, "#ffad55")}</div>
+  <hr>
+  <div><b>Roll:</b> ${buildForceFieldOutlined(result, "#bd7548")}</div>
+  <hr>
+  <div style="font-size:1.35em; font-weight:900; color:${color}; text-shadow:0 0 2px black;">${text}</div>
+  ${reason === "workflow" ? `<div style="margin-top:6px; font-style:italic;">Attack interception check</div>` : ""}
+</div>`
+    });
+  }
+
+  return {
+    skipped: false,
+    outcome: overloadedNow ? "overloaded" : (protectedHit ? "protected" : "failed"),
+    result,
+    protection,
+    overload,
+    fieldId: selectedField.id,
+    fieldName: selectedField.name,
+    protectedHit,
+    overloaded: overloadedNow
+  };
+}
+
+async function resolveForceFieldIntercept({ tokenUuid = "", postToChat = true } = {}) {
+  const tokenDoc = tokenUuid ? await fromUuid(tokenUuid) : canvas.tokens.controlled[0] ?? null;
+  const actor = tokenDoc?.actor;
+  if (!actor) return { skipped: true, reason: "no-actor" };
+  return evaluateForceFieldForActor({ actor, token: tokenDoc, postToChat, reason: "workflow" });
+}
+
+async function openForceFieldCheck() {
+  if (!game.user.isGM) {
+    ui.notifications.warn("Only the GM can run manual Force Field checks.");
+    return;
+  }
+
+  const token = canvas.tokens.controlled[0];
+  if (!token?.actor) {
+    ui.notifications.warn("Select a token first.");
+    return;
+  }
+
+  const actor = token.actor;
+  const fields = actor.items.filter(i => i.type === "forceField");
+  if (!fields.length) {
+    ui.notifications.warn("No Force Fields found on actor.");
+    return;
+  }
+
+  const options = fields.map(field => `<option value="${field.id}">${field.name}</option>`).join("");
+
+  new Dialog({
+    title: "Force Field Check",
+    content: `
+<form>
+  <div class="form-group">
+    <label><b>Force Field</b></label>
+    <select id="ff">${options}</select>
+  </div>
+</form>`,
+    buttons: {
+      roll: {
+        label: "Roll Protection",
+        callback: async html => {
+          const fieldId = html.find("#ff").val();
+          const selected = actor.items.get(fieldId) ?? fields[0];
+          await evaluateForceFieldForActor({ actor, token, field: selected, postToChat: true, reason: "manual" });
+        }
+      },
+      cancel: { label: "Cancel" }
+    },
+    default: "roll"
+  }).render(true);
+}
+
 async function runStep(step) {
   const handlers = {
     attack: { gmOnly: false, execute: runAttackWorkflow },
@@ -3664,7 +3833,8 @@ async function runStep(step) {
     master: { gmOnly: false, execute: openLauncher },
     gmMaster: { gmOnly: true, execute: openLauncher },
     applyDamage: { gmOnly: true, execute: runApplyDamageWorkflow },
-    fear: { gmOnly: false, execute: openFearTest }
+    fear: { gmOnly: false, execute: openFearTest },
+    forceField: { gmOnly: true, execute: openForceFieldCheck }
   };
 
   const handler = handlers[step];
