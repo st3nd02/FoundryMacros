@@ -4,7 +4,7 @@ import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js"
 import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.27";
+const COGITATOR_VERSION = "2.1.30";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -138,6 +138,7 @@ Hooks.once("ready", async () => {
     applyDoubleTapEffect,
     clearDoubleTapEffect,
     applyWeaponRechargingEffect,
+    addConvenientEffectToActor,
     refreshWorkflowHud
   };
 
@@ -743,16 +744,20 @@ function buildWorkflowHtml(state) {
 
   const cards = (state.targets ?? []).map(t => {
     const sizeTxt = t.sizeIgnored ? `${t.sizeLabel} (Black Carapace ignores)` : `${t.sizeLabel} ${t.sizeMod >= 0 ? "+" : ""}${t.sizeMod}`;
+    const forceFieldSummary = t.forceFieldChecked
+      ? `<div><b>Force Field:</b> ${outlined(t.forceFieldName ?? "—", "#ffad55")} | <b>Protection:</b> ${outlined(t.forceFieldProtection ?? "—", "#ffad55")} | <b>Overload:</b> ${outlined(t.forceFieldOverload ?? "—", "#ffad55")} | <b>Roll:</b> ${outlined(t.forceFieldRoll ?? "—", "#bd7548")}</div><div><b>Force Field Result:</b> ${outlined(t.forceFieldOutcome ?? "—", statusColor(t.forceFieldOutcome))}</div>`
+      : "";
     const defenseSummary = t.defenseAction
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">
           <div><b>Incoming Hits:</b> ${t.incomingHits ?? t.allocatedHits ?? 0}</div>
           <div><b>Difficulty:</b> ${t.defenseDifficultyLabel ?? "—"}</div>
           <div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div>
-          <div style="color:#000;font-style:italic;text-align:center;">(${t.defenseAction} — ${t.defenseOutcome ?? "—"})</div>
+          <div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))}</div>
           ${t.defenseNotes?.length ? `<div><b>Notes:</b> ${t.defenseNotes.join(" | ")}</div>` : ""}
+          ${forceFieldSummary}
           <div>${styledDegrees(t)}</div>
         </div>`
-      : `<div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div><div style="color:#000;font-style:italic;text-align:center;">(${t.defenseOutcome ?? "—"})</div>`;
+      : `<div><b>Defense Roll:</b> ${outlined(t.defenseTargetNumber ?? "—", "#3aa0ff")} vs ${outlined(t.defenseRoll ?? "—", "#ff9f1a")}</div><div><b>Status:</b> ${outlined(t.defenseOutcome ?? "Pending", statusColor(t.defenseOutcome))}</div>${forceFieldSummary}`;
 
     const damageSummary = t.applySummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.applySummary}</div>`
@@ -1154,8 +1159,8 @@ async function openLauncher() {
         fear: { label: "Fear Test", callback: () => resolve("fear") },
         medical: { label: "Medical Flow", callback: () => resolve("medical") },
         ...(game.user.isGM ? { healing: { label: "Apply Healing", callback: () => resolve("healing") } } : {}),
-        ...(game.user.isGM ? { restoreFate: { label: "Restore Fate", callback: () => resolve("restoreFate") } } : {}),
-        ...(game.user.isGM ? { fatigue: { label: "Fatigue Manager", callback: () => resolve("fatigue") } } : {}),
+        ...(game.user.isGM ? { restoreFate: { label: "Fate", callback: () => resolve("restoreFate") } } : {}),
+        ...(game.user.isGM ? { fatigue: { label: "Fatigue", callback: () => resolve("fatigue") } } : {}),
         ...(game.user.isGM ? { ammoReload: { label: "Ammo Reload", callback: () => resolve("ammoReload") } } : {}),
         ...(game.user.isGM ? { forceField: { label: "Force Field", callback: () => resolve("forceField") } } : {}),
         cancel: { label: "Cancel", callback: () => resolve(null) }
@@ -1218,8 +1223,8 @@ function getWorkflowHudButtons() {
   if (game.user.isGM) {
     buttons.push({ id: "applyDamage", label: "Apply Damage", action: () => runStep("applyDamage") });
     buttons.push({ id: "healing", label: "Apply Healing", action: () => openHealingFlow() });
-    buttons.push({ id: "restoreFate", label: "Restore Fate", action: () => openFateRestore() });
-    buttons.push({ id: "fatigue", label: "Fatigue Manager", action: () => openFatigueManager() });
+    buttons.push({ id: "restoreFate", label: "Fate", action: () => openFateRestore() });
+    buttons.push({ id: "fatigue", label: "Fatigue", action: () => openFatigueManager() });
     buttons.push({ id: "ammoReload", label: "Ammo Reload", action: () => openAmmoReload() });
     buttons.push({ id: "forceField", label: "Force Field", action: () => openForceFieldCheck() });
   }
@@ -1354,9 +1359,9 @@ class WorkflowHud {
       this.element.appendChild(actionCell("medical", "Medical"));
       this.element.appendChild(actionCell("healing", "Apply Healing"));
 
-      this.element.appendChild(actionCell("restoreFate", "Restore Fate"));
+      this.element.appendChild(actionCell("restoreFate", "Fate"));
       this.element.appendChild(actionCell("ammoReload", "Ammo Reload"));
-      this.element.appendChild(actionCell("fatigue", "Fatigue Manager"));
+      this.element.appendChild(actionCell("fatigue", "Fatigue"));
       this.element.appendChild(actionCell("forceField", "Force Field"));
 
     } else {
