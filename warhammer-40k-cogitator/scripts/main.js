@@ -2,9 +2,10 @@ import { runAttackWorkflow } from "./workflows/dh2e_external_attack_workflow.js"
 import { runDefenseWorkflow } from "./workflows/dh2e_external_defense_workflow.js";
 import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js";
 import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
+import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.30";
+const COGITATOR_VERSION = "2.1.32";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -117,6 +118,7 @@ Hooks.once("ready", async () => {
     openFateRestore,
     openFatigueManager,
     openAmmoReload,
+    runPsychicPowerWorkflow,
     openForceFieldCheck,
     resolveForceFieldIntercept,
     runStep,
@@ -1212,6 +1214,7 @@ async function openLauncher() {
 function getWorkflowHudButtons() {
   const buttons = [
     { id: "attack", label: "Attack", action: () => runStep("attack") },
+    { id: "psychic", label: "Psychic Powers", action: () => runStep("psychic") },
     { id: "defense", label: "Defense", action: () => runStep("defense") },
     { id: "damage", label: "Damage", action: () => runStep("damage") },
     { id: "skill", label: "Skill", action: () => openSkillTest() },
@@ -1339,17 +1342,16 @@ class WorkflowHud {
     this.element.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(${px(110)}, 1fr))`;
 
     const iconCell = this.createIconCell(hudScale, this.locked);
-    const comingSoonCell = (colSpan = 1) => this.createComingSoonCell(hudScale, colSpan);
     const emptyCell = (colSpan = 1) => this.createEmptyCell(hudScale, colSpan);
     const actionCell = (id, fallbackLabel = "Coming soon") => this.createActionCell(hudScale, buttonMap.get(id), fallbackLabel);
 
     if (game.user.isGM) {
       this.element.appendChild(actionCell("attack", "Attack"));
+      this.element.appendChild(actionCell("psychic", "Psychic Powers"));
       this.element.appendChild(actionCell("defense", "Defense"));
       this.element.appendChild(actionCell("damage", "Damage"));
       this.element.appendChild(actionCell("applyDamage", "Apply Damage"));
 
-      this.element.appendChild(comingSoonCell());
       iconCell.style.gridColumn = "span 2";
       this.element.appendChild(iconCell);
       this.element.appendChild(actionCell("fear", "Fear"));
@@ -1366,10 +1368,10 @@ class WorkflowHud {
 
     } else {
       this.element.appendChild(actionCell("attack", "Attack"));
+      this.element.appendChild(actionCell("psychic", "Psychic Powers"));
       this.element.appendChild(actionCell("defense", "Defense"));
       this.element.appendChild(actionCell("damage", "Damage"));
 
-      this.element.appendChild(comingSoonCell());
       this.element.appendChild(iconCell);
       this.element.appendChild(actionCell("fear", "Fear"));
 
@@ -3848,6 +3850,7 @@ async function runHudForceFieldCheck() {
 async function runStep(step) {
   const handlers = {
     attack: { gmOnly: false, execute: runAttackWorkflow },
+    psychic: { gmOnly: false, execute: runPsychicPowerWorkflow },
     defense: { gmOnly: false, execute: runDefenseWorkflow },
     damage: { gmOnly: false, execute: runDamageWorkflow },
     master: { gmOnly: false, execute: openLauncher },
