@@ -1203,7 +1203,7 @@ async function openLauncher() {
     return;
   }
   if (choice === "forceField") {
-    await openForceFieldCheck();
+    await runHudForceFieldCheck();
     return;
   }
   await runStep(choice);
@@ -1226,7 +1226,7 @@ function getWorkflowHudButtons() {
     buttons.push({ id: "restoreFate", label: "Fate", action: () => openFateRestore() });
     buttons.push({ id: "fatigue", label: "Fatigue", action: () => openFatigueManager() });
     buttons.push({ id: "ammoReload", label: "Ammo Reload", action: () => openAmmoReload() });
-    buttons.push({ id: "forceField", label: "Force Field", action: () => openForceFieldCheck() });
+    buttons.push({ id: "forceField", label: "Force Field", action: () => runHudForceFieldCheck() });
   }
 
   return buttons;
@@ -3828,6 +3828,21 @@ async function openForceFieldCheck() {
     },
     default: "roll"
   }).render(true);
+}
+
+async function runHudForceFieldCheck() {
+  if (!game.user.isGM) {
+    ui.notifications.warn("Only the GM can run Force Field checks.");
+    return;
+  }
+
+  const token = canvas.tokens.controlled[0];
+  if (!token?.actor) {
+    ui.notifications.warn("Select a token first.");
+    return;
+  }
+
+  await evaluateForceFieldForActor({ actor: token.actor, token, postToChat: true, reason: "manual" });
 }
 
 async function runStep(step) {
