@@ -1235,7 +1235,7 @@ const showAttackDialog = async () => {
     const normalRange = getNormalRangeForWeapon(weaponDoc);
     return targetTokens.map(t => {
       const pathMeasurement = canvas.grid.measurePath([attackerToken.center, t.center], { gridSpaces: false });
-      const d = Math.round(pathMeasurement.distance ?? 0);
+      const d = Number((pathMeasurement.distance ?? 0).toFixed(2));
       const size = getSizeModifier(t.actor);
       const effectiveDistance = Math.max(0, d - Math.max(0, (size.sizeValue ?? 4) - 4));
       const rangeMod = getAutoRangeBand(effectiveDistance, normalRange, isMelee);
