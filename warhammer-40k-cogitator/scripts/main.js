@@ -4,7 +4,7 @@ import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js"
 import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.22";
+const COGITATOR_VERSION = "2.1.26";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -106,6 +106,7 @@ Hooks.once("ready", async () => {
   game.warhammer40kCogitator = {
     openLauncher,
     openCharacteristicTest,
+    openFearTest,
     openSkillTest,
     openMedicalTest,
     openHealingFlow,
@@ -1144,6 +1145,7 @@ async function openLauncher() {
         ...(game.user.isGM ? { applyDamage: { label: "Apply Damage", callback: () => resolve("applyDamage") } } : {}),
         skill: { label: "Skill Test", callback: () => resolve("skill") },
         characteristic: { label: "Characteristic Test", callback: () => resolve("characteristic") },
+        fear: { label: "Fear Test", callback: () => resolve("fear") },
         medical: { label: "Medical Flow", callback: () => resolve("medical") },
         ...(game.user.isGM ? { healing: { label: "Apply Healing", callback: () => resolve("healing") } } : {}),
         ...(game.user.isGM ? { restoreFate: { label: "Restore Fate", callback: () => resolve("restoreFate") } } : {}),
@@ -1162,6 +1164,10 @@ async function openLauncher() {
   }
   if (choice === "characteristic") {
     await openCharacteristicTest();
+    return;
+  }
+  if (choice === "fear") {
+    await openFearTest();
     return;
   }
   if (choice === "medical") {
@@ -1194,6 +1200,7 @@ function getWorkflowHudButtons() {
     { id: "damage", label: "Damage", action: () => runStep("damage") },
     { id: "skill", label: "Skill", action: () => openSkillTest() },
     { id: "characteristic", label: "Characteristic", action: () => openCharacteristicTest() },
+    { id: "fear", label: "Fear", action: () => openFearTest() },
     { id: "medical", label: "Medical", action: () => openMedicalTest() }
   ];
 
@@ -1328,7 +1335,7 @@ class WorkflowHud {
       this.element.appendChild(comingSoonCell());
       iconCell.style.gridColumn = "span 2";
       this.element.appendChild(iconCell);
-      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(actionCell("fear", "Fear"));
 
       this.element.appendChild(actionCell("characteristic", "Characteristics"));
       this.element.appendChild(actionCell("skill", "Skills"));
@@ -1347,7 +1354,7 @@ class WorkflowHud {
 
       this.element.appendChild(comingSoonCell());
       this.element.appendChild(iconCell);
-      this.element.appendChild(comingSoonCell());
+      this.element.appendChild(actionCell("fear", "Fear"));
 
       this.element.appendChild(actionCell("characteristic", "Characteristics"));
       this.element.appendChild(actionCell("skill", "Skills"));
@@ -3428,6 +3435,226 @@ text-shadow:
   }).render(true);
 }
 
+async function openFearTest() {
+  const token = canvas.tokens.controlled[0];
+  if (!token) return ui.notifications.warn("Select your character first.");
+
+  const actor = token.actor;
+  let fate = actor.system.fate?.value ?? 0;
+
+  const roll3d = game.dice3d;
+
+  const FEAR_TABLE = [
+    { max: 20, text: "The character is badly startled. He can only take a single Half Action during his next turn, but afterward he acts normally." },
+    { max: 40, text: "Fear grips the character and he begins to shake and tremble. He suffers a -10 penalty on all tests for the rest of the encounter unless he can recover his wits (see Shock and Snapping Out of It, page 286)." },
+    { max: 60, text: "Reeling with shock, the character backs away from the source of his Fear. He cannot willingly approach the object of his Fear, but can otherwise act normally, with a -10 penalty on all tests until the end of the encounter." },
+    { max: 80, text: "The character is frozen by terror. He can take no actions until he recovers himself (see Shock and Snapping Out of It, page 286). After snapping out of it, he makes all tests with a -10 penalty for the rest of the encounter." },
+    { max: 100, text: "Panic grips the character. He must flee the source of his fear, if able, as fast as he can, and if prevented from doing so, can only take Half Actions and is at a -20 penalty to all tests. Once away from the danger, he must successfully Snap Out of It (see Shock and Snapping Out of It, page 286) to regain control." },
+    { max: 120, text: "Fainting dead away, the character keels over and remains Unconscious for 1d5 rounds. Once he regains consciousness, he is still shaken and takes all tests with a -10 penalty until the end of the encounter." },
+    { max: 130, text: "Totally overcome, the character screams and vomits uncontrollably for 1d5 rounds. During this time he can do nothing, and drops anything he is holding. Afterward, until the end of the encounter, the character can only take a single Half Action each turn." },
+    { max: 140, text: "The character laughs hysterically and randomly attacks anything near him in a manic frenzy, firing wildly or attacking with whatever he has at hand. This effect lasts until the character Snaps Out of It (see Shock and Snapping Out of It, page 286), or until he is knocked Unconscious or otherwise incapacitated." },
+    { max: 160, text: "The character crumples to the ground for 1d5+1 rounds and begins sobbing, babbling, and tearing at his own flesh, and can do nothing else. Even after he returns to his senses, he is a complete mess, and suffers a -20 penalty on all tests until the end of the encounter." },
+    { max: 170, text: "The character's mind snaps. He becomes catatonic for 1d5 hours; for that time, he is Unconscious and cannot be roused." },
+    { max: 999, text: "HEARTSTOP" }
+  ];
+
+  const selectedTarget = [...game.user.targets][0];
+  const targetTraits = selectedTarget?.actor?.items?.filter(i => i.type === "trait")?.map(i => String(i.name ?? "")) ?? [];
+  const fearTrait = targetTraits.find(name => /fear\s*\(\s*\d+\s*\)/i.test(name)) ?? "";
+  const fearLevelMatch = fearTrait.match(/fear\s*\(\s*(\d+)\s*\)/i);
+  const suggestedFearLevel = Math.min(4, Math.max(1, Number(fearLevelMatch?.[1] ?? 1)));
+
+  async function d100() {
+    const r = await new Roll("1d100").evaluate({ async: true });
+    if (roll3d) roll3d.showForRoll(r);
+    return r.total;
+  }
+
+  const addInlineRolls = text => text.replace(/\d+d\d+(?:\+\d+)?/gi, match => `[[/r ${match}]]`);
+
+  new Dialog({
+    title: "Fear Test",
+    content: `<form>
+<label><input type="checkbox" id="heretic"> Heretic</label><br><br>
+Fear Level:<br>
+<select id="fearMod">
+<option value="0" ${suggestedFearLevel === 1 ? "selected" : ""}>Fear 1</option>
+<option value="-10" ${suggestedFearLevel === 2 ? "selected" : ""}>Fear 2</option>
+<option value="-20" ${suggestedFearLevel === 3 ? "selected" : ""}>Fear 3</option>
+<option value="-30" ${suggestedFearLevel === 4 ? "selected" : ""}>Fear 4</option>
+</select><br><br>
+Custom Modifier:<br>
+<input id="mod" type="number" value="0" style="width:70px"><br><br>
+<hr>
+<label><input type="checkbox" id="faith"> Unshakeable Faith/Will</label><br>
+<label><input type="checkbox" id="iron"> Iron Resolve</label><br>
+<label><input type="checkbox" id="adamant"> Adamantium Faith</label><br>
+</form>`,
+    buttons: {
+      roll: {
+        label: "Roll",
+        callback: async html => {
+          let target = actor.system.characteristics.willpower.total;
+          const baseFearMod = Number(html.find("#fearMod").val());
+          let testFearMod = baseFearMod;
+          if (html.find("#heretic")[0].checked) testFearMod += 10;
+          const customMod = Number(html.find("#mod").val()) || 0;
+          target += testFearMod + customMod;
+          target = Math.max(1, target);
+
+          function getDoF(roll, notes, testTarget) {
+            const rawDoF = Math.floor((roll - testTarget) / 10) + 1;
+            let dof = rawDoF;
+            let forcedSuccess = false;
+            let wpbReduction = 0;
+
+            if (html.find("#adamant")[0].checked) {
+              const wp = actor.system.characteristics.willpower.total;
+              const wpb = Math.floor(wp / 10);
+              dof -= wpb;
+              wpbReduction = wpb;
+              if (rawDoF > 0) notes.push(`Adamantium Faith: −${wpb} DoF`);
+              if (rawDoF > 0 && dof <= 0) {
+                forcedSuccess = true;
+                dof = 0;
+                notes.push("Adamantium Faith turned failure into SUCCESS");
+              }
+            }
+
+            if (dof < 0) dof = 0;
+            return { dof, forcedSuccess, wpbReduction };
+          }
+
+          async function postResult(title, roll, rollHistory, notes, dof, wpbReduction, success, testTarget) {
+            const fearText = html.find("#fearMod option:selected").text();
+            const fearLine = baseFearMod >= 0 ? `+${baseFearMod}` : `${baseFearMod}`;
+            const modsLine = customMod >= 0 ? `+${customMod}` : `${customMod}`;
+            const heretic = html.find("#heretic")[0].checked;
+            const dos = success ? Math.floor((testTarget - roll) / 10) + 1 : 0;
+
+            const fateLine = title === "Fate Reroll"
+              ? `<div style="color:gold; font-size:1.1em; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black; font-weight:bold;">${actor.name} rerolled with Fate</div>`
+              : "";
+
+            const notesBlock = notes.length
+              ? `<div style="margin-top:4px; font-style:italic; opacity:0.85;">${notes.join(" | ")}</div>`
+              : "";
+
+            ChatMessage.create({
+              speaker: ChatMessage.getSpeaker({ actor }),
+              content: `
+<div style="text-align:center; color:#000000; font-size:1.1em;">
+${fateLine}
+<div style="font-style:italic; font-size:1.1em;">
+<b>${actor.name}</b> performs a <b>Fear Test</b> ${selectedTarget ? `against <b>${selectedTarget.name}</b>` : ""}
+</div>
+<hr>
+<div><b>Fear Level:</b> ${fearText} (${fearLine})${heretic ? " | Heretic +10" : ""}</div>
+<div><b>Modifier:</b> ${modsLine}</div>
+<div style="margin-top:6px;font-size:1.2em;">
+<b>Target:</b> <span style="color:#3aa0ff; font-weight:bold; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${testTarget}</span>
+</div>
+<div style="font-size:1.2em; margin-top:4px;">
+<b>Rolls:</b><br>${rollHistory.map(r => `${r.label}: <span style="color:#ff9f1a; font-weight:bold; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${r.value}</span>`).join("<br>")}
+</div>
+${notesBlock}
+${success
+    ? `<div style="font-size:1.2em; font-weight:bold; color:#1aff1a; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black; margin-top:6px;">${dos} Degrees of Success${wpbReduction ? `<br><span style="font-size:0.85em;">Reduced by WPB ${wpbReduction}</span>` : ""}</div>`
+    : `<div style="font-size:1.2em; font-weight:bold; color:#ff2a2a; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black; margin-top:6px;">${dof} Degrees of Failure${wpbReduction ? `<br><span style="font-size:0.85em;">Reduced by WPB ${wpbReduction}</span>` : ""}</div>`
+}
+</div>`
+            });
+          }
+
+          async function rollFear(dof) {
+            let insanityBlock = "";
+            if (dof >= 3) {
+              const insanityRoll = await new Roll("1d5").evaluate({ async: true });
+              if (roll3d) roll3d.showForRoll(insanityRoll);
+              const currentInsanity = actor.system.insanity ?? 0;
+              const newInsanity = currentInsanity + insanityRoll.total;
+              await actor.update({ "system.insanity": newInsanity });
+              insanityBlock = `<div style="margin-top:6px; font-size:1.05em;"><b>Insanity Increase:</b> <span style="color:#ff9f1a; font-weight:900; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${insanityRoll.total}</span><br><b>Insanity Total:</b> <span style="color:#ff2a2a; font-weight:900; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${newInsanity}</span> <span style="font-size:0.9em;"><i>(${currentInsanity} + ${insanityRoll.total})</i></span></div>`;
+            }
+
+            const fearRoll = await d100();
+            const result = fearRoll + dof * 10;
+            const entry = FEAR_TABLE.find(e => result <= e.max);
+            const text = addInlineRolls(entry?.text ?? "");
+
+            ChatMessage.create({
+              speaker: ChatMessage.getSpeaker({ actor }),
+              content: `
+<div style="text-align:center; color:#000000; font-size:1.1em;">
+<div style="font-style:italic;font-size:1.1em;"><b>${actor.name}</b> rolls on the <b>Shock Table</b></div>
+${insanityBlock}
+<hr>
+<div><b>Shock Roll:</b> <span style="color:#ff9f1a; font-weight:bold; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${fearRoll}</span> <span style="font-size:0.9em;"><i>(+${dof * 10} from DoF)</i></span></div>
+<div style="margin-top:6px;font-size:1.2em;"><b>Shock Total:</b> <span style="color:#3aa0ff; font-weight:bold; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${result}</span></div>
+<div style="margin-top:8px; font-size:1.1em;">${text}</div>
+</div>`
+            });
+          }
+
+          let rollHistory = [];
+          let notes = [];
+          let roll = await d100();
+          rollHistory.push({ label: "Initial Roll", value: roll });
+
+          if (roll > target && html.find("#faith")[0].checked) {
+            roll = await d100();
+            rollHistory.push({ label: "Unshakeable Faith", value: roll });
+            notes.push("Unshakeable Faith reroll");
+          }
+
+          let comparisonTarget = target;
+          if (roll > comparisonTarget && html.find("#iron")[0].checked) {
+            const ironTarget = target + 10;
+            const newRoll = await d100();
+            rollHistory.push({ label: "Iron Resolve", value: `${newRoll} vs ${ironTarget}` });
+            notes.push("Iron Resolve reroll (+10 target)");
+            roll = newRoll;
+            comparisonTarget = ironTarget;
+          }
+
+          let { dof, forcedSuccess, wpbReduction } = getDoF(roll, notes, comparisonTarget);
+          let success = (roll <= comparisonTarget) || forcedSuccess;
+
+          await postResult("Initial Test", roll, rollHistory, notes, dof, wpbReduction, success, comparisonTarget);
+
+          if (!success && fate > 0) {
+            new Dialog({
+              title: "Spend Fate?",
+              content: `Spend 1 Fate to reroll?<br><b>(Current: ${fate})</b>`,
+              buttons: {
+                yes: {
+                  label: "Reroll (Fate -1)",
+                  callback: async () => {
+                    fate--;
+                    await actor.update({ "system.fate.value": fate });
+                    rollHistory = [];
+                    roll = await d100();
+                    rollHistory.push({ label: "Fate Roll", value: roll });
+                    notes = ["Fate reroll"];
+                    ({ dof, forcedSuccess, wpbReduction } = getDoF(roll, notes, target));
+                    success = (roll <= target) || forcedSuccess;
+                    await postResult("Fate Reroll", roll, rollHistory, notes, dof, wpbReduction, success, target);
+                    if (!success) await rollFear(dof);
+                  }
+                },
+                no: { label: "No", callback: async () => { await rollFear(dof); } }
+              }
+            }).render(true);
+          } else if (!success) {
+            await rollFear(dof);
+          }
+        }
+      },
+      cancel: { label: "Cancel" }
+    }
+  }).render(true);
+}
+
 async function runStep(step) {
   const handlers = {
     attack: { gmOnly: false, execute: runAttackWorkflow },
@@ -3435,7 +3662,8 @@ async function runStep(step) {
     damage: { gmOnly: false, execute: runDamageWorkflow },
     master: { gmOnly: false, execute: openLauncher },
     gmMaster: { gmOnly: true, execute: openLauncher },
-    applyDamage: { gmOnly: true, execute: runApplyDamageWorkflow }
+    applyDamage: { gmOnly: true, execute: runApplyDamageWorkflow },
+    fear: { gmOnly: false, execute: openFearTest }
   };
 
   const handler = handlers[step];
