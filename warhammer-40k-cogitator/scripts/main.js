@@ -1086,14 +1086,14 @@ async function applyDefenseResult({ chatMessageId, targetTokenUuid, defenseRoll,
   const pendingDefense = state.targets.some(t => {
     if ((t.allocatedHits ?? 0) <= 0) return false;
     const out = String(t.defenseOutcome ?? "").toLowerCase();
-    return !out.includes("success") && !out.includes("failed") && !out.includes("skipped");
+    return !out.includes("success") && !out.includes("fail") && !out.includes("skipped");
   });
 
   const pendingDamage = state.targets.some(t => {
     if ((t.allocatedHits ?? 0) <= 0) return false;
     if (t.damageResolved) return false;
     const out = String(t.defenseOutcome ?? "").toLowerCase();
-    return out.includes("success") || out.includes("failed") || out.includes("skipped");
+    return out.includes("success") || out.includes("fail") || out.includes("skipped");
   });
 
   if (!pendingDefense && pendingDamage) {

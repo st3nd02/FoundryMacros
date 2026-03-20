@@ -123,7 +123,7 @@ for (const msg of game.messages.contents) {
     if ((target.allocatedHits ?? 0) <= 0) continue;
     if (target.damageResolved) continue;
     const out = String(target.defenseOutcome ?? "").toLowerCase();
-    const defenseResolved = out.includes("success") || out.includes("failed") || out.includes("skipped") || out.includes("no active owner");
+    const defenseResolved = out.includes("success") || out.includes("fail") || out.includes("skipped") || out.includes("no active owner");
     if (!defenseResolved || out.includes("awaiting")) continue;
     pending.push({ msg, state, target, targetUuid: target.tokenUuid ?? target.targetTokenUuid });
   }
@@ -261,7 +261,21 @@ new Dialog({
         const dos = Number(html.find("#dos").val());
         const isHordeTarget = !!entry.state?.horde?.active;
         const traitsText = String(weapon.system.special ?? "").toLowerCase();
-        const hasTrait = (name) => traitsText.includes(name);
+        const traitList = traitsText
+          .split(",")
+          .map(t => t.trim().toLowerCase())
+          .filter(Boolean);
+        const hasTrait = name => {
+          const normalized = String(name ?? "").trim().toLowerCase();
+          return traitList.some(trait => trait === normalized || trait.startsWith(`${normalized} (`));
+        };
+        const parseTraitVal = (name, d=0) => {
+          const normalized = String(name ?? "").trim().toLowerCase();
+          const entry = traitList.find(trait => trait === normalized || trait.startsWith(`${normalized} (`));
+          if (!entry) return d;
+          const mm = entry.match(/\((\d+)\)/);
+          return mm ? Number(mm[1]) : d;
+        };
         const tearing = hasTrait("tearing");
         const proven = hasTrait("proven");
         const primitive = hasTrait("primitive");
@@ -280,10 +294,6 @@ new Dialog({
         const warpWeapon = hasTrait("warp weapon");
         const corrosive = hasTrait("corrosive");
         const lance = hasTrait("lance");
-        const parseTraitVal = (name, d=0) => {
-          const mm = traitsText.match(new RegExp(name + "\\s*\\((\\d+)\\)"));
-          return mm ? Number(mm[1]) : d;
-        };
         const hammer = !!entry.state?.toggles?.hammer;
         const flesh = !!entry.state?.toggles?.flesh;
         const raptor = !!entry.state?.toggles?.raptor;
