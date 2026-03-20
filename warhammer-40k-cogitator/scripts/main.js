@@ -1295,7 +1295,7 @@ class WorkflowHud {
     this.element.style.borderRadius = px(8);
     this.element.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(${px(110)}, 1fr))`;
 
-    const iconCell = this.createIconCell(hudScale);
+    const iconCell = this.createIconCell(hudScale, this.locked);
     const comingSoonCell = (colSpan = 1) => this.createComingSoonCell(hudScale, colSpan);
     const emptyCell = (colSpan = 1) => this.createEmptyCell(hudScale, colSpan);
     const actionCell = (id, fallbackLabel = "Coming soon") => this.createActionCell(hudScale, buttonMap.get(id), fallbackLabel);
@@ -1321,7 +1321,6 @@ class WorkflowHud {
       this.element.appendChild(actionCell("fatigue", "Fatigue Manager"));
       this.element.appendChild(comingSoonCell());
 
-      this.element.appendChild(emptyCell());
     } else {
       this.element.appendChild(actionCell("attack", "Attack"));
       this.element.appendChild(actionCell("defense", "Defense"));
@@ -1335,25 +1334,7 @@ class WorkflowHud {
       this.element.appendChild(actionCell("skill", "Skills"));
       this.element.appendChild(actionCell("medical", "Medical"));
 
-      this.element.appendChild(emptyCell());
     }
-
-    const lockButton = document.createElement("button");
-    lockButton.type = "button";
-    lockButton.textContent = this.locked ? "🔒" : "🔓";
-    lockButton.title = this.locked ? "Unlock bar" : "Lock bar";
-    lockButton.style.padding = `${px(4)} ${px(8)}`;
-    lockButton.style.fontSize = px(12);
-    lockButton.style.cursor = "pointer";
-    lockButton.addEventListener("click", async event => {
-      event.stopPropagation();
-      await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudLocked, !this.locked);
-    });
-    lockButton.style.gridColumn = game.user.isGM ? "span 2" : "2";
-    lockButton.style.gridRow = game.user.isGM ? "5" : "4";
-    this.element.appendChild(lockButton);
-
-    this.element.appendChild(emptyCell());
 
     const { clampedX, clampedY } = this.getClampedPosition(x, y);
     this.element.style.left = `${Math.round(clampedX)}px`;
@@ -1410,7 +1391,7 @@ class WorkflowHud {
     return cell;
   }
 
-  createIconCell(hudScale) {
+  createIconCell(hudScale, locked) {
     const px = value => `${Math.round(value * hudScale)}px`;
     const cell = document.createElement("div");
     cell.style.display = "flex";
@@ -1420,6 +1401,14 @@ class WorkflowHud {
     cell.style.padding = px(4);
     cell.style.border = "1px solid rgba(206, 206, 206, 0.35)";
     cell.style.borderRadius = px(4);
+    cell.style.cursor = "pointer";
+    cell.style.background = locked ? "" : "#6f0000";
+    cell.title = locked ? "Unlock bar" : "Lock bar";
+    cell.addEventListener("pointerdown", event => event.stopPropagation());
+    cell.addEventListener("click", async event => {
+      event.stopPropagation();
+      await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudLocked, !locked);
+    });
 
     const icon = document.createElement("img");
     icon.src = `modules/${COGITATOR_ID}/WH40k Cogitator Icon.png`;
