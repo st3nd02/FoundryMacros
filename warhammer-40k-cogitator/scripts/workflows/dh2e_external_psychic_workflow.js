@@ -569,16 +569,42 @@ export async function runPsychicPowerWorkflow() {
     phenomenaText = allResults.join("<hr>");
   }
 
+  const styleBlue = "color:#3aa0ff;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;";
+  const styleOrange = "color:#ff9f1a;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;";
+  const styleGreen = "color:#1aff1a;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;";
+  const styleRed = "color:#ff2a2a;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;";
+
+  const casterDegreeLabel = manifestSuccess ? "Degrees of Success" : "Degrees of Failure";
+  const casterDegreeStyle = manifestSuccess ? styleGreen : styleRed;
+  const targetDegreeLabel = opposedResult?.success ? "Degrees of Success" : "Degrees of Failure";
+  const targetDegreeStyle = opposedResult?.success ? styleGreen : styleRed;
+  const opposedOutcomeLabel = opposedResult?.attackerWins ? "Caster Wins" : "Caster Loses";
+  const opposedOutcomeStyle = opposedResult?.attackerWins ? styleGreen : styleRed;
+
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor, token: token.document }),
-    content: `<div><h3 style="margin:0 0 6px 0;">${actor.name} manifests ${power.name}${targetToken ? ` against ${targetToken.name}` : ""}</h3>
+    content: `<div style="text-align:center; font-size:1.05em;">
+      <div style="font-style:italic; font-size:1.1em;">
+        <b>${actor.name}</b> manifests <b>${power.name}</b>${targetToken ? ` against <b>${targetToken.name}</b>` : ""}
+      </div>
+      <hr>
       <div><b>Mode:</b> ${pick.mode} | <b>Psy Rating:</b> ${effectivePR} | <b>Range:</b> ${resolvedRangeText || "—"}</div>
-      <div><b>Focus Test (${focusTestType}):</b> ${targetNumber} vs ${manifestRoll} → ${manifestSuccess ? `<span style="color:#1aff1a;font-weight:bold;">Success (${manifestDoS} DoS)</span>` : `<span style="color:#ff3b3b;font-weight:bold;">Failure (${manifestDoS} DoF)</span>`}</div>
+      <div style="margin-top:4px;">
+        <b>Focus Test (${focusTestType}):</b>
+        <span style="${styleBlue}">${targetNumber}</span> vs <span style="${styleOrange}">${manifestRoll}</span>
+        ${manifestSuccess ? `→ <span style="${styleGreen}">Success</span>` : `→ <span style="${styleRed}">Failure</span>`}
+      </div>
       <div><b>Description:</b> ${stripHTML(data.effect ?? data.description ?? "") || "—"}</div>
-      ${opposedResult ? `<div><b>Opposed:</b> Attacker ${manifestRoll}/${targetNumber} (${manifestDoS} DoS) vs Target ${opposedResult.roll}/${opposedResult.target} (${opposedResult.dos} ${opposedResult.success ? "DoS" : "DoF"}) → <b>${opposedResult.attackerWins ? "Attacker Wins" : "Defender Wins"}</b></div>` : ""}
-      ${hasDamage ? `<div><b>Damage:</b> ${finalFormula} | <b>Type:</b> ${rawType} | <b>Pen:</b> ${finalPen} | <b>Shape:</b> ${shape || "—"} | <b>Hits:</b> ${hits}</div>` : ""}
-      <div><b>Phenomena:</b> ${triggersPhenomena ? `YES (${phenomenaModifier >= 0 ? "+" : ""}${phenomenaModifier})` : "No"}</div>
-      ${phenomenaText ? `<div style="margin-top:6px;">${phenomenaText}</div>` : ""}
+      ${opposedResult ? `<hr>
+      <div style="font-weight:bold;">Opposed Check</div>
+      <div><b>Caster:</b> <span style="${styleBlue}">${targetNumber}</span> vs <span style="${styleOrange}">${manifestRoll}</span></div>
+      <div><span style="${casterDegreeStyle}">${manifestDoS} ${casterDegreeLabel}</span></div>
+      <div style="margin-top:4px;"><b>Target(s):</b> <span style="${styleBlue}">${opposedResult.target}</span> vs <span style="${styleOrange}">${opposedResult.roll}</span></div>
+      <div><span style="${targetDegreeStyle}">${opposedResult.dos} ${targetDegreeLabel}</span></div>
+      <div style="margin-top:4px;"><span style="${opposedOutcomeStyle}">${opposedOutcomeLabel}</span></div>` : ""}
+      ${hasDamage ? `<hr><div><b>Damage:</b> ${finalFormula} | <b>Type:</b> ${rawType} | <b>Pen:</b> ${finalPen} | <b>Shape:</b> ${shape || "—"} | <b>Hits:</b> ${hits}</div>` : ""}
+      <div style="margin-top:4px;"><b>Phenomena:</b> ${triggersPhenomena ? `YES (${phenomenaModifier >= 0 ? "+" : ""}${phenomenaModifier})` : "No"}</div>
+      ${phenomenaText ? `<div style="margin-top:6px; text-align:center;">${phenomenaText}</div>` : ""}
     </div>`
   });
 
