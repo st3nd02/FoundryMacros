@@ -3,7 +3,7 @@ export async function runPsychicPowerWorkflow() {
   const WORKFLOW_KEY = "dh2eExternalWorkflow";
   const SUSTAINING_EFFECT_ID = "ce-(whc)-sustaining-psychic-power";
   const CONDITION_MAP = {
-    bleeding: { id: "bleeding", name: "Bleeding" },
+    bleeding: { id: "bleeding", name: "Blood Loss", aliases: ["Bleeding"] },
     blinded: { id: "blinded", name: "Blinded" },
     deafened: { id: "deafened", name: "Deafened" },
     fear: { id: "fear", name: "Frightened" },
@@ -714,6 +714,7 @@ export async function runPsychicPowerWorkflow() {
       actorUuid: actor.uuid,
       effectId: condition.id,
       effectName: condition.name,
+      effectNames: condition.aliases ?? [],
       counter: amount > 1 ? amount : null
     });
   }

@@ -467,18 +467,21 @@ async function addConvenientEffectToActor(payload) {
   return cogitatorSocket.executeAsGM("socketAddConvenientEffect", payload);
 }
 
-async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName, counter = null, allowDuplicates = false }) {
+async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName, effectNames = [], counter = null, allowDuplicates = false }) {
   const actor = await resolveActorFromUuid(actorUuid);
   if (!actor) return false;
 
   const effectInterface = game.dfreds?.effectInterface;
   let applied = false;
+  const preferredNames = [effectName, ...effectNames].filter(Boolean);
   if (effectInterface?.addEffect) {
     const paramsByPriority = [
       { effectId, uuid: actor.uuid },
       { effectId, uuids: [actor.uuid] },
-      { effectName, uuid: actor.uuid },
-      { effectName, uuids: [actor.uuid] }
+      ...preferredNames.flatMap(name => ([
+        { effectName: name, uuid: actor.uuid },
+        { effectName: name, uuids: [actor.uuid] }
+      ]))
     ].filter(params => params.effectId || params.effectName);
 
     for (const params of paramsByPriority) {
@@ -493,10 +496,10 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
   }
 
   if (!applied && canModifyActorEffects(actor)) {
-    const existing = allowDuplicates ? null : findActorEffect(actor, effectId, effectName);
+    const existing = allowDuplicates ? null : findActorEffect(actor, effectId, effectName) || preferredNames.map(name => findActorEffect(actor, effectId, name)).find(Boolean);
     if (!existing) {
       await actor.createEmbeddedDocuments("ActiveEffect", [{
-        name: effectName || effectId || "Status Effect",
+        name: preferredNames[0] || effectId || "Status Effect",
         img: "icons/svg/aura.svg",
         icon: "icons/svg/aura.svg",
         transfer: false,
@@ -507,7 +510,7 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
   }
 
   if (applied && Number.isFinite(Number(counter)) && Number(counter) > 0) {
-    const activeEffect = findActorEffect(actor, effectId, effectName);
+    const activeEffect = findActorEffect(actor, effectId, effectName) || preferredNames.map(name => findActorEffect(actor, effectId, name)).find(Boolean);
     if (activeEffect) {
       const numericCounter = Number(counter);
       await activeEffect.update({
@@ -3485,6 +3488,13 @@ async function openFearTest() {
     { max: 170, text: "The character's mind snaps. He becomes catatonic for 1d5 hours; for that time, he is Unconscious and cannot be roused." },
     { max: 999, text: "HEARTSTOP" }
   ];
+  const FEAR_CONDITION_MAP = {
+    fear: { id: "fear", name: "Frightened", aliases: ["Fear"] },
+    stunned: { id: "stunned", name: "Stunned" },
+    unconscious: { id: "unconscious", name: "Unconscious" },
+    prone: { id: "prone", name: "Prone" },
+    bleeding: { id: "bleeding", name: "Blood Loss", aliases: ["Bleeding"] }
+  };
 
   const selectedTarget = [...game.user.targets][0];
   const targetTraits = selectedTarget?.actor?.items?.filter(i => i.type === "trait")?.map(i => String(i.name ?? "")) ?? [];
@@ -3541,14 +3551,33 @@ async function openFearTest() {
     if (value === "a" || value === "an" || value === "one" || value === "next") return 1;
     return 0;
   };
+  const extractRoundsByKeyword = (text, keywordRegex) => {
+    const plain = String(text ?? "").replace(/<[^>]*>/g, " ");
+    const regex = new RegExp(`${keywordRegex.source}\\s+for\\s+((?:\\d+|one|a|an|next))\\s*round`, "gi");
+    let total = 0;
+    let match;
+    while ((match = regex.exec(plain)) !== null) {
+      total += Math.max(parseRoundAmount(match[1]), 0);
+    }
+    return total;
+  };
   const extractFearConditionCounts = text => {
     const plain = String(text ?? "").replace(/<[^>]*>/g, " ").toLowerCase();
     const counts = {};
+    const add = (id, amount = 1) => {
+      counts[id] = (counts[id] ?? 0) + Math.max(Number(amount) || 0, 0);
+    };
     if (/\bfear\b|\bfrightened\b|\bshocked\b|\bpanic\b|\bsnap out of it\b|\bfrozen by terror\b/.test(plain)) counts.fear = 1;
-    const unconsciousMatch = plain.match(/unconscious\s+for\s+((?:\d+|one|a|an|next))\s*round/i);
-    const unconsciousRounds = parseRoundAmount(unconsciousMatch?.[1] ?? 0);
-    if (unconsciousRounds > 0) counts.unconscious = unconsciousRounds;
-    else if (/\bunconscious\b|\bcatatonic\b|\bfainting dead away\b/.test(plain)) counts.unconscious = 1;
+    if (/\bprone\b/.test(plain)) add("prone");
+    if (/\bblood\s+loss\b|\bbleeding\b/.test(plain)) add("bleeding");
+
+    const stunnedRounds = extractRoundsByKeyword(plain, /\bstunned\b/);
+    if (stunnedRounds > 0) add("stunned", stunnedRounds);
+    else if (/\bstunned\b|\bfrozen by terror\b/.test(plain)) add("stunned", 1);
+
+    const unconsciousRounds = extractRoundsByKeyword(plain, /\bunconscious\b/);
+    if (unconsciousRounds > 0) add("unconscious", unconsciousRounds);
+    else if (/\bunconscious\b|\bcatatonic\b|\bfainting dead away\b/.test(plain)) add("unconscious", 1);
     return counts;
   };
 
@@ -3664,15 +3693,17 @@ ${success
             const rolledText = await rollInlineDiceText(baseText);
             const text = stylizeConditionText(rolledText);
             const conditionCounts = extractFearConditionCounts(rolledText);
-            const fearRecipientUuid = selectedTarget?.actor?.uuid ?? actor.uuid;
+            const fearRecipientUuid = actor.uuid;
             for (const [conditionId, amountRaw] of Object.entries(conditionCounts)) {
               const amount = Math.max(Number(amountRaw ?? 0), 0);
               if (amount <= 0) continue;
-              const effectName = conditionId === "fear" ? "Fear" : "Unconscious";
+              const mappedCondition = FEAR_CONDITION_MAP[conditionId];
+              if (!mappedCondition) continue;
               await addConvenientEffectToActor({
                 actorUuid: fearRecipientUuid,
-                effectId: conditionId,
-                effectName,
+                effectId: mappedCondition.id,
+                effectName: mappedCondition.name,
+                effectNames: mappedCondition.aliases ?? [],
                 counter: amount > 1 ? amount : null
               });
             }
