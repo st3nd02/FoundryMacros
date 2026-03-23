@@ -164,6 +164,11 @@ const attackData = {
   dos: entry.state.dos ?? 0,
   location: getHitLocation(entry.state.attackRoll ?? 50)
 };
+const calledShotLocation = String(entry.state?.setupSnapshot?.calledShotLocation ?? "Body");
+const useCalledShotLocation = String(entry.state?.modeKey ?? "").toLowerCase() === "called";
+if (useCalledShotLocation) {
+  attackData.location = calledShotLocation;
+}
 
 const weapon = actor.items.get(entry.state.weaponId) || actor.items.find(w => w.type === "weapon" && w.name === attackData.weapon);
 if (!weapon) return ui.notifications.warn("Weapon not found on actor.");
