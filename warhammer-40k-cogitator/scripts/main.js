@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.36";
+const COGITATOR_VERSION = "2.1.38";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -3664,13 +3664,15 @@ ${success
             const rolledText = await rollInlineDiceText(baseText);
             const text = stylizeConditionText(rolledText);
             const conditionCounts = extractFearConditionCounts(rolledText);
+            const fearRecipientUuid = selectedTarget?.actor?.uuid ?? actor.uuid;
             for (const [conditionId, amountRaw] of Object.entries(conditionCounts)) {
               const amount = Math.max(Number(amountRaw ?? 0), 0);
               if (amount <= 0) continue;
+              const effectName = conditionId === "fear" ? "Fear" : "Unconscious";
               await addConvenientEffectToActor({
-                actorUuid: actor.uuid,
+                actorUuid: fearRecipientUuid,
                 effectId: conditionId,
-                effectName: conditionId === "fear" ? "Fear" : "Unconscious",
+                effectName,
                 counter: amount > 1 ? amount : null
               });
             }
