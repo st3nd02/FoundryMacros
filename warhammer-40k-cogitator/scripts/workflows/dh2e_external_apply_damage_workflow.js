@@ -358,10 +358,19 @@ function stylizeCriticalText(text){
 }
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
-const STUNNED_EFFECT_ID = "ce-(whc)-stunned";
-const STUNNED_EFFECT_NAME = "Stunned";
-const BLOOD_LOSS_EFFECT_ID = "ce-(whc)-blood-loss";
-const BLOOD_LOSS_EFFECT_NAME = "Blood Loss";
+const CONDITION_MAP = {
+  bleeding: { id: "bleeding", name: "Blood Loss" },
+  blinded: { id: "blinded", name: "Blinded" },
+  deafened: { id: "deafened", name: "Deafened" },
+  fear: { id: "fear", name: "Fear" },
+  fire: { id: "fire", name: "Fire" },
+  grappled: { id: "grappled", name: "Grappled" },
+  pinned: { id: "pinned", name: "Pinned" },
+  prone: { id: "prone", name: "Prone" },
+  stunned: { id: "stunned", name: "Stunned" },
+  unconscious: { id: "unconscious", name: "Unconscious" },
+  dead: { id: "dead", name: "Dead" }
+};
 
 const buildWorkflowHtml = state => {
   const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${text}</span>`;
@@ -581,6 +590,52 @@ function textMentionsBloodLoss(text) {
   return /\bblood\s+loss\b/i.test(plain);
 }
 
+function accumulateConditionCountsFromText(counts, text) {
+  if (!text) return;
+  const plain = String(text).replace(/<[^>]*>/g, " ").toLowerCase();
+  const add = (id, amount = 1) => {
+    counts[id] = (counts[id] ?? 0) + Math.max(Number(amount) || 0, 0);
+  };
+
+  if (/\bblood\s+loss\b|\bbleeding\b/.test(plain)) add("bleeding");
+  if (/\bprone\b/.test(plain)) add("prone");
+  if (/\bblinded\b|\bblindness\b|\bblind\b/.test(plain)) add("blinded");
+  if (/\bdeafened\b|\bdeafness\b/.test(plain)) add("deafened");
+  if (/\bfear\b|\bshocked\b|\bsnap out of it\b/.test(plain)) add("fear");
+  if (/\bcatch fire\b|\bon fire\b|\bfire\b/.test(plain)) add("fire");
+  if (/\bgrappled\b|\bimmobilized\b|\bimmobilised\b/.test(plain)) add("grappled");
+  if (/\bpinned\b|\bpinning\b/.test(plain)) add("pinned");
+
+  const stunnedRounds = extractStunnedRounds(plain);
+  if (stunnedRounds > 0) add("stunned", stunnedRounds);
+  else if (/\bstunned\b/.test(plain)) add("stunned", 1);
+
+  const unconsciousRoundsRegex = /unconscious\s+for\s+(\d+)\s*round/gi;
+  let unconsciousMatch;
+  let unconsciousRounds = 0;
+  while ((unconsciousMatch = unconsciousRoundsRegex.exec(plain)) !== null) {
+    unconsciousRounds += Math.max(Number(unconsciousMatch[1] ?? 0), 0);
+  }
+  if (unconsciousRounds > 0) add("unconscious", unconsciousRounds);
+  else if (/\bunconscious\b|\bcatatonic\b/.test(plain)) add("unconscious", 1);
+
+  if (/\bdead\b|\bdie\b|\bdies\b|\bperish\b/.test(plain)) add("dead", 1);
+}
+
+function actorImmuneToDeadCondition(actorDoc) {
+  const traitNames = (actorDoc?.items ?? [])
+    .filter(item => item.type === "trait")
+    .map(item => String(item.name ?? "").toLowerCase());
+  return traitNames.some(name =>
+    name.includes("undying")
+    || name.includes("necron")
+    || name.includes("from beyond")
+    || name.includes("regeneration")
+    || name.includes("strange physiology")
+    || name.includes("black carapace")
+  );
+}
+
 function prettyLoc(loc){
   return loc.replace(/([A-Z])/g," $1").replace(/^./,s=>s.toUpperCase());
 }
@@ -723,6 +778,8 @@ const startingArmourByLocation = Object.fromEntries(
 let report = "";
 let pendingStunnedRounds = extractStunnedRounds((dmg.properties ?? []).join(" | "));
 let pendingBloodLoss = textMentionsBloodLoss((dmg.properties ?? []).join(" | "));
+const pendingConditionCounts = {};
+accumulateConditionCountsFromText(pendingConditionCounts, (dmg.properties ?? []).join(" | "));
 let lastCritLocation = null;
 let realCritToApply = 0;
 let furyCrits = [];
@@ -1010,6 +1067,7 @@ if (suppressingPenalty > 0) {
   `;
 
   if (!resisted) {
+    pendingConditionCounts.pinned = (pendingConditionCounts.pinned ?? 0) + 1;
     await applyConvenientEffect(actor, {
       effectId: "pinned",
       effectName: "Pinned"
@@ -1048,6 +1106,7 @@ if (hasShocking && totalInflicted > 0) {
     const currentFatigue = Number(actor.system?.fatigue?.value ?? 0);
     await actor.update({ "system.fatigue.value": currentFatigue + 1 });
     pendingStunnedRounds += dof;
+    pendingConditionCounts.stunned = (pendingConditionCounts.stunned ?? 0) + dof;
     shockingOutcomeSummary = `<br><b>${dmg.target}</b> is <span style='color:#00b3ff;font-weight:900;'>stunned</span> for <b>${dof}</b> round${dof === 1 ? "" : "s"}.`;
   }
 }
@@ -1081,6 +1140,9 @@ if (hasSnare && totalInflicted > 0) {
   snareOutcomeSummary = succeeded
     ? `<br><b>${dmg.target}</b> avoided the <span style='color:#89d185;font-weight:900;'>Snare</span>.`
     : `<br><b>${dmg.target}</b> is <span style='color:#89d185;font-weight:900;'>Immobilized</span> by <span style='color:#89d185;font-weight:900;'>Snare</span>.`;
+  if (!succeeded) {
+    pendingConditionCounts.grappled = (pendingConditionCounts.grappled ?? 0) + 1;
+  }
 }
 
 if (dmg.force?.resolved) {
@@ -1146,6 +1208,7 @@ for (let i = 0; i < furyCrits.length; i++){
     text = await rollInlineDice(text);
     pendingStunnedRounds += extractStunnedRounds(text);
     pendingBloodLoss = pendingBloodLoss || textMentionsBloodLoss(text);
+    accumulateConditionCountsFromText(pendingConditionCounts, text);
     text = stylizeCriticalText(text);
 
     critReport += `
@@ -1170,6 +1233,7 @@ if (realCritToApply > 0 && lastCritLocation){
     text = await rollInlineDice(text);
     pendingStunnedRounds += extractStunnedRounds(text);
     pendingBloodLoss = pendingBloodLoss || textMentionsBloodLoss(text);
+    accumulateConditionCountsFromText(pendingConditionCounts, text);
     text = stylizeCriticalText(text);
 
     critReport += `
@@ -1183,40 +1247,26 @@ if (realCritToApply > 0 && lastCritLocation){
   }
 }
 
-if (pendingStunnedRounds > 0) {
-  const existingStunned = actor.effects.find(effect => {
-    const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
-    const ids = statuses.map(status => String(status ?? "").toLowerCase());
-    const coreStatus = String(effect.flags?.core?.statusId ?? "").toLowerCase();
-    const dfredsId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
-    const name = String(effect.name ?? "").toLowerCase();
-    return ids.includes(STUNNED_EFFECT_ID) || coreStatus === STUNNED_EFFECT_ID || dfredsId === STUNNED_EFFECT_ID || name === STUNNED_EFFECT_NAME.toLowerCase();
-  });
+pendingConditionCounts.stunned = Math.max(Number(pendingConditionCounts.stunned ?? 0), Number(pendingStunnedRounds ?? 0));
+if (pendingBloodLoss) pendingConditionCounts.bleeding = Math.max(Number(pendingConditionCounts.bleeding ?? 0), 1);
 
-  const existingCounter = Number(
-    existingStunned?.flags?.statuscounter?.counter?.value
-    ?? existingStunned?.flags?.statuscounter?.counter
-    ?? existingStunned?.flags?.statusIconCounters?.value
-    ?? existingStunned?.flags?.statusIconCounters?.counter
-    ?? existingStunned?.flags?.["status-icon-counters"]?.value
-    ?? existingStunned?.flags?.["status-icon-counters"]?.counter
-    ?? existingStunned?.flags?.["status-icon-counter"]?.value
-    ?? existingStunned?.flags?.["status-icon-counter"]?.counter
-    ?? 0
-  );
-  const existingStacks = existingStunned ? (existingCounter > 0 ? existingCounter : 1) : 0;
-
-  await applyConvenientEffect(actor, {
-    effectId: STUNNED_EFFECT_ID,
-    effectName: STUNNED_EFFECT_NAME,
-    counter: existingStacks + pendingStunnedRounds
-  });
+if (Number(critCurrent ?? 0) > 11) {
+  const hasPlayerOwner = Object.values(actor.ownership ?? {}).some(level => Number(level) >= CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
+  if (!hasPlayerOwner && !actorImmuneToDeadCondition(actor)) {
+    pendingConditionCounts.dead = Math.max(Number(pendingConditionCounts.dead ?? 0), 1);
+  }
 }
 
-if (pendingBloodLoss) {
+for (const [conditionKey, countRaw] of Object.entries(pendingConditionCounts)) {
+  const count = Math.max(Number(countRaw ?? 0), 0);
+  if (count <= 0) continue;
+  const condition = CONDITION_MAP[conditionKey];
+  if (!condition) continue;
+  if (condition.id === "dead" && (actorImmuneToDeadCondition(actor) || Object.values(actor.ownership ?? {}).some(level => Number(level) >= CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER))) continue;
   await applyConvenientEffect(actor, {
-    effectId: BLOOD_LOSS_EFFECT_ID,
-    effectName: BLOOD_LOSS_EFFECT_NAME
+    effectId: condition.id,
+    effectName: condition.name,
+    counter: count > 1 ? count : null
   });
 }
 

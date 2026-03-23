@@ -2,6 +2,19 @@ export async function runPsychicPowerWorkflow() {
   const WORKFLOW_NS = "warhammer-40k-cogitator";
   const WORKFLOW_KEY = "dh2eExternalWorkflow";
   const SUSTAINING_EFFECT_ID = "ce-(whc)-sustaining-psychic-power";
+  const CONDITION_MAP = {
+    bleeding: { id: "bleeding", name: "Blood Loss" },
+    blinded: { id: "blinded", name: "Blinded" },
+    deafened: { id: "deafened", name: "Deafened" },
+    fear: { id: "fear", name: "Fear" },
+    fire: { id: "fire", name: "Fire" },
+    grappled: { id: "grappled", name: "Grappled" },
+    pinned: { id: "pinned", name: "Pinned" },
+    prone: { id: "prone", name: "Prone" },
+    stunned: { id: "stunned", name: "Stunned" },
+    unconscious: { id: "unconscious", name: "Unconscious" },
+    dead: { id: "dead", name: "Dead" }
+  };
 
   if (!canvas.tokens.controlled.length) {
     return ui.notifications.warn("Select your token first.");
@@ -97,6 +110,44 @@ export async function runPsychicPowerWorkflow() {
       result = result.replace(match, roll.total);
     }
     return result;
+  };
+
+  const extractConditionCounts = text => {
+    const plain = String(text ?? "").replace(/<[^>]*>/g, " ").toLowerCase();
+    const counts = {};
+    const add = (id, amount = 1) => {
+      counts[id] = (counts[id] ?? 0) + Math.max(Number(amount) || 0, 0);
+    };
+
+    if (/\bblood\s+loss\b|\bbleeding\b/.test(plain)) add("bleeding");
+    if (/\bprone\b/.test(plain)) add("prone");
+    if (/\bblinded\b|\bblindness\b|\bblind\b/.test(plain)) add("blinded");
+    if (/\bdeafened\b|\bdeafness\b/.test(plain)) add("deafened");
+    if (/\bfear\b|\bshocked\b|\bsnap out of it\b/.test(plain)) add("fear");
+    if (/\bcatch fire\b|\bon fire\b|\bfire\b/.test(plain)) add("fire");
+    if (/\bgrappled\b|\bimmobilized\b|\bimmobilised\b/.test(plain)) add("grappled");
+    if (/\bpinned\b|\bpinning\b/.test(plain)) add("pinned");
+
+    const stunnedRegex = /stunned\s+for\s+(\d+)\s*round/gi;
+    let stunnedMatch;
+    let stunnedRounds = 0;
+    while ((stunnedMatch = stunnedRegex.exec(plain)) !== null) {
+      stunnedRounds += Math.max(Number(stunnedMatch[1] ?? 0), 0);
+    }
+    if (stunnedRounds > 0) add("stunned", stunnedRounds);
+    else if (/\bstunned\b/.test(plain)) add("stunned", 1);
+
+    const unconsciousRegex = /unconscious\s+for\s+(\d+)\s*round/gi;
+    let unconsciousMatch;
+    let unconsciousRounds = 0;
+    while ((unconsciousMatch = unconsciousRegex.exec(plain)) !== null) {
+      unconsciousRounds += Math.max(Number(unconsciousMatch[1] ?? 0), 0);
+    }
+    if (unconsciousRounds > 0) add("unconscious", unconsciousRounds);
+    else if (/\bunconscious\b|\bcatatonic\b/.test(plain)) add("unconscious", 1);
+
+    if (/\bdead\b|\bdie\b|\bdies\b|\bperish\b/.test(plain)) add("dead", 1);
+    return counts;
   };
 
   const rollWithDice = async formula => {
@@ -553,6 +604,7 @@ export async function runPsychicPowerWorkflow() {
   }
 
   let phenomenaText = "";
+  const pendingConditionCounts = {};
   if (triggersPhenomena) {
     const rollsToMake = pick.hasFavored ? 2 : 1;
     const allResults = [];
@@ -563,9 +615,17 @@ export async function runPsychicPowerWorkflow() {
         const perilsRoll = await new Roll("1d100").evaluate({ async: true });
         const perilsEntry = await inlineRollDice(getPerilsEntry(perilsRoll.total));
         allResults.push(`<b style="color:orange;">Perils of the Warp! (${perilsRoll.total})</b><br>${perilsEntry}`);
+        const counts = extractConditionCounts(perilsEntry);
+        for (const [id, amount] of Object.entries(counts)) {
+          pendingConditionCounts[id] = (pendingConditionCounts[id] ?? 0) + amount;
+        }
       } else {
         const phEntry = await inlineRollDice(getPhenomenaEntry(phTotal));
         allResults.push(`<b>Psychic Phenomena (${phTotal})</b><br>${phEntry}`);
+        const counts = extractConditionCounts(phEntry);
+        for (const [id, amount] of Object.entries(counts)) {
+          pendingConditionCounts[id] = (pendingConditionCounts[id] ?? 0) + amount;
+        }
       }
     }
     phenomenaText = allResults.join("<hr>");
@@ -609,6 +669,19 @@ export async function runPsychicPowerWorkflow() {
       ${phenomenaText ? `<div style="margin-top:6px; text-align:center;">${phenomenaText}</div>` : ""}
     </div>`
   });
+
+  for (const [conditionId, amountRaw] of Object.entries(pendingConditionCounts)) {
+    const amount = Math.max(Number(amountRaw ?? 0), 0);
+    if (amount <= 0) continue;
+    const condition = CONDITION_MAP[conditionId];
+    if (!condition) continue;
+    await game.warhammer40kCogitator?.addConvenientEffectToActor?.({
+      actorUuid: actor.uuid,
+      effectId: condition.id,
+      effectName: condition.name,
+      counter: amount > 1 ? amount : null
+    });
+  }
 
   if (!manifestSuccess || !hasDamage || hits <= 0) return;
   if (opposed && opposedResult && !opposedResult.attackerWins) return;

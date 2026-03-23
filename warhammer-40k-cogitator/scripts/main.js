@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.35";
+const COGITATOR_VERSION = "2.1.36";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -30,7 +30,7 @@ const REACTION_COUNT_FLAG = "reactionUsedForDefenseCount";
 const USED_EVASION_EFFECT_ID = "ce-(whc)-used-evasion";
 const DEVASTATING_ASSAULT_EFFECT_ID = "ce-devastating-assault";
 const DEVASTATING_ASSAULT_EFFECT_NAME = "Devastating Assault";
-const DOUBLE_TAP_EFFECT_ID = "ce-double-tap";
+const DOUBLE_TAP_EFFECT_ID = "ce-(whc)-double-tap";
 const DOUBLE_TAP_EFFECT_NAME = "Double Tap";
 const WEAPON_RECHARGING_EFFECT_ID = "ce-(whc)-weapon-recharging";
 const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
@@ -2971,6 +2971,14 @@ async function openFatigueManager() {
 
           const exceeded = newValue > max;
           const unconscious = newValue >= max && max > 0;
+          if (unconscious) {
+            await addConvenientEffectToActor({
+              actorUuid: actor.uuid,
+              effectId: "unconscious",
+              effectName: "Unconscious",
+              counter: unconsciousMinutes > 1 ? unconsciousMinutes : null
+            });
+          }
 
           await ChatMessage.create({
             speaker: ChatMessage.getSpeaker({ actor }),
@@ -3491,6 +3499,15 @@ async function openFearTest() {
   }
 
   const addInlineRolls = text => text.replace(/\d+d\d+(?:\+\d+)?/gi, match => `[[/r ${match}]]`);
+  const extractFearConditionCounts = text => {
+    const plain = String(text ?? "").replace(/<[^>]*>/g, " ").toLowerCase();
+    const counts = {};
+    if (/\bfear\b|\bpanic\b|\bsnap out of it\b|\bfrozen by terror\b/.test(plain)) counts.fear = 1;
+    const unconsciousRounds = Number(plain.match(/unconscious\s+for\s+(\d+)\s*round/)?.[1] ?? 0);
+    if (unconsciousRounds > 0) counts.unconscious = unconsciousRounds;
+    else if (/\bunconscious\b|\bcatatonic\b|\bfainting dead away\b/.test(plain)) counts.unconscious = 1;
+    return counts;
+  };
 
   new Dialog({
     title: "Fear Test",
@@ -3601,6 +3618,17 @@ ${success
             const result = fearRoll + dof * 10;
             const entry = FEAR_TABLE.find(e => result <= e.max);
             const text = addInlineRolls(entry?.text ?? "");
+            const conditionCounts = extractFearConditionCounts(entry?.text ?? "");
+            for (const [conditionId, amountRaw] of Object.entries(conditionCounts)) {
+              const amount = Math.max(Number(amountRaw ?? 0), 0);
+              if (amount <= 0) continue;
+              await addConvenientEffectToActor({
+                actorUuid: actor.uuid,
+                effectId: conditionId,
+                effectName: conditionId === "fear" ? "Fear" : "Unconscious",
+                counter: amount > 1 ? amount : null
+              });
+            }
 
             ChatMessage.create({
               speaker: ChatMessage.getSpeaker({ actor }),
