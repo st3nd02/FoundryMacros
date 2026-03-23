@@ -483,14 +483,20 @@ new Dialog({
             if (primitive) modDice[minActive] = Math.min(modDice[minActive], primitiveVal);
           }
           const total = modDice.reduce((a, b) => a + b, 0) + flatBonus;
-          const rolledDiceDisplay = dice.join(",");
           const dosReplaced = !spray && activeIndexes.length;
-          const replacedValue = dosReplaced ? modDice[activeIndexes.reduce((best, idx) => (dice[idx] < dice[best] ? idx : best), activeIndexes[0])] : null;
-          const originalValue = dosReplaced ? dice[activeIndexes.reduce((best, idx) => (dice[idx] < dice[best] ? idx : best), activeIndexes[0])] : null;
+          const replacedIndex = dosReplaced ? activeIndexes.reduce((best, idx) => (dice[idx] < dice[best] ? idx : best), activeIndexes[0]) : -1;
+          const replacedValue = dosReplaced ? modDice[replacedIndex] : null;
+          const originalValue = dosReplaced ? dice[replacedIndex] : null;
           const replacementApplied = dosReplaced && replacedValue !== originalValue;
+          const keptDiceDisplay = dice
+            .map((value, idx) => {
+              const isChosen = !dosReplaced || !replacementApplied || idx !== replacedIndex;
+              return isChosen ? `<b>${value}</b>` : `${value}`;
+            })
+            .join(", ");
           const keptDisplay = dosReplaced
-            ? `[ ${rolledDiceDisplay}${replacedValue != null ? ` (${replacementApplied ? `<b>${replacedValue}</b>` : `${replacedValue}`})` : ""} ]`
-            : `[ ${rolledDiceDisplay} ]`;
+            ? `[ ${keptDiceDisplay}${replacedValue != null ? `, (${replacementApplied ? `<b>${replacedValue}</b>` : `${replacedValue}`})` : ""} ]`
+            : `[ ${keptDiceDisplay} ]`;
 
           damageResults.push(total);
           hitsData.push({ hit: h, location: hitLocations[h - 1], damage: total, fury: null, keptDisplay });

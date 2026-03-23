@@ -12,9 +12,11 @@ export async function runPsychicPowerWorkflow() {
   if (!actor) return ui.notifications.warn("Selected token has no actor.");
 
   const actorTalents = actor.items.filter(i => i.type === "talent");
+  const actorWeapons = actor.items.filter(i => i.type === "weapon");
   const hasTalent = name => actorTalents.some(t => t.name.toLowerCase().trim() === name.toLowerCase());
   const actorHasWarpSense = hasTalent("Warp Sense");
   const actorHasFavoredWarp = hasTalent("Favored of the Warp");
+  const actorHasFocusWeapon = actorWeapons.some(w => /\bfocus\b/i.test(String(w.system?.special ?? "")));
 
   const psychicPowers = actor.items
     .filter(i => i.type === "psychicPower")
@@ -268,7 +270,7 @@ export async function runPsychicPowerWorkflow() {
 <div class="selection-row">
   <div class="power-select-container"><label style="font-weight:bold; white-space:nowrap;">Select Power: </label><select id="powerSelect">${powerOptions}</select></div>
   <div class="sustaining-container"><label style="font-weight:bold; white-space:nowrap;">Psychic Strength:</label><select id="psychicStrength">${psychicStrengthOptions}</select></div>
-  <div class="checkbox-container"><input type="checkbox" id="powerFocus"><label for="powerFocus" style="font-weight:bold;">Psy Focus (+10)</label></div>
+  <div class="checkbox-container"><input type="checkbox" id="powerFocus" ${actorHasFocusWeapon ? "checked" : ""}><label for="powerFocus" style="font-weight:bold;">Psy Focus (+10)</label></div>
   <div class="sustaining-container"><label style="font-weight:bold; white-space:nowrap;">Sustaining Powers:</label><select id="sustainingCount">${sustainingOptions}</select></div>
 </div>
 <hr><div class="section-title"><h3>Talents</h3></div>
@@ -594,11 +596,11 @@ export async function runPsychicPowerWorkflow() {
         <span style="${styleBlue}">${targetNumber}</span> vs <span style="${styleOrange}">${manifestRoll}</span>
         ${manifestSuccess ? `→ <span style="${styleGreen}">Success</span>` : `→ <span style="${styleRed}">Failure</span>`}
       </div>
+      <div><span style="${casterDegreeStyle}">${manifestDoS} ${casterDegreeLabel}</span></div>
       <div><b>Description:</b> ${stripHTML(data.effect ?? data.description ?? "") || "—"}</div>
       ${opposedResult ? `<hr>
       <div style="font-weight:bold;">Opposed Check</div>
       <div><b>Caster:</b> <span style="${styleBlue}">${targetNumber}</span> vs <span style="${styleOrange}">${manifestRoll}</span></div>
-      <div><span style="${casterDegreeStyle}">${manifestDoS} ${casterDegreeLabel}</span></div>
       <div style="margin-top:4px;"><b>Target(s):</b> <span style="${styleBlue}">${opposedResult.target}</span> vs <span style="${styleOrange}">${opposedResult.roll}</span></div>
       <div><span style="${targetDegreeStyle}">${opposedResult.dos} ${targetDegreeLabel}</span></div>
       <div style="margin-top:4px;"><span style="${opposedOutcomeStyle}">${opposedOutcomeLabel}</span></div>` : ""}

@@ -726,6 +726,32 @@ let pendingBloodLoss = textMentionsBloodLoss((dmg.properties ?? []).join(" | "))
 let lastCritLocation = null;
 let realCritToApply = 0;
 let furyCrits = [];
+const resolveCriticalLocation = () => (
+  lastCritLocation
+  || dmg.hitsData?.[dmg.hitsData.length - 1]?.location
+  || dmg.hitsData?.[0]?.location
+  || "Body"
+);
+const applyDirectDamageWithCritical = (damageAmount, location = null) => {
+  const amount = Math.max(Number(damageAmount ?? 0), 0);
+  const woundsBefore = woundsCurrent;
+  let newWounds = woundsCurrent + amount;
+  let critDamage = 0;
+  if (newWounds > woundsMax){
+    critDamage = newWounds - woundsMax;
+    newWounds = woundsMax;
+  }
+  if (trueGrit && critDamage > 0){
+    critDamage = Math.max(critDamage - TB, 1);
+  }
+  woundsCurrent = newWounds;
+  critCurrent += critDamage;
+  if (critDamage > 0){
+    lastCritLocation = location || resolveCriticalLocation();
+    realCritToApply = critCurrent;
+  }
+  return { woundsBefore, critDamage };
+};
   
 // ===== ARMOUR BLOCK =====
 const armourBlock = `
@@ -901,8 +927,7 @@ if (dmg.toxic?.resolved) {
 
   if (!dmg.toxic.success && Number(dmg.toxic.damage ?? 0) > 0){
     const toxicDamage = Number(dmg.toxic.damage);
-    const woundsBefore = woundsCurrent;
-    woundsCurrent += toxicDamage;
+    const { woundsBefore, critDamage } = applyDirectDamageWithCritical(toxicDamage);
 
     report += `
     <div style="font-size:1.1em; color:#66cc66; text-shadow:
@@ -911,15 +936,15 @@ if (dmg.toxic?.resolved) {
       0 0 6px #000;"><b>☣ TOXIC DAMAGE ☣</b><br>
     Damage: ${toxicDamage}<br>
     <span style="font-weight:900;">Inflicted: ${toxicDamage} (ignores armour & TB)</span></div><br>
-    Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}
+    Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}<br>
+    Critical Damage: ${critDamage} (${critCurrent} total)
     `;
   }
 } else if (dmg.toxic?.result && totalInflicted > 0) {
   // Backward compatibility for old payloads
   const toxicDamage = Number(dmg.toxic.result);
-  const woundsBefore = woundsCurrent;
-  woundsCurrent += toxicDamage;
-  report += `<hr><b>☣ TOXIC DAMAGE ☣</b><br>Damage: ${toxicDamage}<br>Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}`;
+  const { woundsBefore, critDamage } = applyDirectDamageWithCritical(toxicDamage);
+  report += `<hr><b>☣ TOXIC DAMAGE ☣</b><br>Damage: ${toxicDamage}<br>Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}<br>Critical Damage: ${critDamage} (${critCurrent} total)`;
 }
 
 if (dmg.hallucinogenic?.resolved) {
@@ -1068,23 +1093,7 @@ if (dmg.force?.resolved) {
 
   if (dmg.force.won && Number(dmg.force.result ?? 0) > 0) {
     const forceDamage = Number(dmg.force.result);
-    const woundsBefore = woundsCurrent;
-    let newWounds = woundsCurrent + forceDamage;
-    let critDamage = 0;
-
-    if (newWounds > woundsMax){
-      critDamage = newWounds - woundsMax;
-      newWounds = woundsMax;
-    }
-    if (trueGrit && critDamage > 0){
-      critDamage = Math.max(critDamage - TB, 1);
-    }
-
-    woundsCurrent = newWounds;
-    critCurrent += critDamage;
-    if (critDamage > 0 && lastCritLocation){
-      realCritToApply = critCurrent;
-    }
+    const { woundsBefore, critDamage } = applyDirectDamageWithCritical(forceDamage);
 
     report += `
     <span style="color:#66cc66;font-weight:900;">ATTACKER WINS</span><br>
@@ -1100,9 +1109,8 @@ if (dmg.force?.resolved) {
 } else if (dmg.force?.used && dmg.force.result) {
   // Backward compatibility for old payloads
   const forceDamage = Number(dmg.force.result);
-  const woundsBefore = woundsCurrent;
-  woundsCurrent = Math.min(woundsCurrent + forceDamage, woundsMax);
-  report += `<hr><b>✦ FORCE DAMAGE ✦</b><br>Damage: ${forceDamage}<br>Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}`;
+  const { woundsBefore, critDamage } = applyDirectDamageWithCritical(forceDamage);
+  report += `<hr><b>✦ FORCE DAMAGE ✦</b><br>Damage: ${forceDamage}<br>Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}<br>Critical Damage: ${critDamage} (${critCurrent} total)`;
 }
 
 // ===== UPDATE ACTOR (same as original logic) =====
