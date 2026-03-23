@@ -343,7 +343,14 @@ function stylizeCriticalText(text){
 "Stunned":    "#00b3ff", // electric blue (shock/impact)
 "Prone":      "#808080", // grey (down on the ground)
 "Deafened":   "#5dade2", // soft blue (muffled/sensory loss)
-"Blinded":    "#6c63ff"  // indigo (darkness/vision loss)
+"Blinded":    "#6c63ff", // indigo (darkness/vision loss)
+"Pinned":     "#f4d03f",
+"Grappled":   "#89d185",
+"Snared":     "#89d185",
+"Unconscious":"#8e44ad",
+"Fear":       "#ff66cc",
+"Shocked":    "#ff66cc",
+"Dead":       "#7f8c8d"
   };
 
   for (const [word,color] of Object.entries(styles)){
@@ -584,6 +591,26 @@ function extractStunnedRounds(text) {
   return rounds;
 }
 
+function parseRoundAmount(raw) {
+  const text = String(raw ?? "").trim().toLowerCase();
+  if (!text) return 0;
+  if (/^\d+$/.test(text)) return Number(text);
+  if (text === "a" || text === "an" || text === "one" || text === "next") return 1;
+  return 0;
+}
+
+function extractRoundsByKeyword(text, keywordRegex) {
+  if (!text) return 0;
+  const plain = String(text).replace(/<[^>]*>/g, " ");
+  const regex = new RegExp(`${keywordRegex.source}\\s+for\\s+((?:\\d+|one|a|an|next))\\s*round`, "gi");
+  let rounds = 0;
+  let match;
+  while ((match = regex.exec(plain)) !== null) {
+    rounds += Math.max(parseRoundAmount(match[1]), 0);
+  }
+  return rounds;
+}
+
 function textMentionsBloodLoss(text) {
   if (!text) return false;
   const plain = String(text).replace(/<[^>]*>/g, " ");
@@ -601,21 +628,16 @@ function accumulateConditionCountsFromText(counts, text) {
   if (/\bprone\b/.test(plain)) add("prone");
   if (/\bblinded\b|\bblindness\b|\bblind\b/.test(plain)) add("blinded");
   if (/\bdeafened\b|\bdeafness\b/.test(plain)) add("deafened");
-  if (/\bfear\b|\bshocked\b|\bsnap out of it\b/.test(plain)) add("fear");
+  if (/\bfear\b|\bfrightened\b|\bshocked\b|\bpanic\b|\bsnap out of it\b/.test(plain)) add("fear");
   if (/\bcatch fire\b|\bon fire\b|\bfire\b/.test(plain)) add("fire");
-  if (/\bgrappled\b|\bimmobilized\b|\bimmobilised\b/.test(plain)) add("grappled");
+  if (/\bgrappled\b|\bsnared\b|\bimmobilized\b|\bimmobilised\b/.test(plain)) add("grappled");
   if (/\bpinned\b|\bpinning\b/.test(plain)) add("pinned");
 
-  const stunnedRounds = extractStunnedRounds(plain);
+  const stunnedRounds = extractRoundsByKeyword(plain, /\bstunned\b/);
   if (stunnedRounds > 0) add("stunned", stunnedRounds);
   else if (/\bstunned\b/.test(plain)) add("stunned", 1);
 
-  const unconsciousRoundsRegex = /unconscious\s+for\s+(\d+)\s*round/gi;
-  let unconsciousMatch;
-  let unconsciousRounds = 0;
-  while ((unconsciousMatch = unconsciousRoundsRegex.exec(plain)) !== null) {
-    unconsciousRounds += Math.max(Number(unconsciousMatch[1] ?? 0), 0);
-  }
+  const unconsciousRounds = extractRoundsByKeyword(plain, /\bunconscious\b/);
   if (unconsciousRounds > 0) add("unconscious", unconsciousRounds);
   else if (/\bunconscious\b|\bcatatonic\b/.test(plain)) add("unconscious", 1);
 

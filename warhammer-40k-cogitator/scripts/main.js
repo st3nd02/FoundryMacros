@@ -3498,12 +3498,55 @@ async function openFearTest() {
     return r.total;
   }
 
-  const addInlineRolls = text => text.replace(/\d+d\d+(?:\+\d+)?/gi, match => `[[/r ${match}]]`);
+  const rollInlineDiceText = async text => {
+    let result = String(text ?? "");
+    const diceRegex = /(\d+d\d+(?:\+\d+)?)/gi;
+    const matches = [...result.matchAll(diceRegex)];
+    for (const match of matches) {
+      const expr = match[1];
+      const roll = await new Roll(expr).evaluate({ async: true });
+      if (roll3d) roll3d.showForRoll(roll);
+      result = result.replace(expr, String(roll.total));
+    }
+    return result;
+  };
+  const stylizeConditionText = text => {
+    const styles = {
+      "Blood Loss": "#b30000",
+      Blinded: "#6c63ff",
+      Deafened: "#5dade2",
+      Fire: "#ff7a00",
+      Stunned: "#00b3ff",
+      Unconscious: "#8e44ad",
+      Pinned: "#f4d03f",
+      Grappled: "#89d185",
+      Snared: "#89d185",
+      Prone: "#808080",
+      Fear: "#ff66cc",
+      Frightened: "#ff66cc",
+      Shocked: "#ff66cc",
+      Dead: "#7f8c8d"
+    };
+    let result = String(text ?? "");
+    for (const [word, color] of Object.entries(styles)) {
+      const regex = new RegExp(`\\b${word}\\b`, "gi");
+      result = result.replace(regex, match => `<b style="color:${color}; text-shadow:1px 1px #000000;">${match}</b>`);
+    }
+    return result;
+  };
+  const parseRoundAmount = raw => {
+    const value = String(raw ?? "").trim().toLowerCase();
+    if (!value) return 0;
+    if (/^\d+$/.test(value)) return Number(value);
+    if (value === "a" || value === "an" || value === "one" || value === "next") return 1;
+    return 0;
+  };
   const extractFearConditionCounts = text => {
     const plain = String(text ?? "").replace(/<[^>]*>/g, " ").toLowerCase();
     const counts = {};
-    if (/\bfear\b|\bpanic\b|\bsnap out of it\b|\bfrozen by terror\b/.test(plain)) counts.fear = 1;
-    const unconsciousRounds = Number(plain.match(/unconscious\s+for\s+(\d+)\s*round/)?.[1] ?? 0);
+    if (/\bfear\b|\bfrightened\b|\bshocked\b|\bpanic\b|\bsnap out of it\b|\bfrozen by terror\b/.test(plain)) counts.fear = 1;
+    const unconsciousMatch = plain.match(/unconscious\s+for\s+((?:\d+|one|a|an|next))\s*round/i);
+    const unconsciousRounds = parseRoundAmount(unconsciousMatch?.[1] ?? 0);
     if (unconsciousRounds > 0) counts.unconscious = unconsciousRounds;
     else if (/\bunconscious\b|\bcatatonic\b|\bfainting dead away\b/.test(plain)) counts.unconscious = 1;
     return counts;
@@ -3617,8 +3660,10 @@ ${success
             const fearRoll = await d100();
             const result = fearRoll + dof * 10;
             const entry = FEAR_TABLE.find(e => result <= e.max);
-            const text = addInlineRolls(entry?.text ?? "");
-            const conditionCounts = extractFearConditionCounts(entry?.text ?? "");
+            const baseText = entry?.text ?? "";
+            const rolledText = await rollInlineDiceText(baseText);
+            const text = stylizeConditionText(rolledText);
+            const conditionCounts = extractFearConditionCounts(rolledText);
             for (const [conditionId, amountRaw] of Object.entries(conditionCounts)) {
               const amount = Math.max(Number(amountRaw ?? 0), 0);
               if (amount <= 0) continue;
