@@ -366,7 +366,7 @@ function stylizeCriticalText(text){
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const CONDITION_MAP = {
-  bleeding: { id: "bleeding", name: "Bleeding" },
+  bleeding: { id: "bleeding", name: "Blood Loss", aliases: ["Bleeding"] },
   blinded: { id: "blinded", name: "Blinded" },
   deafened: { id: "deafened", name: "Deafened" },
   fear: { id: "fear", name: "Frightened" },
@@ -534,14 +534,17 @@ const token = await fromUuid(dmg.targetTokenUuid);
 if (!token) return ui.notifications.warn("Target token not found.");
 const actor = token.actor;
 
-async function applyConvenientEffect(actorDoc, { effectId, effectName, counter = null }) {
+async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAliases = [], counter = null }) {
   if (!actorDoc) return false;
   const effectInterface = game.dfreds?.effectInterface;
+  const preferredNames = [effectName, ...effectAliases].filter(Boolean);
   const paramsByPriority = [
     { effectId, uuid: actorDoc.uuid },
     { effectId, uuids: [actorDoc.uuid] },
-    { effectName, uuid: actorDoc.uuid },
-    { effectName, uuids: [actorDoc.uuid] }
+    ...preferredNames.flatMap(name => ([
+      { effectName: name, uuid: actorDoc.uuid },
+      { effectName: name, uuids: [actorDoc.uuid] }
+    ]))
   ].filter(params => params.effectId || params.effectName);
 
   if (effectInterface?.addEffect) {
@@ -563,7 +566,8 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, counter =
       const coreStatus = String(effect.flags?.core?.statusId ?? "").toLowerCase();
       const dfredsId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
       const name = String(effect.name ?? "").toLowerCase();
-      return ids.includes(String(effectId ?? "").toLowerCase()) || coreStatus === String(effectId ?? "").toLowerCase() || dfredsId === String(effectId ?? "").toLowerCase() || name === String(effectName ?? "").toLowerCase();
+      const nameMatches = preferredNames.some(candidate => name === String(candidate ?? "").toLowerCase());
+      return ids.includes(String(effectId ?? "").toLowerCase()) || coreStatus === String(effectId ?? "").toLowerCase() || dfredsId === String(effectId ?? "").toLowerCase() || nameMatches;
     });
     if (activeEffect) {
       await activeEffect.update({
@@ -1288,6 +1292,7 @@ for (const [conditionKey, countRaw] of Object.entries(pendingConditionCounts)) {
   await applyConvenientEffect(actor, {
     effectId: condition.id,
     effectName: condition.name,
+    effectAliases: condition.aliases ?? [],
     counter: count > 1 ? count : null
   });
 }
