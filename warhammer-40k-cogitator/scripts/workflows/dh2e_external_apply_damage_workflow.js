@@ -538,6 +538,16 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
   if (!actorDoc) return false;
   const effectInterface = game.dfreds?.effectInterface;
   const preferredNames = [effectName, ...effectAliases].filter(Boolean);
+  const findExistingEffect = () => actorDoc.effects.find(effect => {
+    const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+    const ids = statuses.map(status => String(status ?? "").toLowerCase());
+    const coreStatus = String(effect.flags?.core?.statusId ?? "").toLowerCase();
+    const dfredsId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
+    const name = String(effect.name ?? "").toLowerCase();
+    const effectIdLc = String(effectId ?? "").toLowerCase();
+    const nameMatches = preferredNames.some(candidate => name === String(candidate ?? "").toLowerCase());
+    return ids.includes(effectIdLc) || coreStatus === effectIdLc || dfredsId === effectIdLc || nameMatches;
+  });
   const paramsByPriority = [
     { effectId, uuid: actorDoc.uuid },
     { effectId, uuids: [actorDoc.uuid] },
@@ -551,24 +561,28 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
     for (const params of paramsByPriority) {
       try {
         await effectInterface.addEffect(params);
-        break;
+        if (findExistingEffect()) break;
       } catch (_) {
         // Keep trying CE signatures.
       }
     }
   }
 
+  if (!findExistingEffect()) {
+    await actorDoc.createEmbeddedDocuments("ActiveEffect", [{
+      name: preferredNames[0] || effectId || "Status Effect",
+      img: "icons/svg/aura.svg",
+      icon: "icons/svg/aura.svg",
+      transfer: false,
+      disabled: false,
+      statuses: effectId ? [effectId] : [],
+      flags: effectId ? { core: { statusId: effectId } } : {}
+    }]);
+  }
+
   if (Number.isFinite(Number(counter)) && Number(counter) > 0) {
     const numericCounter = Number(counter);
-    const activeEffect = actorDoc.effects.find(effect => {
-      const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
-      const ids = statuses.map(status => String(status ?? "").toLowerCase());
-      const coreStatus = String(effect.flags?.core?.statusId ?? "").toLowerCase();
-      const dfredsId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
-      const name = String(effect.name ?? "").toLowerCase();
-      const nameMatches = preferredNames.some(candidate => name === String(candidate ?? "").toLowerCase());
-      return ids.includes(String(effectId ?? "").toLowerCase()) || coreStatus === String(effectId ?? "").toLowerCase() || dfredsId === String(effectId ?? "").toLowerCase() || nameMatches;
-    });
+    const activeEffect = findExistingEffect();
     if (activeEffect) {
       await activeEffect.update({
         "flags.statuscounter.counter": { value: numericCounter },
@@ -580,7 +594,7 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
     }
   }
 
-  return true;
+  return Boolean(findExistingEffect());
 }
 
 function extractStunnedRounds(text) {
