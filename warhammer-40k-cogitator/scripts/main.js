@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.38";
+const COGITATOR_VERSION = "2.1.41";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -474,6 +474,13 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
   const effectInterface = game.dfreds?.effectInterface;
   let applied = false;
   const preferredNames = [effectName, ...effectNames].filter(Boolean);
+  const hasAppliedEffect = () => {
+    if (allowDuplicates) return false;
+    return Boolean(
+      findActorEffect(actor, effectId, effectName)
+      || preferredNames.map(name => findActorEffect(actor, effectId, name)).find(Boolean)
+    );
+  };
   if (effectInterface?.addEffect) {
     const paramsByPriority = [
       { effectId, uuid: actor.uuid },
@@ -487,8 +494,10 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
     for (const params of paramsByPriority) {
       try {
         await effectInterface.addEffect(params);
-        applied = true;
-        break;
+        if (allowDuplicates || hasAppliedEffect()) {
+          applied = true;
+          break;
+        }
       } catch (_) {
         // Continue trying signatures for CE compatibility.
       }
