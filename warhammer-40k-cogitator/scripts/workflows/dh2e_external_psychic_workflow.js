@@ -570,11 +570,18 @@ export async function runPsychicPowerWorkflow() {
 
   if (!manifestSuccess && Number(actor.system.fate?.value ?? 0) > 0) {
     const useFate = await new Promise(resolve => {
+      let settled = false;
+      const finish = value => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
       new Dialog({
         title: "Spend Fate?",
         content: `<p><b>Focus Power Test Failed!</b><br>Spend 1 Fate Point to reroll?</p>`,
-        buttons: { yes: { label: "Spend Fate (-1)", callback: () => resolve(true) }, no: { label: "Keep Result", callback: () => resolve(false) } },
-        default: "no"
+        buttons: { yes: { label: "Spend Fate (-1)", callback: () => finish(true) }, no: { label: "Keep Result", callback: () => finish(false) } },
+        default: "no",
+        close: () => finish(false)
       }).render(true);
     });
 
@@ -588,7 +595,7 @@ export async function runPsychicPowerWorkflow() {
 
   const resolvedRangeText = rangeInfo.label;
 
-  const isDouble = manifestRoll % 11 === 0;
+  const isDouble = manifestRoll % 11 === 0 || manifestRoll === 100;
   let triggersPhenomena = false;
   let phenomenaModifier = Number(pick.sustainingCount ?? 0) * 10;
   if (pick.mode === "unfettered" && isDouble) {
