@@ -366,13 +366,15 @@ function stylizeCriticalText(text){
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const CONDITION_MAP = {
-  bleeding: { id: "bleeding", name: "Blood Loss", aliases: ["Bleeding"] },
+  bleeding: { id: "bleeding", name: "Bleeding", aliases: ["Blood Loss"] },
   blinded: { id: "blinded", name: "Blinded" },
   deafened: { id: "deafened", name: "Deafened" },
-  fear: { id: "fear", name: "Frightened" },
-  fire: { id: "fire", name: "On Fire" },
+  fear: { id: "fear", name: "Fear", aliases: ["Frightened"] },
+  fire: { id: "fire", name: "Fire", aliases: ["On Fire"] },
   grappled: { id: "grappled", name: "Grappled" },
+  hidden: { id: "hidden", name: "Hidden" },
   pinned: { id: "pinned", name: "Pinned" },
+  poisoned: { id: "poisond", name: "Poisoned" },
   prone: { id: "prone", name: "Prone" },
   stunned: { id: "stunned", name: "Stunned" },
   unconscious: { id: "unconscious", name: "Unconscious" },
