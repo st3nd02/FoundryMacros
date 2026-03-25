@@ -304,12 +304,37 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
     const numericCounter = Number(counter);
     const activeEffect = findExistingEffect();
     if (activeEffect) {
+      const existingCounter = Number(
+        activeEffect.getFlag?.("statuscounter", "value")
+        ?? activeEffect.flags?.statuscounter?.value
+        ?? activeEffect.flags?.statuscounter?.counter?.value
+        ?? activeEffect.flags?.statusIconCounters?.value
+        ?? activeEffect.flags?.statusIconCounters?.counter
+        ?? activeEffect.flags?.["status-icon-counters"]?.value
+        ?? activeEffect.flags?.["status-icon-counters"]?.counter
+        ?? 0
+      ) || 0;
+      const nextCounter = existingCounter + numericCounter;
+      const remainingRounds = Number(activeEffect.duration?.remaining);
+      const currentDuration = Number.isFinite(remainingRounds) ? Math.max(0, Math.ceil(remainingRounds)) : Math.max(0, Number(activeEffect.duration?.rounds ?? 0));
+      const nextDuration = Math.max(currentDuration, nextCounter);
+      const combatRound = Number(game.combat?.round ?? 0);
+      const combatTurn = Number(game.combat?.turn ?? 0);
       await activeEffect.update({
-        "flags.statuscounter.counter": { value: numericCounter },
-        "flags.statusIconCounters.counter": numericCounter,
-        "flags.statusIconCounters.value": numericCounter,
-        "flags.status-icon-counters.counter": numericCounter,
-        "flags.status-icon-counters.value": numericCounter
+        "flags.statuscounter.value": nextCounter,
+        "flags.statuscounter.visible": nextCounter > 1,
+        "flags.statuscounter.config.type": "default",
+        "flags.statuscounter.config.dataSource": "flags.statuscounter.value",
+        "flags.statuscounter.config.modifyDuration": true,
+        "flags.statuscounter.config.durationType": 1,
+        "flags.statuscounter.counter": { value: nextCounter },
+        "flags.statusIconCounters.counter": nextCounter,
+        "flags.statusIconCounters.value": nextCounter,
+        "flags.status-icon-counters.counter": nextCounter,
+        "flags.status-icon-counters.value": nextCounter,
+        "duration.rounds": nextDuration,
+        "duration.startRound": combatRound,
+        "duration.startTurn": combatTurn
       });
     }
   }
