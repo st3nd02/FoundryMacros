@@ -1,3 +1,5 @@
+import { getPerilsOfWarpEntry, getPsychicPhenomenaEntry, inlineRollPsychicText } from "../data/psychic_events.js";
+
 export async function runPsychicPowerWorkflow() {
   const WORKFLOW_NS = "warhammer-40k-cogitator";
   const WORKFLOW_KEY = "dh2eExternalWorkflow";
@@ -118,15 +120,6 @@ export async function runPsychicPowerWorkflow() {
     }
   };
 
-  const inlineRollDice = async text => {
-    const diceRegex = /(\d+d\d+)/gi;
-    let result = text;
-    for (const match of text.match(diceRegex) || []) {
-      const roll = await new Roll(match).evaluate({ async: true });
-      result = result.replace(match, roll.total);
-    }
-    return result;
-  };
 
   const stylizeConditionText = text => {
     const styles = {
@@ -302,55 +295,6 @@ export async function runPsychicPowerWorkflow() {
     return false;
   };
 
-  const getPhenomenaEntry = roll => {
-    if (roll <= 3) return `Dark Foreboding: A faint breeze blows past the psyker and those near him, and everyone gets the feeling that somewhere in the galaxy something unfortunate just happened.`;
-    if (roll <= 5) return `Warp Echo: For a few moments, all noises cause echoes, regardless of the surroundings.`;
-    if (roll <= 8) return `Unholy Stench: The air around the psyker becomes permeated with a bizarre and foul smell.`;
-    if (roll <= 11) return `Mind Warp: The psyker suffers a -5 penalty to Willpower tests until the start of his next turn as his own inherent phobias, suspicions, and hatreds surge to the surface of his mind in a wave of unbound emotion.`;
-    if (roll <= 14) return `Hoarfrost: The temperature plummets for an instant, and a thin coating of frost forms to cover everything within 3d10 metres.`;
-    if (roll <= 17) return `Aura of Taint: All animals within 1d100 metres become spooked and agitated; characters can use the Psyniscience skill to pinpoint the psyker as the cause`;
-    if (roll <= 20) return `Memory Worm: All people within line of sight of the psyker forget some trivial fact or minor personal memory.`;
-    if (roll <= 23) return `Spoilage: Food and drink go bad in a 5d10 metre radius.`;
-    if (roll <= 26) return `Haunting Breeze: Winds whip up around the psyker for a few moments, blowing light objects around and guttering fires within 3d10 metres.`;
-    if (roll <= 29) return `Veil of Darkness: For a brief moment (effectively, until the end of the round), the area within 3d10 metres is plunged into immediate and impenetrable darkness.`;
-    if (roll <= 32) return `Distorted Reflections: Mirrors and other reflective surfaces within a radius of 5d10 metres distort or shatter.`;
-    if (roll <= 35) return `Breath Leech: Each character (including the psyker) within a 3d10 metre radius becomes short of breath for one round and cannot make any Run or Charge actions.`;
-    if (roll <= 38) return `Daemonic Mask: For a fleeting moment, the psyker takes on a daemonic appearance and gains the Fear (1) trait until the start of the next turn. However, he also gains 1 Corruption point.`;
-    if (roll <= 41) return `Unnatural Decay: All plant life within 3d10 metres of the psyker withers and dies.`;
-    if (roll <= 44) return `Spectral Gale: Howling winds erupt around the psyker, requiring each character (including the psyker) within 4d10 metres to make an Easy (+30) Agility or Strength test to avoid being knocked Prone.`;
-    if (roll <= 47) return `Bloody Tears: Blood weeps from stone and wood within 3d10 metres of the psyker. If there are any paintings, pict-displays, statues, or other representations of people inside this area, they appear to be crying blood.`;
-    if (roll <= 50) return `The Earth Protests: The ground suddenly shakes, and each character (including the psyker) within a 5d10 metre radius must make an Ordinary (+10) Agility test or be knocked down.`;
-    if (roll <= 53) return `Actinic Discharge: Static electricity fills the air within 5d10 metres causing hair to stand on end and unprotected electronics to short out, while the psyker is wreathed in eldritch lightning.`;
-    if (roll <= 56) return `Warp Ghosts: Ghostly apparitions fill the air within 3d10 metres around the psyker, flying about and howling in pain for a few brief moments. Everyone in the radius (except the psyker himself) must test against a Fear rating of 1.`;
-    if (roll <= 59) return `Falling Upwards: Everything within 2d10 metres of the psyker (including the psyker himself) rises 1d10 metres into the air as gravity briefly ceases. Almost immediately, everything crashes back to earth, suffering falling Damage as appropriate for the distances fallen.`;
-    if (roll <= 62) return `Banshee Howl: A shrill keening rings out across the immediate area, shattering glass and forcing every mortal creature able to hear it (including the psyker) to pass a Challenging (+0) Toughness Test or be deafened for 1d10 rounds.`;
-    if (roll <= 65) return `The Furies: The Psyker is assailed by unseen horrors. He is slammed to the ground and suffers 1d5 Damage (ignoring Armour, but not Toughness Bonus) and he must test against Fear (2).`;
-    if (roll <= 68) return `Shadow of the Warp: For a split second, the world changes in appearance, and everyone within 1d100 metres has brief but horrific glimpse of the shadow of the Warp. Everyone in the area (including the psyker) must make a Difficult (-10) Willpower Test or gain 1d5 Corruption Points.`;
-    if (roll <= 71) return `Tech Scorn: The machine spirits reject your unnatural ways. All un-warded technology within 5d10 metres malfunctions momentarily, and all ranged weapons Jam, whilst characters with cybernetic implants must pass a Routine (+10) Toughness Test or suffer 1d5 Damage, ignoring Toughness Bonus and Armour.`;
-    if (roll <= 74) return `Warp Madness: A violent ripple of tainted discord causes all creatures within 2d10 metres (with the exception of the psyker) to become Frenzied for a Round and suffer 1d5 Corruption Points unless they can pass a Difficult (-10) Willpower Test.`;
-    return `Perils of the Warp`;
-  };
-
-  const getPerilsEntry = roll => {
-    if (roll <= 5) return `The Gibbering: The psyker screams in pain as uncontrolled Warp energies surge through his unprepared mind. He must make a Challenging (+0) Willpower Test or be stunned for 1d5 Rounds.`;
-    if (roll <= 9) return `Warp Burn: A violent burst of energy from the Warp smashes into the psyker's mind, sending him reeling. He suffers 2d5 Damage, ignoring Toughness Bonus and Armour, and is stunned for 1d5 Rounds.`;
-    if (roll <= 13) return `Psychic Concussion: With a crack of energy, the psyker is knocked unconscious for 1d5 Rounds, and everyone within 3d10 metres must make a Routine (+10) Willpower Test or be Stunned for one Round.`;
-    if (roll <= 18) return `Psy Blast: There is an explosion of power and the psyker is thrown 3d10 metres into the air, falling to the ground moments later.`;
-    if (roll <= 24) return `Soul Sear: Warp power courses through the psyker's body, scorching his soul. The psyker cannot use any powers for the next hour and gains 2d5 Corruption Points.`;
-    if (roll <= 30) return `Locked In: The power cages the psyker's mind in an ethereal prison. Each Round he must spend a Full Action to make a Difficult (-10) Willpower Test to escape.`;
-    if (roll <= 38) return `Chronological Incontinence: Time warps around the psyker. He winks out of existence and reappears in 1d10 Rounds, suffering permanent damage and 1d5 Corruption Points.`;
-    if (roll <= 46) return `Psychic Mirror: The psyker's power is turned back on him.`;
-    if (roll <= 55) return `Warp Whispers: The voices of daemons fill the air within 4d10 metres. All must test or suffer 1d5 Corruption Points and Willpower damage.`;
-    if (roll <= 58) return `Vice Versa: The psyker swaps consciousness with another being for 1d10 rounds.`;
-    if (roll <= 67) return `Dark Summoning: A Bloodletter appears within 3d10 metres for 1d5 plus Toughness Bonus rounds.`;
-    if (roll <= 72) return `Rending the Veil: All sentient creatures within 1d100 metres must test against Fear (2), the psyker against Fear (4) for 1d5 Rounds.`;
-    if (roll <= 78) return `Blood Rain: A psychic storm erupts in 5d10 metres for 1d5 Rounds. The psyker gains 1d5+1 Corruption Points.`;
-    if (roll <= 82) return `Cataclysmic Blast: Everyone within 1d10 metres takes 1d10 Energy Damage with Pen 5.`;
-    if (roll <= 86) return `Mass Possession: Every character within 1d100 metres resists possession for up to 2d10 Rounds.`;
-    if (roll <= 90) return `Reality Quake: Everyone within 3d10 metres takes 2d10 Rending Damage ignoring Armour.`;
-    if (roll <= 99) return `Grand Possession: A powerful daemon attempts to possess the psyker.`;
-    return `Annihilation: The psyker is immediately and irrevocably destroyed.`;
-  };
 
   const powerOptions = `<option value="">Choose Psychic Power</option>${psychicPowers.map(p => `<option value="${p.id}">${p.name}</option>`).join("")}`;
   const psychicStrengthOptions = Array.from({ length: 15 }, (_, idx) => idx - 9)
@@ -717,14 +661,14 @@ export async function runPsychicPowerWorkflow() {
       const phTotal = Math.min(phRoll.total, 100);
       if (phTotal >= 75) {
         const perilsRoll = await new Roll("1d100").evaluate({ async: true });
-        const perilsEntry = stylizeConditionText(await inlineRollDice(getPerilsEntry(perilsRoll.total)));
+        const perilsEntry = stylizeConditionText(await inlineRollPsychicText(getPerilsOfWarpEntry(perilsRoll.total)));
         allResults.push(`<b style="color:orange;">Perils of the Warp! (${perilsRoll.total})</b><br>${perilsEntry}`);
         const counts = extractConditionCounts(perilsEntry);
         for (const [id, amount] of Object.entries(counts)) {
           pendingConditionCounts[id] = (pendingConditionCounts[id] ?? 0) + amount;
         }
       } else {
-        const phEntry = stylizeConditionText(await inlineRollDice(getPhenomenaEntry(phTotal)));
+        const phEntry = stylizeConditionText(await inlineRollPsychicText(getPsychicPhenomenaEntry(phTotal)));
         allResults.push(`<b>Psychic Phenomena (${phTotal})</b><br>${phEntry}`);
         const counts = extractConditionCounts(phEntry);
         for (const [id, amount] of Object.entries(counts)) {

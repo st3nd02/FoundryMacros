@@ -1,3 +1,5 @@
+import { getPerilsOfWarpEntry, getPsychicPhenomenaEntry, inlineRollPsychicText } from "../data/psychic_events.js";
+
 export async function runDefenseWorkflow() {
 try {
 /**
@@ -21,6 +23,8 @@ const rollWithDiceSoNice = async formula => {
   }
   return roll;
 };
+
+const hasActorItemNamed = (actorDoc, itemType, itemName) => actorDoc.items.some(i => i.type === itemType && i.name?.trim().toLowerCase() === itemName.toLowerCase());
 
 const requestedDefense = game.warhammer40kCogitator?.consumePendingDefenseContext?.() ?? null;
 
@@ -139,6 +143,10 @@ if (reactionAlreadyUsed && requestedDefense?.chatMessageId) {
 
 const dodgeBase = actor.system.skills?.dodge?.total ?? 0;
 const parryBase = actor.system.skills?.parry?.total ?? 0;
+const perceptionBase = Number(actor.system.characteristics?.perception?.total ?? 0);
+const psyRating = Number(actor.system.psy?.rating ?? 0);
+const hasForeboding = psyRating > 0 && hasActorItemNamed(actor, "psychicPower", "Foreboding");
+const forebodingBase = Math.max(1, perceptionBase - 10);
 const meleeWeapons = actor.items.filter(i => i.type === "weapon" && ["me", "melee"].includes((i.system.class ?? "").toLowerCase()));
 const difficultyOptions = difficulties.map(d => `<option value="${d.value}" ${d.value === 0 ? "selected" : ""}>${d.label}</option>`).join("");
 const weaponOptions = meleeWeapons.length
@@ -171,6 +179,7 @@ const pick = await new Promise(resolve => {
       <div class="twoCol">
         <label><input type="radio" name="defence" value="dodge" checked> Dodge (${dodgeBase})</label>
         <label><input type="radio" name="defence" value="parry"> Parry (${parryBase})</label>
+        ${hasForeboding ? `<label><input type="radio" name="defence" value="foreboding"> Foreboding (${forebodingBase})</label>` : ""}
       </div>
       <hr>
       <div id="weaponBlock" class="weaponBlock">
@@ -222,9 +231,9 @@ if (!pick) return;
 const entry = pending[pick.idx];
 if (!entry) return ui.notifications.warn("Selected workflow no longer available.");
 
-let base = pick.type === "parry" ? parryBase : dodgeBase;
+let base = pick.type === "parry" ? parryBase : (pick.type === "foreboding" ? forebodingBase : dodgeBase);
 const notes = [];
-let actionText = pick.type === "parry" ? "Parry" : "Dodge";
+let actionText = pick.type === "parry" ? "Parry" : (pick.type === "foreboding" ? "Foreboding (counts as Dodge)" : "Dodge");
 const inescapableAttackPenalty = Math.max(0, Number(entry?.target?.inescapableAttackPenalty ?? 0));
 if (inescapableAttackPenalty > 0) {
   notes.push(`Inescapable Attack -${inescapableAttackPenalty}`);
@@ -290,6 +299,37 @@ if (pick.type === "parry") {
 
 let target = Math.max(1, base + pick.difficultyMod + pick.manualMod - inescapableAttackPenalty);
 let roll = await rollWithDiceSoNice("1d100");
+let forebodingPsychicNotes = [];
+
+if (pick.type === "foreboding") {
+  const isDouble = roll.total % 11 === 0;
+  const psyClassType = String(actor.system.psy?.class ?? "").toLowerCase().trim();
+  const hasFavoredWarp = hasActorItemNamed(actor, "talent", "Favored of the Warp");
+  let triggersPhenomena = false;
+  let phenomenaModifier = 0;
+
+  if (isDouble) {
+    triggersPhenomena = true;
+    if (psyClassType !== "bound") phenomenaModifier += 10;
+  }
+
+  if (triggersPhenomena) {
+    forebodingPsychicNotes.push(`Psychic Phenomena triggered (${phenomenaModifier >= 0 ? "+" : ""}${phenomenaModifier})`);
+    const rollsToMake = hasFavoredWarp ? 2 : 1;
+    for (let i = 0; i < rollsToMake; i++) {
+      const phRoll = await rollWithDiceSoNice(`1d100 + ${phenomenaModifier}`);
+      const phTotal = Math.min(phRoll.total, 100);
+      if (phTotal >= 75) {
+        const perilsRoll = await rollWithDiceSoNice("1d100");
+        const perilsText = await inlineRollPsychicText(getPerilsOfWarpEntry(perilsRoll.total));
+        forebodingPsychicNotes.push(`Perils of the Warp (${perilsRoll.total}): ${perilsText}`);
+      } else {
+        const phenomenaText = await inlineRollPsychicText(getPsychicPhenomenaEntry(phTotal));
+        forebodingPsychicNotes.push(`Psychic Phenomena (${phTotal}): ${phenomenaText}`);
+      }
+    }
+  }
+}
 
 const postResult = ({ usedFate }) => {
   const val = roll.total;
@@ -373,12 +413,12 @@ if (game.warhammer40kCogitator?.submitDefenseResult) {
       defenseRoll,
       defenseOutcome,
       allocatedHits,
-      defenseDetails: {
+    defenseDetails: {
         actionText,
         incomingHits: targetState.allocatedHits ?? 0,
         difficultyLabel: pick.difficultyLabel,
         targetNumber: target,
-        notes,
+        notes: [...notes, ...forebodingPsychicNotes],
         degrees: defenseResult.degrees,
         success: defenseResult.success
       }
@@ -426,7 +466,7 @@ if (pick.type === "parry" && defenseResult.success) {
           incomingHits: targetState.allocatedHits ?? 0,
           difficultyLabel: pick.difficultyLabel,
           targetNumber: target,
-          notes: [...notes, extraNote],
+          notes: [...notes, ...forebodingPsychicNotes, extraNote],
           degrees: defenseResult.degrees,
           success: defenseResult.success
         }
