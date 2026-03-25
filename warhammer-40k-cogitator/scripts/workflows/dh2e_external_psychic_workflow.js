@@ -207,6 +207,30 @@ export async function runPsychicPowerWorkflow() {
     return null;
   };
 
+  const resolvePsychicRange = (rawRange, prValue) => {
+    const raw = String(rawRange ?? "").trim();
+    if (!raw) return { label: "—", meters: null, isSelf: false };
+    if (/^self$/i.test(raw)) return { label: "Self", meters: 0, isSelf: true };
+
+    const compact = raw.toLowerCase().replace(/\s+/g, "").replace(/metres?|meters?/g, "m");
+    const flatMatch = compact.match(/^(\d+(?:\.\d+)?)(?:m)?$/i);
+    if (flatMatch) {
+      const meters = Number(flatMatch[1]);
+      return { label: `${meters}m`, meters, isSelf: false };
+    }
+
+    let expr = compact.replace(/pr/gi, String(prValue)).replace(/m/gi, "");
+    if (/^[0-9+\-*/().]+$/.test(expr)) {
+      try {
+        const meters = Number(Roll.safeEval(expr));
+        if (Number.isFinite(meters)) return { label: `${meters}m`, meters, isSelf: false };
+      } catch (_err) {
+        // Fall through and use unresolved display text.
+      }
+    }
+    return { label: raw, meters: null, isSelf: false };
+  };
+
   const requestOwnerDefense = async ({ targetState, chatMessage, state }) => {
     const targetDoc = await fromUuid(targetState.tokenUuid);
     const targetActor = targetDoc?.actor;
@@ -348,6 +372,7 @@ export async function runPsychicPowerWorkflow() {
 .field-block { display:flex; flex-direction:column; }
 .full-width { grid-column:1 / span 3; }
 .big-box { width:100%; min-height:180px; height:220px; resize:vertical; }
+.bottom-right-info { text-align:right; justify-content:flex-end; align-items:flex-end; }
 </style>
 <h2 style="text-align:center;"><b>${actor.name}</b></h2>
 <div class="top-panel">
@@ -378,7 +403,11 @@ export async function runPsychicPowerWorkflow() {
   <div class="field-block"><div class="section-title">Pen</div><input id="penetration" type="text"></div>
   <div class="field-block"><div class="section-title">Power Shape</div><input id="damageZone" type="text"></div>
   <div class="field-block"><div class="section-title">Modifier</div><input id="rollModifier" type="number" value="0"></div>
-  <div class="field-block"><div class="section-title">&nbsp;</div><div id="opposedNote" class="opposed-inline">Opposed Power</div></div>
+  <div class="field-block bottom-right-info">
+    <div class="section-title">&nbsp;</div>
+    <div id="opposedNote" class="opposed-inline">Opposed Power</div>
+    <div id="distanceNote" style="font-weight:bold;">Distance: No target</div>
+  </div>
   <div class="field-block full-width"><div class="section-title">Special Traits</div><input id="damageSpecial" type="text"></div>
 </div><hr><div class="section-title">Effect</div><textarea id="effect" class="big-box" style="font-family:monospace;"></textarea>`;
 
@@ -389,6 +418,7 @@ export async function runPsychicPowerWorkflow() {
         const powerSelect = html.find("#powerSelect");
         const focusSelect = html.find("#focusTest");
         const opposedBox = html.find("#opposedNote");
+        const distanceNote = html.find("#distanceNote");
         const psyModeSelect = html.find("#psyMode");
         const bcToggle = html.find("#blackCrusadeToggle");
 
@@ -459,12 +489,27 @@ export async function runPsychicPowerWorkflow() {
           if (isOpposedPower(rawTest)) opposedBox.show(); else opposedBox.hide();
         }
 
+        function updateDistanceNote() {
+          const selectedTarget = Array.from(game.user.targets ?? [])[0] ?? null;
+          if (!selectedTarget) {
+            distanceNote.text("Distance: No target");
+            return;
+          }
+          if (selectedTarget.id === token.id) {
+            distanceNote.text("Distance: Self");
+            return;
+          }
+          const dist = measureDistanceMeters(token, selectedTarget);
+          distanceNote.text(Number.isFinite(dist) ? `Distance: ${Number(dist).toFixed(2)}m` : "Distance: —");
+        }
+
         psyModeSelect.on("change", updatePsychicStrengthOptions);
         bcToggle.on("change", () => {
           updatePsyModes();
           updatePsychicStrengthOptions();
         });
         powerSelect.on("change", ev => populateFields(ev.target.value));
+        updateDistanceNote();
         updatePsyModes();
         updatePsychicStrengthOptions();
       },
@@ -499,10 +544,8 @@ export async function runPsychicPowerWorkflow() {
   const hasDamage = String(data.damage?.formula ?? "").trim().length > 0;
 
   const targets = Array.from(game.user.targets ?? []);
-  const targetToken = targets[0] ?? null;
-  const targetActor = targetToken?.actor ?? null;
-
-  if (hasDamage && !targetToken) return ui.notifications.warn("This power requires a target.");
+  let targetToken = targets[0] ?? null;
+  let targetActor = targetToken?.actor ?? null;
 
   const basePR = Number(actor.system.psy?.rating ?? 1);
   const psyClassRaw = String(actor.system.psy?.class ?? "").toLowerCase();
@@ -545,6 +588,24 @@ export async function runPsychicPowerWorkflow() {
   const bcBonus = pick.isBlackCrusade ? (effectivePR * 5) : 0;
   const targetNumber = Math.max(1, baseStat + focusDifficulty + testModifierFromStrength + focusBonus + pick.rollModifier + bcBonus);
 
+  const rangeInfo = resolvePsychicRange(String(data.range ?? ""), effectivePR);
+  if (rangeInfo.isSelf) {
+    if (targetToken && targetToken.id !== token.id) {
+      return ui.notifications.warn("This power has Self range. Target must be the caster.");
+    }
+    targetToken = token;
+    targetActor = actor;
+    ui.notifications.info("Self range power: caster selected as target.");
+  }
+
+  if ((hasDamage || opposed) && !targetToken) return ui.notifications.warn("This power requires a target.");
+  if ((hasDamage || opposed) && Number.isFinite(rangeInfo.meters) && targetToken) {
+    const dist = measureDistanceMeters(token, targetToken);
+    if (Number.isFinite(dist) && dist > rangeInfo.meters) {
+      return ui.notifications.warn(`Target too far (${Number(dist).toFixed(2)}m > ${rangeInfo.meters}m).`);
+    }
+  }
+
   let manifestRoll = (await rollWithDice("1d100")).total;
   let manifestSuccess = manifestRoll !== 100 && manifestRoll <= targetNumber && !(pick.isBlackCrusade && manifestRoll >= 91);
   let manifestDoS = calcDoS(targetNumber, manifestRoll);
@@ -567,16 +628,7 @@ export async function runPsychicPowerWorkflow() {
     }
   }
 
-  const resolvedRangeText = resolveFormula(String(data.range ?? ""), effectivePR).trim();
-  if ((hasDamage || opposed) && targetToken) {
-    const rangeValue = Number((resolvedRangeText.match(/\d+(?:\.\d+)?/) || [NaN])[0]);
-    if (Number.isFinite(rangeValue)) {
-      const dist = measureDistanceMeters(token, targetToken);
-      if (Number.isFinite(dist) && dist > rangeValue) {
-        return ui.notifications.warn(`Target too far (${Number(dist).toFixed(2)}m > ${rangeValue}m).`);
-      }
-    }
-  }
+  const resolvedRangeText = rangeInfo.label;
 
   const isDouble = manifestRoll % 11 === 0;
   let triggersPhenomena = false;
@@ -680,6 +732,8 @@ export async function runPsychicPowerWorkflow() {
   const opposedOutcomeLabel = opposedResult?.attackerWins ? "Caster Wins" : "Caster Loses";
   const opposedOutcomeStyle = opposedResult?.attackerWins ? styleGreen : styleRed;
 
+  const shouldShowDescription = manifestSuccess || hasDamage || opposed;
+
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor, token: token.document }),
     content: `<div style="text-align:center; font-size:1.05em;">
@@ -694,7 +748,7 @@ export async function runPsychicPowerWorkflow() {
         ${manifestSuccess ? `→ <span style="${styleGreen}">Success</span>` : `→ <span style="${styleRed}">Failure</span>`}
       </div>
       <div><span style="${casterDegreeStyle}">${manifestDoS} ${casterDegreeLabel}</span></div>
-      <div><b>Description:</b> ${stripHTML(data.effect ?? data.description ?? "") || "—"}</div>
+      ${shouldShowDescription ? `<div><b>Description:</b> ${stripHTML(data.effect ?? data.description ?? "") || "—"}</div>` : ""}
       ${opposedResult ? `<hr>
       <div style="font-weight:bold;">Opposed Check</div>
       <div><b>Caster:</b> <span style="${styleBlue}">${targetNumber}</span> vs <span style="${styleOrange}">${manifestRoll}</span></div>
