@@ -481,9 +481,10 @@ new Dialog({
             .filter(r => r.active)
             .map(r => r.idx);
           const modDice = [...dice];
+          const dosReplacementValue = Math.min(Math.max(Number(dos ?? 0), 0), 10);
           if (!spray && activeIndexes.length) {
             const minActive = activeIndexes.reduce((best, idx) => (modDice[idx] < modDice[best] ? idx : best), activeIndexes[0]);
-            modDice[minActive] = Math.max(modDice[minActive], dos);
+            modDice[minActive] = Math.max(modDice[minActive], dosReplacementValue);
             if (proven) modDice[minActive] = Math.max(modDice[minActive], provenVal);
             if (primitive) modDice[minActive] = Math.min(modDice[minActive], primitiveVal);
           }
@@ -491,14 +492,14 @@ new Dialog({
           const dosReplaced = !spray && activeIndexes.length;
           const replacedIndex = dosReplaced ? activeIndexes.reduce((best, idx) => (dice[idx] < dice[best] ? idx : best), activeIndexes[0]) : -1;
           const originalValue = dosReplaced ? dice[replacedIndex] : null;
-          const replacementApplied = dosReplaced && Number(dos) > Number(originalValue ?? 0);
+          const replacementApplied = dosReplaced && dosReplacementValue > Number(originalValue ?? 0);
           const highlightedIndexes = new Set(activeIndexes);
           if (replacementApplied) highlightedIndexes.delete(replacedIndex);
           const keptDiceDisplay = dice
             .map((value, idx) => highlightedIndexes.has(idx) ? `<b>${value}</b>` : `${value}`)
             .join(", ");
           const keptDisplay = dosReplaced
-            ? `[ ${keptDiceDisplay}, (${replacementApplied ? `<b>${dos}</b>` : `${dos}`}) ]`
+            ? `[ ${keptDiceDisplay}, (${replacementApplied ? `<b>${dosReplacementValue}</b>` : `${dosReplacementValue}`}) ]`
             : `[ ${keptDiceDisplay} ]`;
 
           damageResults.push(total);
