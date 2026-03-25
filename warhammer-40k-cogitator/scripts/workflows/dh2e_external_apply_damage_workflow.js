@@ -540,6 +540,9 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
   if (!actorDoc) return false;
   const effectInterface = game.dfreds?.effectInterface;
   const preferredNames = [effectName, ...effectAliases].filter(Boolean);
+  const statusTemplate = Array.isArray(CONFIG?.statusEffects)
+    ? CONFIG.statusEffects.find(status => String(status?.id ?? "").toLowerCase() === String(effectId ?? "").toLowerCase())
+    : null;
   const findExistingEffect = () => actorDoc.effects.find(effect => {
     const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
     const ids = statuses.map(status => String(status ?? "").toLowerCase());
@@ -550,6 +553,35 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
     const nameMatches = preferredNames.some(candidate => name === String(candidate ?? "").toLowerCase());
     return ids.includes(effectIdLc) || coreStatus === effectIdLc || dfredsId === effectIdLc || nameMatches;
   });
+  const createSystemActiveEffect = async () => {
+    if (!effectId) return false;
+    if (findExistingEffect()) return true;
+
+    const systemEffectData = {
+      name: statusTemplate?.name || preferredNames[0] || effectId,
+      img: statusTemplate?.img || statusTemplate?.icon || "icons/svg/aura.svg",
+      icon: statusTemplate?.icon || statusTemplate?.img || "icons/svg/aura.svg",
+      transfer: false,
+      disabled: false,
+      statuses: [effectId],
+      flags: { core: { statusId: effectId } }
+    };
+
+    try {
+      if (typeof actorDoc.toggleStatusEffect === "function") {
+        await actorDoc.toggleStatusEffect(effectId, { active: true });
+      } else {
+        await actorDoc.createEmbeddedDocuments("ActiveEffect", [systemEffectData]);
+      }
+    } catch (_) {
+      try {
+        await actorDoc.createEmbeddedDocuments("ActiveEffect", [systemEffectData]);
+      } catch (_) {
+        return false;
+      }
+    }
+    return Boolean(findExistingEffect());
+  };
   const paramsByPriority = [
     { effectId, uuid: actorDoc.uuid },
     { effectId, uuids: [actorDoc.uuid] },
@@ -559,18 +591,24 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
     ]))
   ].filter(params => params.effectId || params.effectName);
 
-  if (effectInterface?.addEffect) {
+  // Prefer native/system status effects first so Foundry status icon counters work reliably.
+  let hasEffect = await createSystemActiveEffect();
+
+  if (!hasEffect && effectInterface?.addEffect) {
     for (const params of paramsByPriority) {
       try {
         await effectInterface.addEffect(params);
-        if (findExistingEffect()) break;
+        if (findExistingEffect()) {
+          hasEffect = true;
+          break;
+        }
       } catch (_) {
         // Keep trying CE signatures.
       }
     }
   }
 
-  if (!findExistingEffect()) {
+  if (!hasEffect && !findExistingEffect()) {
     await actorDoc.createEmbeddedDocuments("ActiveEffect", [{
       name: preferredNames[0] || effectId || "Status Effect",
       img: "icons/svg/aura.svg",
@@ -580,6 +618,7 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
       statuses: effectId ? [effectId] : [],
       flags: effectId ? { core: { statusId: effectId } } : {}
     }]);
+    hasEffect = Boolean(findExistingEffect());
   }
 
   if (Number.isFinite(Number(counter)) && Number(counter) > 0) {
