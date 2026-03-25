@@ -329,6 +329,19 @@ function extractStunnedRounds(text) {
   return rounds;
 }
 
+function extractDurationByKeyword(text, keywordRegex, units = ["round", "rounds"]) {
+  if (!text) return 0;
+  const plain = String(text).replace(/<[^>]*>/g, " ");
+  const unitAlternation = units.map(unit => unit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const regex = new RegExp(`${keywordRegex.source}\\s+for\\s+((?:\\d+|one|a|an|next))\\s*(?:${unitAlternation})\\b`, "gi");
+  let total = 0;
+  let match;
+  while ((match = regex.exec(plain)) !== null) {
+    total += Math.max(parseRoundAmount(match[1]), 0);
+  }
+  return total;
+}
+
 function parseRoundAmount(raw) {
   const text = String(raw ?? "").trim().toLowerCase();
   if (!text) return 0;
@@ -364,14 +377,18 @@ function accumulateConditionCountsFromText(counts, text) {
 
   if (/\bblood\s+loss\b|\bbleeding\b/.test(plain)) add("bleeding");
   if (/\bprone\b/.test(plain)) add("prone");
-  if (/\bblinded\b|\bblindness\b|\bblind\b/.test(plain)) add("blinded");
-  if (/\bdeafened\b|\bdeafness\b/.test(plain)) add("deafened");
+  const blindedDuration = extractDurationByKeyword(plain, /\bblinded\b|\bblindness\b|\bblind\b/, ["round", "rounds", "hour", "hours", "minute", "minutes"]);
+  if (blindedDuration > 0) add("blinded", blindedDuration);
+  else if (/\bblinded\b|\bblindness\b|\bblind\b/.test(plain)) add("blinded");
+  const deafenedDuration = extractDurationByKeyword(plain, /\bdeafened\b|\bdeafness\b|\bdeaf\b/, ["round", "rounds", "hour", "hours", "minute", "minutes"]);
+  if (deafenedDuration > 0) add("deafened", deafenedDuration);
+  else if (/\bdeafened\b|\bdeafness\b|\bdeaf\b/.test(plain)) add("deafened");
   if (/\bfear\b|\bfrightened\b|\bshocked\b|\bpanic\b|\bsnap out of it\b/.test(plain)) add("fear");
   if (/\bcatch fire\b|\bon fire\b|\bfire\b/.test(plain)) add("fire");
   if (/\bgrappled\b|\bsnared\b|\bimmobilized\b|\bimmobilised\b/.test(plain)) add("grappled");
   if (/\bpinned\b|\bpinning\b/.test(plain)) add("pinned");
 
-  const stunnedRounds = extractRoundsByKeyword(plain, /\bstunned\b/);
+  const stunnedRounds = extractDurationByKeyword(plain, /\bstunned\b/, ["round", "rounds"]);
   if (stunnedRounds > 0) add("stunned", stunnedRounds);
   else if (/\bstunned\b/.test(plain)) add("stunned", 1);
 
@@ -392,6 +409,20 @@ function extractFatigueLevelsFromText(text) {
     levels += Math.max(0, Number(match[1] ?? 0));
   }
   return levels;
+}
+
+function styleCriticalEffectKeywords(text) {
+  const outlined = (label, color) => `<span style="font-weight:900;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${label}</span>`;
+  const stylers = [
+    { regex: /\bStunned\b/g, color: "#00b3ff" },
+    { regex: /\bBlinded\b/g, color: "#6c63ff" },
+    { regex: /\bDeafened\b/g, color: "#5dade2" },
+    { regex: /\bBlood Loss\b/g, color: "#ff4d4d" },
+    { regex: /\bProne\b/g, color: "#f4d03f" },
+    { regex: /\bUnconscious\b/g, color: "#8e44ad" },
+    { regex: /\bDead\b/g, color: "#ff2a2a" }
+  ];
+  return stylers.reduce((styledText, styler) => styledText.replace(styler.regex, match => outlined(match, styler.color)), String(text ?? ""));
 }
 
 function actorImmuneToDeadCondition(actorDoc) {
@@ -547,7 +578,7 @@ const startingArmourByLocation = Object.fromEntries(
 );
 
 let report = "";
-let pendingStunnedRounds = extractStunnedRounds((dmg.properties ?? []).join(" | "));
+let pendingStunnedRounds = 0;
 let pendingBloodLoss = textMentionsBloodLoss((dmg.properties ?? []).join(" | "));
 let pendingFatigueFromCriticals = 0;
 const pendingConditionCounts = {};
@@ -739,7 +770,7 @@ if (dmg.concussive?.resolved) {
   `;
 
   if (!dmg.concussive.success) {
-    pendingStunnedRounds += stunRounds;
+    pendingConditionCounts.stunned = (pendingConditionCounts.stunned ?? 0) + stunRounds;
   }
 }
 
@@ -978,10 +1009,10 @@ for (let i = 0; i < furyCrits.length; i++){
   let text = getCriticalText(critType, loc, fury.value);
   if (text){
     text = await inlineRollCriticalText(text);
-    pendingStunnedRounds += extractStunnedRounds(text);
     pendingBloodLoss = pendingBloodLoss || textMentionsBloodLoss(text);
     pendingFatigueFromCriticals += extractFatigueLevelsFromText(text);
     accumulateConditionCountsFromText(pendingConditionCounts, text);
+    text = styleCriticalEffectKeywords(text);
 
     critReport += `
     <hr>
@@ -1003,10 +1034,10 @@ if (realCritToApply > 0 && lastCritLocation){
 
   if (text){
     text = await inlineRollCriticalText(text);
-    pendingStunnedRounds += extractStunnedRounds(text);
     pendingBloodLoss = pendingBloodLoss || textMentionsBloodLoss(text);
     pendingFatigueFromCriticals += extractFatigueLevelsFromText(text);
     accumulateConditionCountsFromText(pendingConditionCounts, text);
+    text = styleCriticalEffectKeywords(text);
 
     critReport += `
     <hr>
@@ -1036,7 +1067,7 @@ if (pendingFatigueFromCriticals > 0) {
   critReport += `<br><b>Fatigue from Critical Effects:</b> ${pendingFatigueFromCriticals}`;
 }
 
-pendingConditionCounts.stunned = Math.max(Number(pendingConditionCounts.stunned ?? 0), Number(pendingStunnedRounds ?? 0));
+if (pendingStunnedRounds > 0) pendingConditionCounts.stunned = (pendingConditionCounts.stunned ?? 0) + pendingStunnedRounds;
 if (pendingBloodLoss) pendingConditionCounts.bleeding = Math.max(Number(pendingConditionCounts.bleeding ?? 0), 1);
 
 if (Number(critCurrent ?? 0) > 11) {
