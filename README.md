@@ -1,62 +1,226 @@
+![Warhammer 40k Cogitator Cover](<WH40k Cogitator Cover.png>)
+
 # Warhammer 40k Cogitator
 
-## Project Scope
+## What this module does
 
-This repository contains the **Warhammer 40k Cogitator** Foundry VTT V13 module for Dark Heresy 2e workflow orchestration.
+The **Warhammer 40k Cogitator** is a Foundry VTT v13 module for Dark Heresy 2e that runs a complete, macro-free combat workflow and utility toolkit:
 
-## Module Architecture (Macro-Free)
+- Attack → Defense → Damage → Apply Damage orchestration
+- Multiplayer owner/GM handoff with socket coordination
+- Persistent canvas HUD + launcher + keybind access
+- Test and management utilities (skill, characteristic, fear, medicae, healing, fate, fatigue, ammo)
+- Psychic power workflow and force-field interception flow
 
-The module is now fully **macro-free at runtime**:
+## Core architecture
 
-- Workflow execution is driven directly by module code in `warhammer-40k-cogitator/scripts/main.js` and internal workflow handlers.
-- `runStep(step)` dispatches directly to module-owned handlers for:
-  - `attack`
-  - `defense`
-  - `damage`
-  - `master`
-  - `gmMaster`
-  - `applyDamage`
-- No `macro.execute()` fallback path is used by the launcher or Workflow HUD.
+This module is **macro-free at runtime**. All execution is dispatched from module code through `runStep(step)` and internal handlers.
 
-## Runtime Usage
+### Main handlers
+- `attack`
+- `psychic`
+- `defense`
+- `damage`
+- `applyDamage`
+- launcher/master entry points (`master`, `gmMaster`)
 
-1. Install as Foundry module `warhammer-40k-cogitator` using root manifest `module.json`.
-2. Ensure the installed folder name is `warhammer-40k-cogitator`.
-3. Enable the module in your world.
-4. Use any of the built-in module entry points:
-   - Workflow HUD (canvas bar)
-   - Launcher hotkey `Ctrl+Shift+C`
-   - `game.warhammer40kCogitator.openLauncher()` from console
+The module exposes a public API on `game.warhammer40kCogitator` for launcher opening, workflow dispatch, socket emission, defense/damage submission, effect helpers, and HUD refresh.
 
-Available launcher/HUD actions:
+## Workflow systems
 
-- Player + GM: Attack, Defense, Damage, Skill Test, Characteristic Test
-- GM only: Apply Damage
+### 1) Attack workflow
+The attack workflow handles:
 
-## Permissions and Networking
+- Attacker/target selection validation
+- Melee and ranged attack mode selection
+- Range band and power mode handling
+- Weapon trait and weapon-item modifiers
+- Talent-based modifiers and special logic
+- Attack roll and hit allocation per target
+- Auto creation/update of rich workflow chat cards
 
-- GM-only actions remain GM-only (including Apply Damage).
-- Player-available actions remain player-available.
-- Socket-based defense and damage coordination remains active for multi-user workflows.
+Special combat behavior includes support for:
 
-## Migration Notes
+- **Double Tap** target priming/follow-up
+- **Devastating Assault** mirrored follow-up prompt
+- **Blademaster** reroll behavior
+- **Jam** and **Weapon Recharging** status handling
+- **Spray** evasion handling
+- **Horde**-specific hit/magnitude handling
+- Grenade scatter and grenade damage handling
 
-- Legacy macro-related world settings from older versions are safely ignored.
-- No macro auto-create/update behavior is performed on startup.
-- Existing worlds with old macro settings continue loading without crashes.
+### 2) Defense workflow
+The defense workflow resolves pending incoming attacks for the defending owner:
 
-## Forge / Manifest Troubleshooting
+- Dodge / Parry / Foreboding defense paths
+- Parry weapon validation and trait checks (Balanced/Defensive/Unbalanced/Unwieldy/Flexible)
+- Condition-aware penalties (e.g., prone, blinded, stunned, unconscious)
+- Inescapable Attack penalty integration
+- Optional Fate rerolls on failed defenses
+- Writes structured defense results back into workflow cards
 
-If Forge reports **"Invalid manifest response received"**, check:
+### 3) Damage workflow
+The damage workflow resolves pending damage for the attacker side:
 
-1. The URL points to the **raw JSON** file (not a GitHub HTML page).
-2. The manifest is valid JSON and includes core fields (`id`/`name`, `title`, `version`, `compatibility`).
-3. The published manifest includes a valid `download` ZIP URL (required for Forge install/update workflows).
-4. Only one manifest for this module ID is shipped in the install ZIP (to avoid loader ambiguity).
+- Lists pending post-defense targets
+- Uses attack context (mode, traits, talents, modifiers)
+- Builds per-hit location and damage data
+- Handles penetration and damage type context
+- Stores result payloads for downstream application
 
-Direct Forge manifest URL:
-- `https://raw.githubusercontent.com/st3nd02/FoundryMacros/main/module.json`
+### 4) Apply Damage workflow (GM)
+The apply-damage workflow is GM-only and:
 
-### Forge-ready public manifest template
+- Selects pending resolved damage entries
+- Applies damage payloads to target actors
+- Updates workflow cards with application summaries
+- Supports legacy payload fallback (`game.dh2eLastDamage`)
+- Integrates critical effect text/table handling
 
-A ready-to-fill public manifest template is included at `forge-manifest.template.json`.
+## Multiplayer and permissions
+
+The module coordinates player/GM resolution with socket events:
+
+- Defense requests routed to valid token owners
+- Damage-ready notices routed to attacker owners
+- GM-authorized application paths for defense and damage results
+- Context synchronization and cleanup across connected users
+
+Permission boundaries are preserved:
+
+- GM-only actions stay GM-only (e.g., Apply Damage, manual Force Field checks, healing/fate/fatigue/ammo tools)
+- Player-available actions remain player-available
+
+## Combat turn automation
+
+On combat turn/round changes, the module can:
+
+- Clear spent defense reaction tracking for active actors
+- Apply bleeding fatigue tick at round start
+- Remove expired turn-start effects (stunned, blinded, deafened variants)
+- Expire stale pending workflow states on round advance
+- Post GM-facing cleanup notifications
+
+## Effect and condition integration
+
+The module integrates with Convenient Effects / status systems and can:
+
+- Apply/remove status effects locally or via GM socket execution
+- Handle duplicate stackable effects (e.g., Used Evasion)
+- Sync and maintain counters/durations for supported counter modules
+- Manage named combat effects like:
+  - Used Evasion
+  - Double Tap
+  - Devastating Assault
+  - Weapon Recharging
+  - Force Field Active / Overloaded
+
+## Launcher, HUD, and controls
+
+You can access module functionality through:
+
+- **Workflow HUD** (persistent draggable/lockable canvas bar)
+- **Launcher dialog**
+- **Hotkey**: `Ctrl+Shift+C`
+- Console API: `game.warhammer40kCogitator.openLauncher()`
+
+The HUD supports player and GM action sets; GM-only actions are shown only to GMs.
+
+## Utility tools
+
+### Skill Test
+- Interactive DH2e skill test dialog
+- Difficulty/modifier controls
+- Specialty handling
+- Talent-aware behavior for relevant skill families
+- Fate reroll prompts
+- Styled chat output with DoS/DoF
+
+### Characteristic Test
+- Characteristic picker
+- Difficulty/modifier controls
+- Unnatural bonus handling
+- Fate reroll flow
+- Styled chat result output
+
+### Fear Test
+- Fear level configuration and trait support
+- Talent/trait toggles (e.g., faith/resolve style mitigations)
+- Shock table roll flow on failed fear tests
+- Insanity handling when applicable
+- Automatic condition extraction/application from shock results
+
+### Medical Flow
+- First Aid / Extended Care / Diagnose / Staunch Blood Loss modes
+- Medical talent/item modifiers
+- Healing roll generation and chat reporting
+- Optional immediate handoff to GM healing application
+- Healing roll history for quick reuse
+
+### Apply Healing (GM)
+- Applies healing to critical first, then wounds
+- Supports prefilled values and history source
+- Posts treatment summary to chat
+
+### Fate Restore (GM)
+- Full or partial fate restoration controls
+- Chat reporting of restoration and over-cap gain
+
+### Fatigue Manager (GM)
+- Add or reset fatigue values
+- Applies unconscious effect when threshold reached
+- Chat reporting with threshold warnings
+
+### Ammo Reload (GM)
+- Weapon + compatible ammunition selection
+- Full or partial reload controls
+- Ammo consumption/update/delete handling
+- Chat reporting
+
+## Psychic workflow
+
+Psychic powers are handled in a dedicated workflow with:
+
+- Power selection and focus-test normalization
+- Formula parsing/resolution with PR/stat substitution
+- Opposed test awareness
+- Range parsing and measurement behavior
+- Psychic phenomena / perils integration
+- Inline dice resolution within phenomena/perils text
+- Condition extraction/application from result text
+- Owner-target defense request routing for psychic attacks
+
+## Force field workflow
+
+Force field logic supports both automatic and manual checks:
+
+- Selects preferred/selected force field item
+- Rolls protection and overload checks
+- Handles active vs overloaded effect transitions
+- Can automatically intercept incoming hits during workflows
+- Posts formatted chat outcomes (protected / failed / overloaded)
+
+## Data-driven rules support
+
+The module includes data tables used during play:
+
+- `scripts/data/talents.json` for talent behavior metadata
+- `scripts/data/criticals.js` for critical effect tables
+- `scripts/data/psychic_events.js` for psychic phenomena and perils tables
+
+## Installation and packaging
+
+- Module ID: `warhammer-40k-cogitator`
+- Foundry compatibility: v13
+- Entry module: `warhammer-40k-cogitator/scripts/main.js`
+- Socket support enabled
+- Required modules:
+  - `dfreds-convenient-effects`
+  - `statuscounter`
+  - `socketlib`
+- Recommended module:
+  - `fvtt-token-action-hud-core`
+
+## Migration behavior
+
+Legacy macro settings from older worlds are detected and ignored safely in macro-free mode. No macro auto-create/update behavior is performed at startup.
