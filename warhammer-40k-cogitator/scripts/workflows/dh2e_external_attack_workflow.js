@@ -200,6 +200,13 @@ const actorHasEffect = (actorDoc, { effectId = "", effectName = "" }) => {
     return false;
   });
 };
+const getActiveConditionNames = actorDoc => {
+  if (!actorDoc?.effects) return [];
+  return actorDoc.effects
+    .filter(effect => !effect.disabled && !effect.isSuppressed)
+    .map(effect => String(effect.name ?? "").trim())
+    .filter(Boolean);
+};
 const parseTraitNumber = (traits, key, fallback = 0) => {
   const trait = traits.find(t => t.includes(key));
   if (!trait) return fallback;
@@ -1283,7 +1290,10 @@ const showAttackDialog = async () => {
           <div class="form-group"><label><b>Aim</b></label><select id="aimMod"><option value="0">No Aim</option><option value="10">Half Aim (+10)</option><option value="20">Full Aim (+20)</option></select></div>
           <div class="form-group"><label><b>Craftsmanship:</b> <span id="weaponCraftDisplay">—</span></label></div>
         </div>
-        <div class="form-group"><label><b>Modifier</b></label><input id="manualMod" type="number" value="0"/></div>
+        <div class="attack-dialog-row-2col">
+          <div class="form-group"><label><b>Modifier</b></label><input id="manualMod" type="number" value="0"/></div>
+          <div class="form-group"><label><b>Conditions on Target:</b> <span id="targetConditionsDisplay">—</span></label></div>
+        </div>
         <div class="form-group"><label><b>Weapon Modifications:</b> <span id="detectedItems">—</span></label></div>
         <div class="form-group"><label><b>Weapon Traits:</b> <span id="weaponTraitsDisplay">—</span></label></div>
         <hr><h3>Attack Specifics</h3>
@@ -1449,6 +1459,11 @@ const showAttackDialog = async () => {
 
           const detected = detectWeaponItems(attacker, weaponDoc);
           html.find("#detectedItems").html(presentWeaponItems(detected).join(", "));
+          const targetConditions = targetTokens.map(targetToken => {
+            const conditions = getActiveConditionNames(targetToken.actor);
+            return `${targetToken.name}: ${conditions.length ? conditions.join(", ") : "None"}`;
+          });
+          html.find("#targetConditionsDisplay").text(targetConditions.join(" | "));
 
           const normalRange = getNormalRangeForWeapon(weaponDoc);
           const isMeleeW = (weaponDoc?.system?.class ?? "").toLowerCase() === "melee";
