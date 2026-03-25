@@ -761,6 +761,10 @@ function getCritText(type, loc, value){
   value = Math.clamp(value, 1, 10);
   return CRIT[type]?.[loc]?.[value] || null;
 }
+
+const actorHasTrueGrit = (actor.items ?? [])
+  .some(item => item.type === "talent" && String(item.name ?? "").trim().toLowerCase() === "true grit");
+
 new Dialog({
 
 title:`Apply Damage → ${actor.name}`,
@@ -776,7 +780,7 @@ content:`
 <br><br>
 
 <label><input type="checkbox" id="ignoreArmour"> Ignore Armour</label><br>
-<label><input type="checkbox" id="trueGrit"> True Grit</label>
+<label><input type="checkbox" id="trueGrit" ${actorHasTrueGrit ? "checked" : ""}> True Grit</label>
 </form>
 `,
 
