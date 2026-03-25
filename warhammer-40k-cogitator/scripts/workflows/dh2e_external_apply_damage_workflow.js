@@ -54,7 +54,7 @@ Head: [
 "In a gruesome display, the flesh is burned from the target's head, exposing charred bone and muscle underneath. The target suffers 1d10 levels of Fatigue. He is Blinded permanently. Roll 1d10; this is the target's new Fellowship characteristic value. If his Fellowship value is already 10 or lower, this can be skipped as no one would notice any difference in his behaviour and demeanour.",
 "The target's head is destroyed in a conflagration of fiery death. He does not survive.",
 "Superheated by the attack, the target's brain explodes, tearing apart his skull and sending flaming chunks of meat flying at those nearby. The target is very, very dead.",
-"Superheated by the attack, the target's brain explodes, tearing apart his skull, the target's entire body catches fire and runs off headless 2d10 metres in a random direction (use the Scatter Diagram on page 230). Anything flammable it passes, including characters, must make a Challenging (+0) Agility test or catch fire."
+"Superheated by the attack, the target's brain explodes, tearing apart his skull, the target's entire body catches fire and runs off headless 2d10 metres towards <direction> <direction name>. Anything flammable it passes, including characters, must make a Challenging (+0) Agility test or catch fire."
 ],
 
 Leg: [
@@ -273,6 +273,25 @@ async function rollInlineDice(text){
 
     // replace entire dice expression with just the number
     text = text.replace(expr, r.total);
+  }
+
+  if (text.includes("<direction> <direction name>")) {
+    const dirRoll = new Roll("1d10");
+    await dirRoll.evaluate({ async: true });
+    const scatterMap = {
+      1: { arrow: "↖", label: "NW" },
+      2: { arrow: "↑", label: "N" },
+      3: { arrow: "↗", label: "NE" },
+      4: { arrow: "←", label: "W" },
+      5: { arrow: "→", label: "E" },
+      6: { arrow: "↙", label: "SW" },
+      7: { arrow: "↙", label: "SW" },
+      8: { arrow: "↓", label: "S" },
+      9: { arrow: "↘", label: "SE" },
+      10: { arrow: "↘", label: "SE" }
+    };
+    const direction = scatterMap[Number(dirRoll.total)] ?? { arrow: "?", label: "?" };
+    text = text.replace("<direction> <direction name>", `${direction.arrow} ${direction.label}`);
   }
 
   return text;
