@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.41";
+const COGITATOR_VERSION = "2.1.55";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -166,6 +166,7 @@ function registerCombatHooks() {
     const actor = getUpdatedCombatTurnActor(combat, changed);
     if (!actor) return;
     await clearDefenseReaction(actor);
+    await applyBleedingTurnStartFatigue(actor);
     await clearExpiredTurnStartEffects(actor);
   });
 }
@@ -210,6 +211,34 @@ function getEffectRemainingTurns(effect) {
   if (Number.isFinite(rounds)) return rounds;
 
   return null;
+}
+
+function actorHasCondition(actorDoc, conditionIdOrName) {
+  if (!actorDoc?.effects) return false;
+  const needle = String(conditionIdOrName ?? "").trim().toLowerCase();
+  if (!needle) return false;
+  return actorDoc.effects.some(effect => {
+    if (!effect || effect.disabled || effect.isSuppressed) return false;
+    const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+    const normalizedStatuses = statuses.map(status => String(status ?? "").trim().toLowerCase());
+    const coreStatus = String(effect.flags?.core?.statusId ?? "").trim().toLowerCase();
+    const ceStatus = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").trim().toLowerCase();
+    const name = String(effect.name ?? "").trim().toLowerCase();
+    if (normalizedStatuses.includes(needle)) return true;
+    if (coreStatus === needle || ceStatus === needle) return true;
+    return name.includes(needle);
+  });
+}
+
+async function applyBleedingTurnStartFatigue(actor) {
+  if (!actor || !game.user?.isGM) return;
+  if (!actorHasCondition(actor, "bleeding")) return;
+  const currentFatigue = Number(actor.system?.fatigue?.value ?? 0);
+  await actor.update({ "system.fatigue.value": currentFatigue + 1 });
+  await ChatMessage.create({
+    speaker: { alias: "System" },
+    content: `<b>${actor.name}</b> gains <b>+1 Fatigue</b> at round start due to <b>Bleeding</b>.`
+  });
 }
 
 async function clearExpiredTurnStartEffects(actor) {

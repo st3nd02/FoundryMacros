@@ -59,6 +59,22 @@ const CONDITION_MAP = {
   unconscious: { id: "unconscious", name: "Unconscious" },
   dead: { id: "dead", name: "Dead" }
 };
+const actorHasCondition = (actorDoc, conditionIdOrName) => {
+  if (!actorDoc?.effects) return false;
+  const needle = String(conditionIdOrName ?? "").trim().toLowerCase();
+  if (!needle) return false;
+  return actorDoc.effects.some(effect => {
+    if (!effect || effect.disabled || effect.isSuppressed) return false;
+    const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+    const normalizedStatuses = statuses.map(status => String(status ?? "").trim().toLowerCase());
+    const coreStatus = String(effect.flags?.core?.statusId ?? "").trim().toLowerCase();
+    const ceStatus = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").trim().toLowerCase();
+    const name = String(effect.name ?? "").trim().toLowerCase();
+    if (normalizedStatuses.includes(needle)) return true;
+    if (coreStatus === needle || ceStatus === needle) return true;
+    return name.includes(needle);
+  });
+};
 
 const buildWorkflowHtml = state => {
   const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${text}</span>`;
@@ -653,6 +669,7 @@ RL ${armourValues.rightLeg?.value||0}
 // ===============================
 let totalInflicted = 0;
 const hasCorrosive = (dmg.properties ?? []).some((property) => String(property ?? "").toLowerCase().includes("corrosive"));
+const targetIsUnconscious = actorHasCondition(actor, "unconscious");
 let corrosiveArmourDamageTotal = 0;
 let corrosiveWoundsDamageTotal = 0;
 for (let hit of dmg.hitsData){
@@ -687,7 +704,8 @@ for (let hit of dmg.hitsData){
 
   const soak = effectiveArmour + TB;
 
-  const baseDamage = hit.damage;
+  const baseDamageRaw = Number(hit.damage ?? 0);
+  const baseDamage = targetIsUnconscious ? baseDamageRaw * 2 : baseDamageRaw;
   const damage = Math.max(baseDamage + extra, 0);
 
   const inflicted = Math.max(damage - soak, 0);
@@ -736,7 +754,7 @@ for (let hit of dmg.hitsData){
   font-weight:bold;
   font-size:1.1em;
   text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;
-">${baseDamage}${extra?` + ${extra}`:""}</span><br>
+">${baseDamageRaw}${targetIsUnconscious ? " × 2 (Unconscious)" : ""}${extra?` + ${extra}`:""}</span><br>
   ${hit.keptDisplay ? `<span style="font-style:italic;color:#000;">${hit.keptDisplay}</span><br>` : ""}
 
   ${corrosiveHitHtml}

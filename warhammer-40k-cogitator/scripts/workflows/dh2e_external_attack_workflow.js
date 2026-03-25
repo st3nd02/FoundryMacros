@@ -207,6 +207,22 @@ const getActiveConditionNames = actorDoc => {
     .map(effect => String(effect.name ?? "").trim())
     .filter(Boolean);
 };
+const actorHasCondition = (actorDoc, conditionIdOrName) => {
+  if (!actorDoc?.effects) return false;
+  const needle = String(conditionIdOrName ?? "").trim().toLowerCase();
+  if (!needle) return false;
+  return actorDoc.effects.some(effect => {
+    if (!effect || effect.disabled || effect.isSuppressed) return false;
+    const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+    const normalizedStatuses = statuses.map(status => String(status ?? "").trim().toLowerCase());
+    const coreStatus = String(effect.flags?.core?.statusId ?? "").trim().toLowerCase();
+    const ceStatus = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").trim().toLowerCase();
+    const name = String(effect.name ?? "").trim().toLowerCase();
+    if (normalizedStatuses.includes(needle)) return true;
+    if (coreStatus === needle || ceStatus === needle) return true;
+    return name.includes(needle);
+  });
+};
 const parseTraitNumber = (traits, key, fallback = 0) => {
   const trait = traits.find(t => t.includes(key));
   if (!trait) return fallback;
@@ -723,6 +739,17 @@ const runAttackWorkflow = async setup => {
   if (setup.manualMod) modifierNotes.push(`Manual ${setup.manualMod >= 0 ? "+" : ""}${setup.manualMod}`);
   if (setup.aimMod) modifierNotes.push(setup.aimLabel);
 
+  const attackerIsProne = actorHasCondition(attacker, "prone");
+  const attackerIsBlinded = actorHasCondition(attacker, "blinded");
+  if (attackerIsProne && isMelee) {
+    sharedMod -= 10;
+    modifierNotes.push("Prone Attacker -10 (Melee)");
+  }
+  if (attackerIsBlinded && isMelee) {
+    sharedMod -= 30;
+    modifierNotes.push("Blinded Attacker -30 (Melee)");
+  }
+
   if (setup.isHorde) {
     const hordeBonus = Number(setup.hordeBonus ?? 0);
     sharedMod += hordeBonus;
@@ -861,8 +888,17 @@ const runAttackWorkflow = async setup => {
   }
 
   const targets = setup.targetConfigs.map(conf => {
+    const targetToken = targetTokens.find(token => token.document?.uuid === conf.tokenUuid) ?? null;
+    const targetActor = targetToken?.actor ?? null;
+    const targetStunned = actorHasCondition(targetActor, "stunned");
+    const targetUnconscious = actorHasCondition(targetActor, "unconscious");
+    const targetProne = actorHasCondition(targetActor, "prone");
     const effectiveRangeMod = (!isMelee && t.marksman && conf.rangeMod < 0) ? 0 : conf.rangeMod;
     const scatterPointBlankBonus = (!isMelee && hasTrait(traits, "scatter") && conf.rangeMod === 30) ? 10 : 0;
+    const targetConditionAttackMod = (targetStunned ? 20 : 0)
+      + (targetProne ? (isMelee ? 10 : -10) : 0);
+    if (targetStunned) modifierNotes.push(`${conf.targetName} Stunned +20`);
+    if (targetProne) modifierNotes.push(`${conf.targetName} Prone ${isMelee ? "+10 (Melee)" : "-10 (Ranged)"}`);
     return ({
     tokenUuid: conf.tokenUuid,
     targetTokenUuid: conf.tokenUuid,
@@ -871,10 +907,14 @@ const runAttackWorkflow = async setup => {
     rangeLabel: conf.rangeLabel,
     rangeMod: effectiveRangeMod,
     scatterAttackBonus: scatterPointBlankBonus,
+    targetConditionAttackMod,
+    targetStunned,
+    targetUnconscious,
+    targetProne,
     sizeLabel: conf.sizeLabel,
     sizeMod: conf.sizeMod,
     sizeIgnored: conf.sizeIgnored,
-    targetNumber: Math.max(1, baseSkill + sharedMod + effectiveRangeMod + scatterPointBlankBonus + conf.sizeMod),
+    targetNumber: Math.max(1, baseSkill + sharedMod + effectiveRangeMod + scatterPointBlankBonus + targetConditionAttackMod + conf.sizeMod),
     allocatedHits: 0,
     inescapableAttackPenalty: 0,
     defenseRoll: null,
@@ -960,6 +1000,17 @@ const runAttackWorkflow = async setup => {
   let result = isSpray ? 1 : (await animatedRoll("1d100", chatMessage.speaker)).total;
   let { success, dos, jam, bestTN } = evaluateAttackResult({ result, targets: state.targets, weapon, traits });
   state.bestTarget = bestTN;
+  const unconsciousMeleeTarget = isMelee
+    ? state.targets.find(tg => tg.targetUnconscious)
+    : null;
+  if (unconsciousMeleeTarget) {
+    const wsb = Number(attacker.system?.characteristics?.weaponSkill?.bonus ?? 1);
+    success = true;
+    jam = false;
+    dos = Math.max(1, wsb);
+    state.bestTarget = 100;
+    state.extraText = [state.extraText, `${unconsciousMeleeTarget.name} is unconscious: melee attack auto-succeeds (${dos} DoS)`].filter(Boolean).join(" | ");
+  }
 
   if (!isSpray && !success) {
     const useFate = await promptAttackFateReroll({ actorDoc: attacker, rollValue: result, bestTN });
@@ -1156,6 +1207,14 @@ const runAttackWorkflow = async setup => {
       continue;
     }
 
+    if (tg.targetStunned || tg.targetUnconscious) {
+      tg.defenseRoll = "—";
+      tg.defenseOutcome = `Failed (${tg.targetStunned ? "Stunned" : "Unconscious"})`;
+      tg.damageResolved = false;
+      tg.damageSummary = null;
+      continue;
+    }
+
     if (game.warhammer40kCogitator?.hasDefenseReaction?.(targetActor)) {
       tg.defenseOutcome = "Failed (Reaction already used)";
       tg.defenseRoll = "—";
@@ -1294,6 +1353,7 @@ const showAttackDialog = async () => {
           <div class="form-group"><label><b>Modifier</b></label><input id="manualMod" type="number" value="0"/></div>
           <div class="form-group"><label><b>Conditions on Target:</b> <span id="targetConditionsDisplay">—</span></label></div>
         </div>
+        <div class="form-group"><label><b>Conditions on Self:</b> <span id="selfConditionsDisplay">—</span></label></div>
         <div class="form-group"><label><b>Weapon Modifications:</b> <span id="detectedItems">—</span></label></div>
         <div class="form-group"><label><b>Weapon Traits:</b> <span id="weaponTraitsDisplay">—</span></label></div>
         <hr><h3>Attack Specifics</h3>
@@ -1464,6 +1524,8 @@ const showAttackDialog = async () => {
             return `${targetToken.name}: ${conditions.length ? conditions.join(", ") : "None"}`;
           });
           html.find("#targetConditionsDisplay").text(targetConditions.join(" | "));
+          const selfConditions = getActiveConditionNames(attacker);
+          html.find("#selfConditionsDisplay").text(selfConditions.length ? selfConditions.join(", ") : "None");
 
           const normalRange = getNormalRangeForWeapon(weaponDoc);
           const isMeleeW = (weaponDoc?.system?.class ?? "").toLowerCase() === "melee";
@@ -1630,6 +1692,20 @@ const showAttackDialog = async () => {
 
 const setup = await showAttackDialog();
 if (!setup) return;
+if (actorHasCondition(attacker, "pinned")) {
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor: attacker, token: attackerToken.document }),
+    content: `<b>${attacker.name}</b> you are pinned, can only move to cover.`
+  });
+  return;
+}
+if (actorHasCondition(attacker, "stunned")) {
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor: attacker, token: attackerToken.document }),
+    content: `<b>${attacker.name}</b> is stunned and cannot attack.`
+  });
+  return;
+}
 if (setup.toggles?.whirlwind) {
   const wsb = attacker.system.characteristics.weaponSkill?.bonus ?? 1;
   setup.modeKey = "standard";
@@ -1648,6 +1724,14 @@ if (setupWeaponType === "plasma" && Number(setup.powerModeKey ?? 1) === 3 && act
 const isSprayWeapon = hasTrait(setupTraits, "spray");
 const isBlastWeapon = hasTrait(setupTraits, "blast");
 const isGrenadeWeapon = hasTrait(setupTraits, "grenade");
+const selectedWeaponIsMelee = String(selectedWeapon?.system?.class ?? "").toLowerCase() === "melee";
+if (!selectedWeaponIsMelee && actorHasCondition(attacker, "blinded")) {
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor: attacker, token: attackerToken.document }),
+    content: `<b>${attacker.name}</b> automatically fails the ranged attack due to blindness.`
+  });
+  return;
+}
 const singleTargetModes = ["single","called","standard"];
 if (!setup.toggles?.whirlwind && !isSprayWeapon && !isBlastWeapon && singleTargetModes.includes(setup.modeKey) && setup.targetConfigs.length > 1) {
   ui.notifications.warn("Selected attack type can only target one opponent.");

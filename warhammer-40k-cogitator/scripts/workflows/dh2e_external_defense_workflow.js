@@ -25,6 +25,22 @@ const rollWithDiceSoNice = async formula => {
 };
 
 const hasActorItemNamed = (actorDoc, itemType, itemName) => actorDoc.items.some(i => i.type === itemType && i.name?.trim().toLowerCase() === itemName.toLowerCase());
+const actorHasCondition = (actorDoc, conditionIdOrName) => {
+  if (!actorDoc?.effects) return false;
+  const needle = String(conditionIdOrName ?? "").trim().toLowerCase();
+  if (!needle) return false;
+  return actorDoc.effects.some(effect => {
+    if (!effect || effect.disabled || effect.isSuppressed) return false;
+    const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+    const normalizedStatuses = statuses.map(status => String(status ?? "").trim().toLowerCase());
+    const coreStatus = String(effect.flags?.core?.statusId ?? "").trim().toLowerCase();
+    const ceStatus = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").trim().toLowerCase();
+    const name = String(effect.name ?? "").trim().toLowerCase();
+    if (normalizedStatuses.includes(needle)) return true;
+    if (coreStatus === needle || ceStatus === needle) return true;
+    return name.includes(needle);
+  });
+};
 
 const requestedDefense = game.warhammer40kCogitator?.consumePendingDefenseContext?.() ?? null;
 
@@ -238,6 +254,10 @@ const inescapableAttackPenalty = Math.max(0, Number(entry?.target?.inescapableAt
 if (inescapableAttackPenalty > 0) {
   notes.push(`Inescapable Attack -${inescapableAttackPenalty}`);
 }
+const defenderIsStunned = actorHasCondition(actor, "stunned");
+const defenderIsUnconscious = actorHasCondition(actor, "unconscious");
+const defenderIsProne = actorHasCondition(actor, "prone");
+const defenderIsBlinded = actorHasCondition(actor, "blinded");
 
 if (pick.type === "skip") {
   const targetState = entry.state.targets.find(t => (t.tokenUuid ?? t.targetTokenUuid) === token.document.uuid);
@@ -269,6 +289,32 @@ if (pick.type === "skip") {
   return;
 }
 
+if (defenderIsStunned || defenderIsUnconscious) {
+  const reason = defenderIsStunned ? "Stunned" : "Unconscious";
+  try {
+    await game.warhammer40kCogitator.submitDefenseResult({
+      chatMessageId: entry.msg.id,
+      targetTokenUuid: token.document.uuid,
+      defenseRoll: null,
+      defenseOutcome: `Failed (${reason})`,
+      allocatedHits: entry.target?.allocatedHits ?? 0,
+      defenseDetails: {
+        actionText: "Auto-fail",
+        incomingHits: entry.target?.allocatedHits ?? 0,
+        difficultyLabel: "—",
+        targetNumber: null,
+        notes: [`Cannot defend while ${reason.toLowerCase()}`],
+        degrees: 0,
+        success: false
+      }
+    });
+    ui.notifications.info(`Defense automatically failed: ${reason}.`);
+  } catch (err) {
+    ui.notifications.error(`Defense result could not be applied: ${err.message ?? err}`);
+  }
+  return;
+}
+
 if (pick.type === "parry") {
   if (!pick.weaponId) return ui.notifications.warn("Select a melee weapon.");
   const w = actor.items.get(pick.weaponId);
@@ -295,6 +341,15 @@ if (pick.type === "parry") {
   if (attackTraits.some(t => t.includes("flexible"))) {
     return ui.notifications.warn("Attacker weapon is Flexible; parry is not possible.");
   }
+}
+
+if (defenderIsProne) {
+  base -= 20;
+  notes.push("Prone -20");
+}
+if (defenderIsBlinded && (pick.type === "parry" || pick.type === "dodge")) {
+  base -= 30;
+  notes.push("Blinded -30");
 }
 
 let target = Math.max(1, base + pick.difficultyMod + pick.manualMod - inescapableAttackPenalty);
