@@ -3498,11 +3498,11 @@ async function openFearTest() {
     { max: 999, text: "HEARTSTOP" }
   ];
   const FEAR_CONDITION_MAP = {
-    fear: { id: "fear", name: "Frightened", aliases: ["Fear"] },
+    fear: { id: "fear", name: "Fear", aliases: ["Frightened"] },
     stunned: { id: "stunned", name: "Stunned" },
     unconscious: { id: "unconscious", name: "Unconscious" },
     prone: { id: "prone", name: "Prone" },
-    bleeding: { id: "bleeding", name: "Blood Loss", aliases: ["Bleeding"] }
+    bleeding: { id: "bleeding", name: "Bleeding", aliases: ["Blood Loss"] }
   };
 
   const selectedTarget = [...game.user.targets][0];
