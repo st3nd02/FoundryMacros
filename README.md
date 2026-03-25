@@ -218,9 +218,3 @@ The module includes data tables used during play:
   - `dfreds-convenient-effects`
   - `statuscounter`
   - `socketlib`
-- Recommended module:
-  - `fvtt-token-action-hud-core`
-
-## Migration behavior
-
-Legacy macro settings from older worlds are detected and ignored safely in macro-free mode. No macro auto-create/update behavior is performed at startup.
