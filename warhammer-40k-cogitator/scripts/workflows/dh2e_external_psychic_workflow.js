@@ -104,6 +104,20 @@ export async function runPsychicPowerWorkflow() {
     return replaced;
   };
 
+  const evaluateNumericFormula = async expr => {
+    const formula = String(expr ?? "").trim();
+    if (!formula) return 0;
+    const direct = Number(formula);
+    if (Number.isFinite(direct)) return direct;
+    try {
+      const roll = await new Roll(formula).evaluate({ async: true });
+      return Number.isFinite(Number(roll.total)) ? Number(roll.total) : 0;
+    } catch (err) {
+      console.warn("WH40k Cogitator | Failed to evaluate numeric formula:", formula, err);
+      return 0;
+    }
+  };
+
   const inlineRollDice = async text => {
     const diceRegex = /(\d+d\d+)/gi;
     let result = text;
@@ -673,6 +687,7 @@ export async function runPsychicPowerWorkflow() {
 
   const finalFormula = resolveFormula(rawFormula, effectivePR);
   const finalPen = resolveFormula(rawPen, effectivePR);
+  const finalPenValue = await evaluateNumericFormula(finalPen);
   const finalSpecial = resolveFormula(rawSpecial, effectivePR);
   const hitLocation = getHitLocation(manifestRoll);
 
@@ -755,7 +770,7 @@ export async function runPsychicPowerWorkflow() {
       <div style="margin-top:4px;"><b>Target(s):</b> <span style="${styleBlue}">${opposedResult.target}</span> vs <span style="${styleOrange}">${opposedResult.roll}</span></div>
       <div><span style="${targetDegreeStyle}">${opposedResult.dos} ${targetDegreeLabel}</span></div>
       <div style="margin-top:4px;"><span style="${opposedOutcomeStyle}">${opposedOutcomeLabel}</span></div>` : ""}
-      ${hasDamage ? `<hr><div><b>Damage:</b> ${finalFormula} | <b>Type:</b> ${rawType} | <b>Pen:</b> ${finalPen} | <b>Shape:</b> ${shape || "—"} | <b>Hits:</b> ${hits}</div>` : ""}
+      ${hasDamage ? `<hr><div><b>Damage:</b> ${finalFormula} | <b>Type:</b> ${rawType} | <b>Pen:</b> ${finalPenValue} | <b>Shape:</b> ${shape || "—"} | <b>Hits:</b> ${hits}</div>` : ""}
       <div style="margin-top:4px;"><b>Phenomena:</b> ${triggersPhenomena ? `YES (${phenomenaModifier >= 0 ? "+" : ""}${phenomenaModifier})` : "No"}</div>
       ${phenomenaText ? `<div style="margin-top:6px; text-align:center;">${phenomenaText}</div>` : ""}
     </div>`
@@ -788,7 +803,7 @@ export async function runPsychicPowerWorkflow() {
     weaponId: power.id,
     weaponName: power.name,
     weaponDamage: finalFormula,
-    weaponPen: finalPen,
+    weaponPen: finalPenValue,
     weaponType: rawType,
     weaponSpecial: `${finalSpecial}${finalSpecial ? ", " : ""}InfaAmmo`,
     weaponTraits: `${finalSpecial}${finalSpecial ? ", " : ""}InfaAmmo`,
@@ -840,7 +855,7 @@ export async function runPsychicPowerWorkflow() {
         targetTokenUuid: targetToken.document.uuid,
         weapon: power.name,
         damageType: rawType,
-        penetration: finalPen,
+        penetration: finalPenValue,
         hits,
         hitsData,
         dos: manifestDoS,
