@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.55";
+const COGITATOR_VERSION = "2.1.56";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -167,6 +167,7 @@ function registerCombatHooks() {
     if (!actor) return;
     await clearDefenseReaction(actor);
     await applyBleedingTurnStartFatigue(actor);
+    await applyFireTurnStartEffects(actor);
     await clearExpiredTurnStartEffects(actor);
   });
 }
@@ -237,7 +238,48 @@ async function applyBleedingTurnStartFatigue(actor) {
   await actor.update({ "system.fatigue.value": currentFatigue + 1 });
   await ChatMessage.create({
     speaker: { alias: "System" },
-    content: `<b>${actor.name}</b> gains <b>+1 Fatigue</b> at round start due to <b>Bleeding</b>.`
+    content: `<b>${actor.name}</b> gains <b>+1 Fatigue</b> at turn start due to <b>Bleeding</b>.`
+  });
+}
+
+async function applyFireTurnStartEffects(actor) {
+  if (!actor || !game.user?.isGM) return;
+  if (!actorHasCondition(actor, "fire")) return;
+
+  const fireRoll = await new Roll("1d10").evaluate({ async: true });
+  const fireDamage = Number(fireRoll.total ?? 0);
+
+  const woundsMax = Number(actor.system?.wounds?.max ?? 0);
+  const woundsCurrent = Number(actor.system?.wounds?.value ?? 0);
+  const critCurrent = Number(actor.system?.wounds?.critical ?? 0);
+  const newWounds = Math.max(0, woundsCurrent - fireDamage);
+  const overflowToCritical = Math.max(0, fireDamage - woundsCurrent);
+  const newCritical = critCurrent + overflowToCritical;
+
+  const currentFatigue = Number(actor.system?.fatigue?.value ?? 0);
+  const newFatigue = currentFatigue + 1;
+
+  await actor.update({
+    "system.wounds.value": newWounds,
+    "system.wounds.critical": newCritical,
+    "system.fatigue.value": newFatigue
+  });
+
+  await fireRoll.toMessage({
+    speaker: { alias: "System" },
+    flavor: `${actor.name} suffers <b>Fire</b> turn-start effects`
+  });
+
+  const critSummary = overflowToCritical > 0
+    ? `<br><b>Critical Damage (Body):</b> +${overflowToCritical} (Total ${newCritical})`
+    : "";
+  const deathSummary = Number(newCritical ?? 0) > 11
+    ? `<br><span style="color:#ff2a2a;font-weight:900;">${actor.name} exceeds 11 Critical Damage and dies.</span>`
+    : "";
+
+  await ChatMessage.create({
+    speaker: { alias: "System" },
+    content: `<b>${actor.name}</b> takes <b>${fireDamage}</b> <b>Energy</b> damage from <b>Fire</b> (ignores Armour, location: <b>Body</b>).<br><b>Wounds:</b> ${woundsCurrent} → ${newWounds}${Number.isFinite(woundsMax) && woundsMax > 0 ? `/${woundsMax}` : ""}${critSummary}<br><b>Fatigue:</b> ${currentFatigue} → ${newFatigue}${deathSummary}`
   });
 }
 
