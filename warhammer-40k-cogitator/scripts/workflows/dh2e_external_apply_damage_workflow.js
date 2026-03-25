@@ -334,8 +334,14 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
       const remainingRounds = Number(activeEffect.duration?.remaining);
       const currentDuration = Number.isFinite(remainingRounds) ? Math.max(0, Math.ceil(remainingRounds)) : Math.max(0, Number(activeEffect.duration?.rounds ?? 0));
       const nextDuration = Math.max(currentDuration, nextCounter);
-      const combatRound = Number(game.combat?.round ?? 0);
-      const combatTurn = Number(game.combat?.turn ?? 0);
+      const combat = game.combat;
+      let combatRound = Number(combat?.round ?? 0);
+      let combatTurn = Number(combat?.turn ?? 0);
+      const targetTurnIndex = Number(combat?.turns?.findIndex(combatant => combatant?.actor?.id === actorDoc.id) ?? -1);
+      if (Number.isInteger(targetTurnIndex) && targetTurnIndex >= 0) {
+        if (Number.isInteger(combatTurn) && targetTurnIndex < combatTurn) combatRound += 1;
+        combatTurn = targetTurnIndex;
+      }
       await activeEffect.update({
         "flags.statuscounter.value": nextCounter,
         "flags.statuscounter.visible": nextCounter > 1,

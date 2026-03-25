@@ -1012,6 +1012,15 @@ const runAttackWorkflow = async setup => {
     state.extraText = [state.extraText, `${unconsciousMeleeTarget.name} is unconscious: melee attack auto-succeeds (${dos} DoS)`].filter(Boolean).join(" | ");
   }
 
+  if (!success && isMelee && hasWeaponSpecial(weapon, "blade") && setup.toggles?.blademaster && !attacker.effects.some(e => String(e.name ?? "").toLowerCase().includes("blademaster used"))) {
+    const reroll = (await animatedRoll("1d100", chatMessage.speaker)).total;
+    const evalRe = evaluateAttackResult({ result: reroll, targets: state.targets, weapon, traits });
+    state.extraText = [state.extraText, `Blademaster reroll: ${result} → ${reroll}`].filter(Boolean).join(" | ");
+    result = reroll; success = evalRe.success; dos = evalRe.dos; jam = evalRe.jam; bestTN = evalRe.bestTN;
+    state.bestTarget = bestTN;
+    await attacker.createEmbeddedDocuments("ActiveEffect", [{ name: "Blademaster Used", img: "icons/svg/sword.svg", origin: attacker.uuid }]);
+  }
+
   if (!isSpray && !success) {
     const useFate = await promptAttackFateReroll({ actorDoc: attacker, rollValue: result, bestTN });
     if (useFate) {
@@ -1115,15 +1124,6 @@ const runAttackWorkflow = async setup => {
       skipAllOutReactionConsume: true
     }
   };
-
-  if (!success && isMelee && hasWeaponSpecial(weapon, "blade") && setup.toggles?.blademaster && !attacker.effects.some(e => String(e.name ?? "").toLowerCase().includes("blademaster used"))) {
-    const reroll = (await animatedRoll("1d100", chatMessage.speaker)).total;
-    const evalRe = evaluateAttackResult({ result: reroll, targets: state.targets, weapon, traits });
-    state.extraText = [state.extraText, `Blademaster reroll: ${result} → ${reroll}`].filter(Boolean).join(" | ");
-    result = reroll; success = evalRe.success; dos = evalRe.dos; jam = evalRe.jam; bestTN = evalRe.bestTN;
-    state.bestTarget = bestTN;
-    await attacker.createEmbeddedDocuments("ActiveEffect", [{ name: "Blademaster Used", img: "icons/svg/sword.svg", origin: attacker.uuid }]);
-  }
 
   const hitTargets = state.targets.filter(tg => (tg.allocatedHits ?? 0) > 0);
   const consumedDoubleTapTarget = attacker.getFlag(WORKFLOW_NS, DOUBLE_TAP_TARGET_FLAG);
