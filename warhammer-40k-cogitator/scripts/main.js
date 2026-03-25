@@ -163,10 +163,67 @@ function registerCombatHooks() {
     if ("round" in changed && game.user.isGM) {
       await clearResidualWorkflowsOnRoundChange(combat);
     }
-    const actor = combat?.combatant?.actor;
+    const actor = getUpdatedCombatTurnActor(combat, changed);
     if (!actor) return;
     await clearDefenseReaction(actor);
+    await clearExpiredTurnStartEffects(actor);
   });
+}
+
+function getUpdatedCombatTurnActor(combat, changed) {
+  if (!combat) return null;
+
+  const changedTurn = Number(changed?.turn);
+  if (Number.isInteger(changedTurn) && changedTurn >= 0) {
+    return combat.turns?.[changedTurn]?.actor ?? null;
+  }
+
+  return combat.combatant?.actor ?? null;
+}
+
+const TURN_START_EXPIRING_EFFECT_NAMES = new Set(["stunned", "blinded", "deafened", "defeaned"]);
+
+function isTurnStartExpiringEffect(effect) {
+  if (!effect) return false;
+
+  const statusValues = Array.isArray(effect.statuses)
+    ? effect.statuses
+    : Array.from(effect.statuses ?? []);
+  const normalizedStatuses = statusValues.map(status => String(status ?? "").trim().toLowerCase());
+  const coreStatus = String(effect.flags?.core?.statusId ?? "").trim().toLowerCase();
+  const ceStatus = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").trim().toLowerCase();
+  const normalizedName = String(effect.name ?? "").trim().toLowerCase();
+
+  if (normalizedStatuses.some(status => TURN_START_EXPIRING_EFFECT_NAMES.has(status))) return true;
+  if (TURN_START_EXPIRING_EFFECT_NAMES.has(coreStatus)) return true;
+  if (TURN_START_EXPIRING_EFFECT_NAMES.has(ceStatus)) return true;
+  return TURN_START_EXPIRING_EFFECT_NAMES.has(normalizedName);
+}
+
+function getEffectRemainingTurns(effect) {
+  if (!effect) return null;
+
+  const remaining = Number(effect.duration?.remaining);
+  if (Number.isFinite(remaining)) return remaining;
+
+  const rounds = Number(effect.duration?.rounds);
+  if (Number.isFinite(rounds)) return rounds;
+
+  return null;
+}
+
+async function clearExpiredTurnStartEffects(actor) {
+  if (!actor) return;
+  if (!canModifyActorEffects(actor)) return;
+
+  const expiredEffectIds = actor.effects
+    .filter(effect => isTurnStartExpiringEffect(effect) && Number(getEffectRemainingTurns(effect)) <= 0)
+    .map(effect => effect.id)
+    .filter(Boolean);
+
+  if (expiredEffectIds.length) {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", expiredEffectIds);
+  }
 }
 
 async function clearResidualWorkflowsOnRoundChange(combat) {
