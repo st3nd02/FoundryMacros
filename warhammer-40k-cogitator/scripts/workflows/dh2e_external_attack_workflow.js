@@ -1524,13 +1524,13 @@ const showAttackDialog = async () => {
             const id = String(input.attr("id") ?? "");
             const hasIt = hasTalent(attacker, needle);
             const relevant = Object.prototype.hasOwnProperty.call(relevanceById, id) ? !!relevanceById[id] : true;
-            const shown = relevant;
+            const shown = hasIt && relevant;
 
             // Dynamic vertical flow: hide irrelevant talents completely so each column closes gaps upward.
             $label.toggleClass("talent-hidden", !shown);
-            $label.toggleClass("talent-unavailable", !hasIt || !relevant);
+            $label.toggleClass("talent-unavailable", !shown);
 
-            input.prop("disabled", !hasIt || !relevant);
+            input.prop("disabled", !shown);
             if (!relevant || !shown) {
               input.prop("checked", false);
               return;
