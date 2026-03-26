@@ -859,6 +859,7 @@ const runAttackWorkflow = async setup => {
   }
   if (t.flesh && isMelee) selectedTalents.push("Flesh Render");
   if (t.raptor) selectedTalents.push("Raptor");
+  if (t.oneOnOne && isMelee) selectedTalents.push("One-on-One");
   if (t.forceChannel) selectedTalents.push("Force Channeling");
   if (t.nowhereToHide) selectedTalents.push("Nowhere to Hide (auto)");
   const inescapableApplies = !!(
@@ -1029,6 +1030,15 @@ const runAttackWorkflow = async setup => {
       ({ success, dos, jam, bestTN } = evaluateAttackResult({ result, targets: state.targets, weapon, traits }));
       state.bestTarget = bestTN;
       state.extraText = [state.extraText, `${attacker.name} spent Fate to reroll attack`].filter(Boolean).join(" | ");
+    }
+  }
+
+  if (success && !jam && isMelee && t.oneOnOne) {
+    const wsBonus = Number(attacker.system?.characteristics?.weaponSkill?.bonus ?? 0);
+    const oneOnOneBonus = Math.max(0, Math.floor(wsBonus / 2));
+    if (oneOnOneBonus > 0) {
+      dos += oneOnOneBonus;
+      state.extraText = [state.extraText, `One-on-One: +${oneOnOneBonus} DoS`].filter(Boolean).join(" | ");
     }
   }
 
@@ -1375,6 +1385,7 @@ const showAttackDialog = async () => {
           <div class="attack-talents-col">
             <label class="talent-toggle" data-needle="double tap"><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
             <label class="talent-toggle" data-needle="target selection"><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
+            <label class="talent-toggle" data-needle="one-on-one"><input type="checkbox" id="talent_one_on_one"/> One-on-One</label>
             <label class="talent-toggle talent-auto" data-needle="mighty shot"><input type="checkbox" id="talent_mighty" disabled/> Mighty Shot (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="nowhere to hide"><input type="checkbox" id="talent_nowhere_to_hide" disabled/> Nowhere to Hide (auto)</label>
             <label class="talent-toggle talent-auto" data-needle="marksman"><input type="checkbox" id="talent_marksman" disabled/> Marksman (auto)</label>
@@ -1453,6 +1464,7 @@ const showAttackDialog = async () => {
             talent_ambi: hasTalent(attacker, "ambidextrous") && twoWeaponAttack,
             talent_master: hasTalent(attacker, "two weapon master") && twoWeaponAttack,
             talent_doubletap: hasTalent(attacker, "double tap") && twoWeaponAttack,
+            talent_one_on_one: hasTalent(attacker, "one-on-one") && isMelee,
             talent_flesh: hasTalent(attacker, "flesh render") && isMelee && isTearingWeapon,
             talent_raptor: hasTalent(attacker, "raptor") && isMelee && modeKey === "charge",
             talent_inescapable_melee: hasTalent(attacker, "inescapable attack (melee)") && isMelee && ["standard", "called", "charge", "allout"].includes(modeKey),
@@ -1579,6 +1591,7 @@ const showAttackDialog = async () => {
           const pt = pendingMirrorSetup.toggles ?? {};
           html.find("#talent_deadeye").prop("checked", !!pt.deadeye);
           html.find("#talent_doubletap").prop("checked", !!pt.doubletap);
+          html.find("#talent_one_on_one").prop("checked", !!pt.oneOnOne);
           html.find("#talent_targetsel").prop("checked", !!pt.targetsel);
           html.find("#talent_devastating").prop("checked", !!pt.devastating);
           html.find("#talent_blademaster").prop("checked", !!pt.blademaster);
@@ -1656,6 +1669,7 @@ const showAttackDialog = async () => {
                 deadeye: html.find("#talent_deadeye")[0].checked,
                 marksman: html.find("#talent_marksman")[0].checked,
                 doubletap: html.find("#talent_doubletap")[0].checked,
+                oneOnOne: html.find("#talent_one_on_one")[0].checked,
                 targetsel: html.find("#talent_targetsel")[0].checked,
                 devastating: html.find("#talent_devastating")[0].checked,
                 blademaster: html.find("#talent_blademaster")[0].checked,
