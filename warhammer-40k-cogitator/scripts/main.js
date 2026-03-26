@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.69";
+const COGITATOR_VERSION = "2.1.70";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -17,7 +17,8 @@ const SETTINGS = {
 
 const HUD_LAYOUTS = {
   original: "original",
-  metalWarhammer: "metal-warhammer"
+  metalWarhammer: "metal-warhammer",
+  cogitatorTheme: "Cogitator-Theme"
 };
 
 const SOCKET_EVENTS = {
@@ -108,7 +109,8 @@ Hooks.once("init", () => {
     type: String,
     choices: {
       [HUD_LAYOUTS.original]: "Original",
-      [HUD_LAYOUTS.metalWarhammer]: "Metal-Warhammer"
+      [HUD_LAYOUTS.metalWarhammer]: "Metal-Warhammer",
+      [HUD_LAYOUTS.cogitatorTheme]: "Cogitator-Theme"
     },
     default: HUD_LAYOUTS.metalWarhammer,
     onChange: () => refreshWorkflowHud()
@@ -1476,17 +1478,38 @@ function removeWorkflowHud() {
 
 function getWorkflowHudLayoutProfile() {
   const selectedLayout = String(game.settings.get(COGITATOR_ID, SETTINGS.workflowHudLayout) ?? HUD_LAYOUTS.metalWarhammer);
-  const currentLayout = selectedLayout === HUD_LAYOUTS.original ? HUD_LAYOUTS.original : HUD_LAYOUTS.metalWarhammer;
-  const textureBasePath = new URL(`../textures/${HUD_LAYOUTS.metalWarhammer}/`, import.meta.url).href;
+  const currentLayout = Object.values(HUD_LAYOUTS).includes(selectedLayout)
+    ? selectedLayout
+    : HUD_LAYOUTS.metalWarhammer;
+
+  const layoutAssetMap = {
+    [HUD_LAYOUTS.metalWarhammer]: {
+      hudBackground: "Warhammer-40k-Cogitator-HUD-Background.png",
+      buttonBackground: "Warhammer-40k-Cogitator-background-Button.png",
+      buttonPressed: "Warhammer-40k-Cogitator-Button-Pressed.png",
+      cogitatorButton: "Warhammer-40k-cogitator-button.png"
+    },
+    [HUD_LAYOUTS.cogitatorTheme]: {
+      hudBackground: "Cogitator-Background-HUD-Cogitator.png",
+      buttonBackground: "Cogitator-Button-Cogitator.png",
+      buttonPressed: "Cogitator-Pressed-Button-Cogitator.png",
+      cogitatorButton: "Warhammer-40k-cogitator-button.png"
+    }
+  };
+
+  const selectedAssets = layoutAssetMap[currentLayout];
+  const textureBasePath = selectedAssets
+    ? new URL(`../textures/${currentLayout}/`, import.meta.url).href
+    : null;
 
   return {
     id: currentLayout,
-    useTextures: currentLayout === HUD_LAYOUTS.metalWarhammer,
+    useTextures: Boolean(selectedAssets),
     assets: {
-      hudBackground: `${textureBasePath}/Warhammer-40k-Cogitator-HUD-Background.png`,
-      buttonBackground: `${textureBasePath}/Warhammer-40k-Cogitator-background-Button.png`,
-      buttonPressed: `${textureBasePath}/Warhammer-40k-Cogitator-Button-Pressed.png`,
-      cogitatorButton: `${textureBasePath}/Warhammer-40k-cogitator-button.png`
+      hudBackground: selectedAssets ? `${textureBasePath}/${selectedAssets.hudBackground}` : "",
+      buttonBackground: selectedAssets ? `${textureBasePath}/${selectedAssets.buttonBackground}` : "",
+      buttonPressed: selectedAssets ? `${textureBasePath}/${selectedAssets.buttonPressed}` : "",
+      cogitatorButton: selectedAssets ? `${textureBasePath}/${selectedAssets.cogitatorButton}` : ""
     }
   };
 }
