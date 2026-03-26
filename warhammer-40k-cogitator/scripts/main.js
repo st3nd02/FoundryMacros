@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.67";
+const COGITATOR_VERSION = "2.1.69";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -1477,7 +1477,7 @@ function removeWorkflowHud() {
 function getWorkflowHudLayoutProfile() {
   const selectedLayout = String(game.settings.get(COGITATOR_ID, SETTINGS.workflowHudLayout) ?? HUD_LAYOUTS.metalWarhammer);
   const currentLayout = selectedLayout === HUD_LAYOUTS.original ? HUD_LAYOUTS.original : HUD_LAYOUTS.metalWarhammer;
-  const textureBasePath = `modules/${COGITATOR_ID}/textures/${HUD_LAYOUTS.metalWarhammer}`;
+  const textureBasePath = new URL(`../textures/${HUD_LAYOUTS.metalWarhammer}/`, import.meta.url).href;
 
   return {
     id: currentLayout,
