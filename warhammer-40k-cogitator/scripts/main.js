@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.63";
+const COGITATOR_VERSION = "2.1.64";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -1613,16 +1613,6 @@ class WorkflowHud {
     buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
     buttonEl.style.cursor = button ? "pointer" : "default";
     buttonEl.style.transition = "border-color 120ms ease, color 120ms ease, box-shadow 120ms ease";
-    const highlightedActionIds = new Set(["medical", "healing", "restoreFate", "skill", "characteristic", "forceField"]);
-    if (highlightedActionIds.has(button?.id)) {
-      buttonEl.style.backgroundColor = "#b7a982";
-      buttonEl.style.backgroundImage = `url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Button-Pressed.png"), linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(207,192,155,0.18) 0%, rgba(183,169,130,0.20) 100%)`;
-      buttonEl.style.backgroundSize = "cover, auto, auto";
-      buttonEl.style.backgroundPosition = "center, center, center";
-      buttonEl.style.backgroundRepeat = "no-repeat, repeat, repeat";
-      buttonEl.style.color = "var(--wh-ink)";
-      buttonEl.style.textShadow = "0 1px 0 rgba(255,255,255,0.2)";
-    }
     if (!button) {
       buttonEl.disabled = true;
       buttonEl.style.opacity = "0.82";
@@ -1636,12 +1626,24 @@ class WorkflowHud {
       });
       buttonEl.addEventListener("mouseenter", () => {
         buttonEl.style.borderColor = "var(--wh-brass-light)";
-        buttonEl.style.color = highlightedActionIds.has(button?.id) ? "#1f1a10" : "#f2ead8";
+        buttonEl.style.backgroundColor = "#b7a982";
+        buttonEl.style.backgroundImage = `url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Button-Pressed.png"), linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(207,192,155,0.18) 0%, rgba(183,169,130,0.20) 100%)`;
+        buttonEl.style.backgroundSize = "cover, auto, auto";
+        buttonEl.style.backgroundPosition = "center, center, center";
+        buttonEl.style.backgroundRepeat = "no-repeat, repeat, repeat";
+        buttonEl.style.color = "#1f1a10";
+        buttonEl.style.textShadow = "0 1px 0 rgba(255,255,255,0.2)";
         buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -3px 6px rgba(0,0,0,0.35), 0 0 6px rgba(122,15,15,0.18)";
       });
       buttonEl.addEventListener("mouseleave", () => {
         buttonEl.style.borderColor = "var(--wh-brass-dark)";
-        buttonEl.style.color = highlightedActionIds.has(button?.id) ? "var(--wh-ink)" : "var(--wh-text)";
+        buttonEl.style.backgroundColor = "#23282d";
+        buttonEl.style.backgroundImage = `url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Background-Button.png"), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)`;
+        buttonEl.style.backgroundSize = "cover, auto, auto";
+        buttonEl.style.backgroundPosition = "center, center, center";
+        buttonEl.style.backgroundRepeat = "no-repeat, repeat, repeat";
+        buttonEl.style.color = "var(--wh-text)";
+        buttonEl.style.textShadow = "0 1px 1px rgba(0,0,0,0.7)";
         buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
       });
     }
