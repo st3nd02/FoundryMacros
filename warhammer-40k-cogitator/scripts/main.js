@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.56";
+const COGITATOR_VERSION = "2.1.59";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -1495,7 +1495,7 @@ class WorkflowHud {
       this.element.style.border = "1px solid var(--wh-brass-dark)";
       this.element.style.background = "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 18%, rgba(0,0,0,0.16) 100%), linear-gradient(145deg, var(--wh-metal-light) 0%, var(--wh-metal) 38%, var(--wh-metal-dark) 100%)";
       this.element.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -2px 8px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.45)";
-      this.element.style.zIndex = "9999";
+      this.element.style.zIndex = "45";
       this.element.style.alignItems = "center";
       this.element.style.userSelect = "none";
       this.element.style.pointerEvents = "all";
