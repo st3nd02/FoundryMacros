@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.59";
+const COGITATOR_VERSION = "2.1.63";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -1494,10 +1494,10 @@ class WorkflowHud {
       this.element.style.display = "grid";
       this.element.style.border = "1px solid var(--wh-brass-dark)";
       this.element.style.backgroundColor = "var(--wh-metal)";
-      this.element.style.backgroundImage = `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 18%, rgba(0,0,0,0.16) 100%), linear-gradient(145deg, var(--wh-metal-light) 0%, var(--wh-metal) 38%, var(--wh-metal-dark) 100%), url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-HUD-Background.png")`;
-      this.element.style.backgroundSize = "auto, auto, cover";
+      this.element.style.backgroundImage = `url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-HUD-Background.png"), linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 18%, rgba(0,0,0,0.12) 100%), linear-gradient(145deg, rgba(58,64,70,0.18) 0%, rgba(42,47,52,0.12) 38%, rgba(28,31,34,0.18) 100%)`;
+      this.element.style.backgroundSize = "cover, auto, auto";
       this.element.style.backgroundPosition = "center, center, center";
-      this.element.style.backgroundRepeat = "repeat, repeat, no-repeat";
+      this.element.style.backgroundRepeat = "no-repeat, repeat, repeat";
       this.element.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -2px 8px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.45)";
       this.element.style.zIndex = "45";
       this.element.style.alignItems = "center";
@@ -1599,10 +1599,10 @@ class WorkflowHud {
     buttonEl.style.fontSize = px(12);
     buttonEl.style.minHeight = px(36);
     buttonEl.style.backgroundColor = "#23282d";
-    buttonEl.style.backgroundImage = `linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.10) 100%), linear-gradient(145deg, #31373d 0%, #23282d 55%, #1b1f23 100%), url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Background-Button.png")`;
-    buttonEl.style.backgroundSize = "auto, auto, cover";
+    buttonEl.style.backgroundImage = `url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Background-Button.png"), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)`;
+    buttonEl.style.backgroundSize = "cover, auto, auto";
     buttonEl.style.backgroundPosition = "center, center, center";
-    buttonEl.style.backgroundRepeat = "repeat, repeat, no-repeat";
+    buttonEl.style.backgroundRepeat = "no-repeat, repeat, repeat";
     buttonEl.style.border = "1px solid var(--wh-brass-dark)";
     buttonEl.style.borderRadius = px(4);
     buttonEl.style.color = "var(--wh-text)";
@@ -1616,10 +1616,10 @@ class WorkflowHud {
     const highlightedActionIds = new Set(["medical", "healing", "restoreFate", "skill", "characteristic", "forceField"]);
     if (highlightedActionIds.has(button?.id)) {
       buttonEl.style.backgroundColor = "#b7a982";
-      buttonEl.style.backgroundImage = `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%), linear-gradient(145deg, #cfc09b 0%, #b7a982 100%), url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Button-Pressed.png")`;
-      buttonEl.style.backgroundSize = "auto, auto, cover";
+      buttonEl.style.backgroundImage = `url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Button-Pressed.png"), linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(207,192,155,0.18) 0%, rgba(183,169,130,0.20) 100%)`;
+      buttonEl.style.backgroundSize = "cover, auto, auto";
       buttonEl.style.backgroundPosition = "center, center, center";
-      buttonEl.style.backgroundRepeat = "repeat, repeat, no-repeat";
+      buttonEl.style.backgroundRepeat = "no-repeat, repeat, repeat";
       buttonEl.style.color = "var(--wh-ink)";
       buttonEl.style.textShadow = "0 1px 0 rgba(255,255,255,0.2)";
     }
@@ -1691,11 +1691,11 @@ class WorkflowHud {
     cell.style.cursor = "pointer";
     cell.style.backgroundColor = locked ? "#23282d" : "#3f0505";
     cell.style.backgroundImage = locked
-      ? `linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.15) 100%), linear-gradient(145deg, #31373d 0%, #23282d 55%, #1b1f23 100%), url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Background-Button.png")`
-      : `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.15) 100%), repeating-linear-gradient(45deg, rgba(0,0,0,0) 0 8px, rgba(0,0,0,0) 8px 10px, rgba(199,163,0,0.25) 10px 16px, rgba(0,0,0,0) 16px 18px), linear-gradient(145deg, #5b1010 0%, #3f0505 100%), url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Button-Pressed.png")`;
-    cell.style.backgroundSize = "auto, auto, auto, cover";
+      ? `url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Background-Button.png"), linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.10) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)`
+      : `url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Button-Pressed.png"), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.12) 100%), repeating-linear-gradient(45deg, rgba(0,0,0,0) 0 8px, rgba(0,0,0,0) 8px 10px, rgba(199,163,0,0.18) 10px 16px, rgba(0,0,0,0) 16px 18px), linear-gradient(145deg, rgba(91,16,16,0.20) 0%, rgba(63,5,5,0.22) 100%)`;
+    cell.style.backgroundSize = "cover, auto, auto, auto";
     cell.style.backgroundPosition = "center, center, center, center";
-    cell.style.backgroundRepeat = "repeat, repeat, repeat, no-repeat";
+    cell.style.backgroundRepeat = "no-repeat, repeat, repeat, repeat";
     cell.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
     cell.title = locked ? "Unlock bar" : "Lock bar";
     cell.addEventListener("pointerdown", event => event.stopPropagation());
