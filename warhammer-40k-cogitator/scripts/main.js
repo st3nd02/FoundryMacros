@@ -1494,7 +1494,7 @@ class WorkflowHud {
       this.element.style.display = "grid";
       this.element.style.border = "1px solid var(--wh-brass-dark)";
       this.element.style.backgroundColor = "var(--wh-metal)";
-      this.element.style.backgroundImage = `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 18%, rgba(0,0,0,0.16) 100%), linear-gradient(145deg, var(--wh-metal-light) 0%, var(--wh-metal) 38%, var(--wh-metal-dark) 100%), url("modules/${COGITATOR_ID}/Warhammer 40k Cogitator HUD Background.png")`;
+      this.element.style.backgroundImage = `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 18%, rgba(0,0,0,0.16) 100%), linear-gradient(145deg, var(--wh-metal-light) 0%, var(--wh-metal) 38%, var(--wh-metal-dark) 100%), url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-HUD-Background.png")`;
       this.element.style.backgroundSize = "auto, auto, cover";
       this.element.style.backgroundPosition = "center, center, center";
       this.element.style.backgroundRepeat = "repeat, repeat, no-repeat";
@@ -1599,7 +1599,7 @@ class WorkflowHud {
     buttonEl.style.fontSize = px(12);
     buttonEl.style.minHeight = px(36);
     buttonEl.style.backgroundColor = "#23282d";
-    buttonEl.style.backgroundImage = `linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.10) 100%), linear-gradient(145deg, #31373d 0%, #23282d 55%, #1b1f23 100%), url("modules/${COGITATOR_ID}/Warhammer 40k Cogitator Button.png")`;
+    buttonEl.style.backgroundImage = `linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.10) 100%), linear-gradient(145deg, #31373d 0%, #23282d 55%, #1b1f23 100%), url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Background-Button.png")`;
     buttonEl.style.backgroundSize = "auto, auto, cover";
     buttonEl.style.backgroundPosition = "center, center, center";
     buttonEl.style.backgroundRepeat = "repeat, repeat, no-repeat";
@@ -1616,7 +1616,7 @@ class WorkflowHud {
     const highlightedActionIds = new Set(["medical", "healing", "restoreFate", "skill", "characteristic", "forceField"]);
     if (highlightedActionIds.has(button?.id)) {
       buttonEl.style.backgroundColor = "#b7a982";
-      buttonEl.style.backgroundImage = `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%), linear-gradient(145deg, #cfc09b 0%, #b7a982 100%), url("modules/${COGITATOR_ID}/Warhammer 40k Cogitator Button Pressed.png")`;
+      buttonEl.style.backgroundImage = `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%), linear-gradient(145deg, #cfc09b 0%, #b7a982 100%), url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Button-Pressed.png")`;
       buttonEl.style.backgroundSize = "auto, auto, cover";
       buttonEl.style.backgroundPosition = "center, center, center";
       buttonEl.style.backgroundRepeat = "repeat, repeat, no-repeat";
@@ -1691,8 +1691,8 @@ class WorkflowHud {
     cell.style.cursor = "pointer";
     cell.style.backgroundColor = locked ? "#23282d" : "#3f0505";
     cell.style.backgroundImage = locked
-      ? `linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.15) 100%), linear-gradient(145deg, #31373d 0%, #23282d 55%, #1b1f23 100%), url("modules/${COGITATOR_ID}/Warhammer 40k Cogitator Button.png")`
-      : `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.15) 100%), repeating-linear-gradient(45deg, rgba(0,0,0,0) 0 8px, rgba(0,0,0,0) 8px 10px, rgba(199,163,0,0.25) 10px 16px, rgba(0,0,0,0) 16px 18px), linear-gradient(145deg, #5b1010 0%, #3f0505 100%), url("modules/${COGITATOR_ID}/Warhammer 40k Cogitator Button Pressed.png")`;
+      ? `linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.15) 100%), linear-gradient(145deg, #31373d 0%, #23282d 55%, #1b1f23 100%), url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Background-Button.png")`
+      : `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.15) 100%), repeating-linear-gradient(45deg, rgba(0,0,0,0) 0 8px, rgba(0,0,0,0) 8px 10px, rgba(199,163,0,0.25) 10px 16px, rgba(0,0,0,0) 16px 18px), linear-gradient(145deg, #5b1010 0%, #3f0505 100%), url("modules/${COGITATOR_ID}/Warhammer-40k-Cogitator-Button-Pressed.png")`;
     cell.style.backgroundSize = "auto, auto, auto, cover";
     cell.style.backgroundPosition = "center, center, center, center";
     cell.style.backgroundRepeat = "repeat, repeat, repeat, no-repeat";
