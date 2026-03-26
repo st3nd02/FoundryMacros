@@ -1508,16 +1508,16 @@ function getWorkflowHudLayoutProfile() {
   const selectedAssets = layoutAssetMap[currentLayout];
   const textureBasePath = selectedAssets
     ? new URL(`../textures/${currentLayout}/`, import.meta.url).href
-    : null;
+    : "";
 
   return {
     id: currentLayout,
     useTextures: Boolean(selectedAssets),
     assets: {
-      hudBackground: selectedAssets ? `${textureBasePath}/${selectedAssets.hudBackground}` : "",
-      buttonBackground: selectedAssets ? `${textureBasePath}/${selectedAssets.buttonBackground}` : "",
-      buttonPressed: selectedAssets ? `${textureBasePath}/${selectedAssets.buttonPressed}` : "",
-      cogitatorButton: selectedAssets ? `${textureBasePath}/${selectedAssets.cogitatorButton}` : ""
+      hudBackground: selectedAssets ? new URL(selectedAssets.hudBackground, textureBasePath).href : "",
+      buttonBackground: selectedAssets ? new URL(selectedAssets.buttonBackground, textureBasePath).href : "",
+      buttonPressed: selectedAssets ? new URL(selectedAssets.buttonPressed, textureBasePath).href : "",
+      cogitatorButton: selectedAssets ? new URL(selectedAssets.cogitatorButton, textureBasePath).href : ""
     }
   };
 }
