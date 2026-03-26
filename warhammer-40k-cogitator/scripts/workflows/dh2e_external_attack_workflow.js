@@ -1388,31 +1388,34 @@ const showAttackDialog = async () => {
           <div class="attack-talents-col">
             <label class="talent-toggle" data-needle="double tap"><input type="checkbox" id="talent_doubletap"/> Double Tap</label>
             <label class="talent-toggle" data-needle="target selection"><input type="checkbox" id="talent_targetsel"/> Target Selection</label>
+            <label class="talent-toggle" data-needle="mighty shot"><input type="checkbox" id="talent_mighty"/> Mighty Shot</label>
+            <label class="talent-toggle" data-needle="marksman"><input type="checkbox" id="talent_marksman"/> Marksman</label>
+            <label class="talent-toggle" data-needle="deadeye"><input type="checkbox" id="talent_deadeye"/> Deadeye Shot</label>
+            <label class="talent-toggle" data-needle="precision killer (ranged)"><input type="checkbox" id="talent_precision_ranged"/> Precision Killer (Ranged)</label>
+            <label class="talent-toggle" data-needle="inescapable attack (ranged)"><input type="checkbox" id="talent_inescapable_ranged"/> Inescapable Attack (Ranged)</label>
+          </div>
+          <div class="attack-talents-col">
             <label class="talent-toggle" data-needle="one-on-one"><input type="checkbox" id="talent_one_on_one"/> One-on-One</label>
-            <label class="talent-toggle talent-auto" data-needle="mighty shot"><input type="checkbox" id="talent_mighty" disabled/> Mighty Shot (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="nowhere to hide"><input type="checkbox" id="talent_nowhere_to_hide" disabled/> Nowhere to Hide (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="marksman"><input type="checkbox" id="talent_marksman" disabled/> Marksman (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="deadeye"><input type="checkbox" id="talent_deadeye" disabled/> Deadeye Shot (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="precision killer (ranged)"><input type="checkbox" id="talent_precision_ranged" disabled/> Precision Killer (Ranged) (auto)</label>
-          </div>
-          <div class="attack-talents-col">
-            <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
+            <label class="talent-toggle" data-needle="blademaster"><input type="checkbox" id="talent_blademaster"/> Blademaster</label>
             <label class="talent-toggle" data-needle="whirlwind"><input type="checkbox" id="talent_whirlwind"/> Whirlwind of Death</label>
+            <label class="talent-toggle" data-needle="hammer blow"><input type="checkbox" id="talent_hammer"/> Hammer Blow</label>
+            <label class="talent-toggle" data-needle="devastating assault"><input type="checkbox" id="talent_devastating"/> Devastating Assault</label>
             <label class="talent-toggle" data-needle="raptor"><input type="checkbox" id="talent_raptor"/> Raptor</label>
-            <label class="talent-toggle talent-auto" data-needle="blademaster"><input type="checkbox" id="talent_blademaster" disabled/> Blademaster (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="berserk charge"><input type="checkbox" id="talent_berserk" disabled/> Berserk Charge (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="flesh render"><input type="checkbox" id="talent_flesh" disabled/> Flesh Render (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="precision killer (melee)"><input type="checkbox" id="talent_precision_melee" disabled/> Precision Killer (Melee) (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="crushing blow"><input type="checkbox" id="talent_crushing" disabled/> Crushing Blow (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="hammer blow"><input type="checkbox" id="talent_hammer" disabled/> Hammer Blow (auto)</label>
+            <label class="talent-toggle" data-needle="berserk charge"><input type="checkbox" id="talent_berserk"/> Berserk Charge</label>
+            <label class="talent-toggle" data-needle="flesh render"><input type="checkbox" id="talent_flesh"/> Flesh Render</label>
+            <label class="talent-toggle" data-needle="precision killer (melee)"><input type="checkbox" id="talent_precision_melee"/> Precision Killer (Melee)</label>
+            <label class="talent-toggle" data-needle="crushing blow"><input type="checkbox" id="talent_crushing"/> Crushing Blow</label>
+            <label class="talent-toggle" data-needle="inescapable attack (melee)"><input type="checkbox" id="talent_inescapable_melee"/> Inescapable Attack (Melee)</label>
           </div>
           <div class="attack-talents-col">
-            <label class="talent-toggle talent-auto" data-needle="inescapable attack (melee)"><input type="checkbox" id="talent_inescapable_melee" disabled/> Inescapable Attack (Melee) (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="inescapable attack (ranged)"><input type="checkbox" id="talent_inescapable_ranged" disabled/> Inescapable Attack (Ranged) (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="ambidextrous"><input type="checkbox" id="talent_ambi" disabled/> Ambidextrous (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (melee)"><input type="checkbox" id="talent_twm_melee" disabled/> Two-Weapon Wielder (Melee) (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="two-weapon wielder (ranged)"><input type="checkbox" id="talent_twm_ranged" disabled/> Two-Weapon Wielder (Ranged) (auto)</label>
-            <label class="talent-toggle talent-auto" data-needle="two weapon master"><input type="checkbox" id="talent_master" disabled/> Two Weapon Master (auto)</label>
+            <label class="talent-toggle" data-needle="nowhere to hide"><input type="checkbox" id="talent_nowhere_to_hide"/> Nowhere to Hide</label>
+            <label class="talent-toggle" data-needle="ambidextrous"><input type="checkbox" id="talent_ambi"/> Ambidextrous</label>
+            <label class="talent-toggle" data-needle="two-weapon wielder (melee)"><input type="checkbox" id="talent_twm_melee"/> Two-Weapon Wielder (Melee)</label>
+            <label class="talent-toggle" data-needle="two-weapon wielder (ranged)"><input type="checkbox" id="talent_twm_ranged"/> Two-Weapon Wielder (Ranged)</label>
+            <label class="talent-toggle" data-needle="two weapon master"><input type="checkbox" id="talent_master"/> Two Weapon Master</label>
+            <label class="talent-toggle" data-needle="swift attack"><input type="checkbox" id="talent_swift"/> Swift Attack</label>
+            <label class="talent-toggle" data-needle="lightning attack"><input type="checkbox" id="talent_lightning"/> Lightning Attack</label>
+            <label class="talent-toggle" data-needle="true grit"><input type="checkbox" id="talent_true_grit"/> True Grit</label>
           </div>
         </div>
         <hr><h3>Targets</h3>
@@ -1454,32 +1457,64 @@ const showAttackDialog = async () => {
           const isBladeWeapon = hasWeaponSpecial(weaponDoc, "blade");
           const twoWeaponAttack = !!html.find("#twoWeaponAttack")[0]?.checked;
 
+          const shootingMelee = !!html.find("#shootMelee")[0]?.checked;
+          const hasHordeTargetNow = hasHordeTarget();
           const relevanceById = {
-            talent_blademaster: hasTalent(attacker, "blademaster") && isMelee && isBladeWeapon,
-            talent_berserk: hasTalent(attacker, "berserk charge") && isMelee && modeKey === "charge",
-            talent_deadeye: hasTalent(attacker, "deadeye") && !isMelee && modeKey === "called",
-            talent_marksman: hasTalent(attacker, "marksman") && !isMelee,
-            talent_crushing: hasTalent(attacker, "crushing blow") && isMelee,
-            talent_mighty: hasTalent(attacker, "mighty shot") && !isMelee,
-            talent_hammer: hasTalent(attacker, "hammer blow") && isMelee,
-            talent_twm_melee: hasTalent(attacker, "two-weapon wielder (melee)") && isMelee && twoWeaponAttack,
-            talent_twm_ranged: hasTalent(attacker, "two-weapon wielder (ranged)") && !isMelee && twoWeaponAttack,
-            talent_ambi: hasTalent(attacker, "ambidextrous") && twoWeaponAttack,
-            talent_master: hasTalent(attacker, "two weapon master") && twoWeaponAttack,
-            talent_doubletap: hasTalent(attacker, "double tap") && twoWeaponAttack,
-            talent_one_on_one: hasTalent(attacker, "one-on-one") && isMelee,
-            talent_flesh: hasTalent(attacker, "flesh render") && isMelee && isTearingWeapon,
-            talent_raptor: hasTalent(attacker, "raptor") && isMelee && modeKey === "charge",
-            talent_inescapable_melee: hasTalent(attacker, "inescapable attack (melee)") && isMelee && ["standard", "called", "charge", "allout"].includes(modeKey),
-            talent_inescapable_ranged: hasTalent(attacker, "inescapable attack (ranged)") && !isMelee && ["single", "called"].includes(modeKey),
-            talent_precision_melee: hasTalent(attacker, "precision killer (melee)") && isMelee && modeKey === "called",
-            talent_precision_ranged: hasTalent(attacker, "precision killer (ranged)") && !isMelee && modeKey === "called",
-            talent_nowhere_to_hide: hasTalent(attacker, "nowhere to hide")
+            talent_doubletap: twoWeaponAttack,
+            talent_targetsel: shootingMelee,
+            talent_mighty: !isMelee,
+            talent_marksman: !isMelee,
+            talent_deadeye: !isMelee && modeKey === "called",
+            talent_precision_ranged: !isMelee && modeKey === "called",
+            talent_inescapable_ranged: !isMelee && ["single", "called"].includes(modeKey),
+            talent_one_on_one: isMelee,
+            talent_blademaster: isMelee && isBladeWeapon,
+            talent_whirlwind: isMelee && modeKey === "standard",
+            talent_hammer: isMelee && modeKey === "allout",
+            talent_devastating: isMelee && modeKey === "allout",
+            talent_raptor: isMelee && modeKey === "charge",
+            talent_berserk: isMelee && modeKey === "charge",
+            talent_flesh: isMelee && isTearingWeapon,
+            talent_precision_melee: isMelee && modeKey === "called",
+            talent_crushing: isMelee,
+            talent_inescapable_melee: isMelee && ["standard", "called", "charge", "allout"].includes(modeKey),
+            talent_nowhere_to_hide: true,
+            talent_ambi: true,
+            talent_twm_melee: isMelee,
+            talent_twm_ranged: !isMelee,
+            talent_master: true,
+            talent_swift: isMelee,
+            talent_lightning: isMelee,
+            talent_true_grit: true
           };
 
-          const showById = {
-            talent_raptor: !!relevanceById.talent_raptor,
-            talent_marksman: !!relevanceById.talent_marksman
+          const defaultCheckedById = {
+            talent_doubletap: false,
+            talent_targetsel: true,
+            talent_mighty: true,
+            talent_marksman: true,
+            talent_deadeye: true,
+            talent_precision_ranged: true,
+            talent_inescapable_ranged: true,
+            talent_one_on_one: false,
+            talent_blademaster: true,
+            talent_whirlwind: hasHordeTargetNow,
+            talent_hammer: false,
+            talent_devastating: false,
+            talent_raptor: false,
+            talent_berserk: true,
+            talent_flesh: true,
+            talent_precision_melee: true,
+            talent_crushing: true,
+            talent_inescapable_melee: true,
+            talent_nowhere_to_hide: true,
+            talent_ambi: true,
+            talent_twm_melee: true,
+            talent_twm_ranged: true,
+            talent_master: true,
+            talent_swift: true,
+            talent_lightning: true,
+            talent_true_grit: true
           };
 
           html.find(".talent-toggle").each((_, el) => {
@@ -1488,24 +1523,23 @@ const showAttackDialog = async () => {
             const input = $label.find("input");
             const id = String(input.attr("id") ?? "");
             const hasIt = hasTalent(attacker, needle);
-            const relevant = Object.prototype.hasOwnProperty.call(relevanceById, id) ? !!relevanceById[id] : hasIt;
-            const shown = Object.prototype.hasOwnProperty.call(showById, id) ? !!showById[id] : hasIt;
+            const relevant = Object.prototype.hasOwnProperty.call(relevanceById, id) ? !!relevanceById[id] : true;
+            const shown = relevant;
 
             // Dynamic vertical flow: hide irrelevant talents completely so each column closes gaps upward.
             $label.toggleClass("talent-hidden", !shown);
             $label.toggleClass("talent-unavailable", !hasIt || !relevant);
 
-            if ($label.hasClass("talent-auto")) {
-              input.prop("disabled", true);
-              input.prop("checked", hasIt && relevant);
+            input.prop("disabled", !hasIt || !relevant);
+            if (!relevant || !shown) {
+              input.prop("checked", false);
               return;
             }
-
-            input.prop("disabled", !hasIt || !relevant);
-            if (!relevant || !shown) input.prop("checked", false);
+            if (input[0]?.dataset.userSet === "1") return;
+            if (!pendingMirrorSetup && Object.prototype.hasOwnProperty.call(defaultCheckedById, id)) {
+              input.prop("checked", !!defaultCheckedById[id]);
+            }
           });
-
-          html.find("#talent_marksman").prop("checked", !!relevanceById.talent_marksman);
         };
 
         const refresh = () => {
@@ -1627,6 +1661,7 @@ const showAttackDialog = async () => {
           refreshAttackSpecifics();
           refreshTalents();
         });
+        html.find("#shootMelee").on("change", refreshTalents);
         html.find("#horde").on("change", syncHordeBonus);
         refresh();
         if (pendingMirrorSetup) {
