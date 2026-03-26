@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.70";
+const COGITATOR_VERSION = "2.1.71";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -18,7 +18,8 @@ const SETTINGS = {
 const HUD_LAYOUTS = {
   original: "original",
   metalWarhammer: "metal-warhammer",
-  cogitatorTheme: "Cogitator-Theme"
+  cogitatorTheme: "Cogitator-Theme",
+  chaosTheme: "Chaos"
 };
 
 const SOCKET_EVENTS = {
@@ -110,7 +111,8 @@ Hooks.once("init", () => {
     choices: {
       [HUD_LAYOUTS.original]: "Original",
       [HUD_LAYOUTS.metalWarhammer]: "Metal-Warhammer",
-      [HUD_LAYOUTS.cogitatorTheme]: "Cogitator-Theme"
+      [HUD_LAYOUTS.cogitatorTheme]: "Cogitator-Theme",
+      [HUD_LAYOUTS.chaosTheme]: "Chaos-Theme"
     },
     default: HUD_LAYOUTS.metalWarhammer,
     onChange: () => refreshWorkflowHud()
@@ -1494,6 +1496,12 @@ function getWorkflowHudLayoutProfile() {
       buttonBackground: "Cogitator-Button-Cogitator.png",
       buttonPressed: "Cogitator-Pressed-Button-Cogitator.png",
       cogitatorButton: "Warhammer-40k-cogitator-button.png"
+    },
+    [HUD_LAYOUTS.chaosTheme]: {
+      hudBackground: "Chaos-Background.png",
+      buttonBackground: "Chaos-Button.png",
+      buttonPressed: "Chaos-pressed-button.png",
+      cogitatorButton: "Dark_Mechanicum_Icon.png"
     }
   };
 
@@ -1577,12 +1585,14 @@ class WorkflowHud {
       this.element.style.setProperty("--wh-ink", "#2b2416");
       this.element.style.setProperty("--wh-yellow-dirty", "#9a7f00");
       this.element.style.setProperty("--wh-yellow", "#c7a300");
-      this.element.style.setProperty("--wh-text", "#e6dcc5");
+      this.element.style.setProperty("--wh-text", layoutProfile.id === HUD_LAYOUTS.chaosTheme ? "#f5f5dc" : "#e6dcc5");
       this.element.style.setProperty("--wh-shadow", "rgba(0, 0, 0, 0.65)");
       this.element.style.setProperty("--wh-shadow-deep", "rgba(0, 0, 0, 0.85)");
 
       this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
     }
+
+    this.element.style.setProperty("--wh-text", layoutProfile.id === HUD_LAYOUTS.chaosTheme ? "#f5f5dc" : "#e6dcc5");
 
     this.element.style.backgroundColor = "var(--wh-metal)";
     this.element.style.backgroundImage = layoutProfile.useTextures
