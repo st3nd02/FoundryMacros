@@ -1484,7 +1484,7 @@ function getWorkflowHudLayoutProfile() {
     useTextures: currentLayout === HUD_LAYOUTS.metalWarhammer,
     assets: {
       hudBackground: `${textureBasePath}/Warhammer-40k-Cogitator-HUD-Background.png`,
-      buttonBackground: `${textureBasePath}/Warhammer-40k-Cogitator-Background-Button.png`,
+      buttonBackground: `${textureBasePath}/Warhammer-40k-Cogitator-background-Button.png`,
       buttonPressed: `${textureBasePath}/Warhammer-40k-Cogitator-Button-Pressed.png`,
       cogitatorButton: `${textureBasePath}/Warhammer-40k-cogitator-button.png`
     }
