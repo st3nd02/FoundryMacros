@@ -1346,7 +1346,10 @@ const showAttackDialog = async () => {
           .attack-specifics-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; align-items:center; }
           .attack-dialog-row-2col { display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; }
           .attack-talents-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px 12px; align-items:start; }
-          .attack-talents-col { display:grid; gap:4px; }
+          /* Keep the existing 3 columns, but stack visible talents naturally so hidden rows collapse upward. */
+          .attack-talents-col { display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
+          .attack-talents-col .talent-toggle { width:100%; }
+          .talent-hidden { display:none !important; }
           .talent-unavailable { color:#8a8a8a; }
           .talent-auto input { opacity:0.65; }
         </style>
@@ -1488,7 +1491,8 @@ const showAttackDialog = async () => {
             const relevant = Object.prototype.hasOwnProperty.call(relevanceById, id) ? !!relevanceById[id] : hasIt;
             const shown = Object.prototype.hasOwnProperty.call(showById, id) ? !!showById[id] : hasIt;
 
-            $label.toggle(shown);
+            // Dynamic vertical flow: hide irrelevant talents completely so each column closes gaps upward.
+            $label.toggleClass("talent-hidden", !shown);
             $label.toggleClass("talent-unavailable", !hasIt || !relevant);
 
             if ($label.hasClass("talent-auto")) {
