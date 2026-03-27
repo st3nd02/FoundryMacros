@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.71";
+const COGITATOR_VERSION = "2.1.73";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -112,7 +112,7 @@ Hooks.once("init", () => {
       [HUD_LAYOUTS.original]: "Original",
       [HUD_LAYOUTS.metalWarhammer]: "Metal-Warhammer",
       [HUD_LAYOUTS.cogitatorTheme]: "Cogitator-Theme",
-      [HUD_LAYOUTS.chaosTheme]: "Chaos-Theme"
+      [HUD_LAYOUTS.chaosTheme]: "Chaos"
     },
     default: HUD_LAYOUTS.metalWarhammer,
     onChange: () => refreshWorkflowHud()
@@ -1480,24 +1480,30 @@ function removeWorkflowHud() {
 
 function getWorkflowHudLayoutProfile() {
   const selectedLayout = String(game.settings.get(COGITATOR_ID, SETTINGS.workflowHudLayout) ?? HUD_LAYOUTS.metalWarhammer);
-  const currentLayout = Object.values(HUD_LAYOUTS).includes(selectedLayout)
-    ? selectedLayout
+  const normalizedSelectedLayout = selectedLayout === "Chaos-Theme"
+    ? HUD_LAYOUTS.chaosTheme
+    : selectedLayout;
+  const currentLayout = Object.values(HUD_LAYOUTS).includes(normalizedSelectedLayout)
+    ? normalizedSelectedLayout
     : HUD_LAYOUTS.metalWarhammer;
 
   const layoutAssetMap = {
     [HUD_LAYOUTS.metalWarhammer]: {
+      textureFolder: HUD_LAYOUTS.metalWarhammer,
       hudBackground: "Warhammer-40k-Cogitator-HUD-Background.png",
       buttonBackground: "Warhammer-40k-Cogitator-background-Button.png",
       buttonPressed: "Warhammer-40k-Cogitator-Button-Pressed.png",
       cogitatorButton: "Warhammer-40k-cogitator-button.png"
     },
     [HUD_LAYOUTS.cogitatorTheme]: {
+      textureFolder: HUD_LAYOUTS.cogitatorTheme,
       hudBackground: "Cogitator-Background-HUD-Cogitator.png",
       buttonBackground: "Cogitator-Button-Cogitator.png",
       buttonPressed: "Cogitator-Pressed-Button-Cogitator.png",
       cogitatorButton: "Warhammer-40k-cogitator-button.png"
     },
     [HUD_LAYOUTS.chaosTheme]: {
+      textureFolder: "chaos",
       hudBackground: "Chaos-Background.png",
       buttonBackground: "Chaos-Button.png",
       buttonPressed: "Chaos-pressed-button.png",
@@ -1507,7 +1513,7 @@ function getWorkflowHudLayoutProfile() {
 
   const selectedAssets = layoutAssetMap[currentLayout];
   const textureBasePath = selectedAssets
-    ? new URL(`../textures/${currentLayout}/`, import.meta.url).href
+    ? new URL(`../textures/${selectedAssets.textureFolder}/`, import.meta.url).href
     : "";
 
   return {
