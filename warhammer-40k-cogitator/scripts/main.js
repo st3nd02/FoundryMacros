@@ -1507,7 +1507,7 @@ function getWorkflowHudLayoutProfile() {
       hudBackground: "Chaos-Background.png",
       buttonBackground: "Chaos-Button.png",
       buttonPressed: "Chaos-pressed-button.png",
-      cogitatorButton: "Dark_Mechanicum_Icon.png"
+      cogitatorButton: "Dark_Mechanicum_Icon.webp"
     }
   };
 
