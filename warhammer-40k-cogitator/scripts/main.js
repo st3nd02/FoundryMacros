@@ -1619,7 +1619,7 @@ class WorkflowHud {
     this.element.style.gap = px(6);
     this.element.style.padding = px(8);
     this.element.style.borderRadius = px(6);
-    this.element.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(${px(110)}, 1fr))`;
+    this.element.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(${px(105)}, 1fr))`;
 
     const iconCell = this.createIconCell(hudScale, this.locked, layoutProfile);
     const emptyCell = (colSpan = 1) => this.createEmptyCell(hudScale, colSpan);
@@ -1630,7 +1630,7 @@ class WorkflowHud {
       this.element.appendChild(actionCell("defense", "Defense"));
       this.element.appendChild(actionCell("damage", "Damage"));
       this.element.appendChild(actionCell("applyDamage", "Apply Damage"));
-      this.element.appendChild(actionCell("psychic", "Psychic Powers"));
+      this.element.appendChild(actionCell("psychic", "Psychic"));
 
       iconCell.style.gridColumn = "span 2";
       this.element.appendChild(iconCell);
@@ -1650,7 +1650,7 @@ class WorkflowHud {
       this.element.appendChild(actionCell("attack", "Attack"));
       this.element.appendChild(actionCell("defense", "Defense"));
       this.element.appendChild(actionCell("damage", "Damage"));
-      this.element.appendChild(actionCell("psychic", "Psychic Powers"));
+      this.element.appendChild(actionCell("psychic", "Psychic"));
 
       this.element.appendChild(iconCell);
       this.element.appendChild(actionCell("fear", "Fear"));
@@ -1676,8 +1676,8 @@ class WorkflowHud {
     buttonEl.dataset.role = "workflow-action";
     buttonEl.textContent = button?.label ?? fallbackLabel;
     buttonEl.style.padding = `${px(6)} ${px(8)}`;
-    buttonEl.style.fontSize = px(12);
-    buttonEl.style.minHeight = px(36);
+    buttonEl.style.fontSize = px(10);
+    buttonEl.style.minHeight = px(34);
     buttonEl.style.backgroundColor = "#23282d";
     buttonEl.style.backgroundImage = layoutProfile.useTextures
       ? `url("${layoutProfile.assets.buttonBackground}"), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)`
