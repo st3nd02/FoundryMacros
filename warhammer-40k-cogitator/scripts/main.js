@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.75";
+const COGITATOR_VERSION = "2.1.73";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -1434,7 +1434,7 @@ async function openLauncher() {
 function getWorkflowHudButtons() {
   const buttons = [
     { id: "attack", label: "Attack", action: () => runStep("attack") },
-    { id: "psychic", label: "Psychic", action: () => runStep("psychic") },
+    { id: "psychic", label: "Psychic Powers", action: () => runStep("psychic") },
     { id: "defense", label: "Defense", action: () => runStep("defense") },
     { id: "damage", label: "Damage", action: () => runStep("damage") },
     { id: "skill", label: "Skill", action: () => openSkillTest() },
@@ -1541,18 +1541,6 @@ function getWorkflowHudCenterPosition() {
   };
 }
 
-function getHudTextColor(layoutId) {
-  if (layoutId === HUD_LAYOUTS.cogitatorTheme) return "#6cae6e";
-  if (layoutId === HUD_LAYOUTS.chaosTheme) return "#f5f5dc";
-  return "#e6dcc5";
-}
-
-function getHudHoverTextColor(layoutId) {
-  if (layoutId === HUD_LAYOUTS.original) return "#000000";
-  if (layoutId === HUD_LAYOUTS.metalWarhammer) return "#7b0f0f";
-  return getHudTextColor(layoutId);
-}
-
 async function resetWorkflowHudToCenter() {
   const { x, y } = getWorkflowHudCenterPosition();
   await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudPosX, x);
@@ -1603,22 +1591,20 @@ class WorkflowHud {
       this.element.style.setProperty("--wh-ink", "#2b2416");
       this.element.style.setProperty("--wh-yellow-dirty", "#9a7f00");
       this.element.style.setProperty("--wh-yellow", "#c7a300");
-      this.element.style.setProperty("--wh-text", getHudTextColor(layoutProfile.id));
-      this.element.style.setProperty("--wh-hover-text", getHudHoverTextColor(layoutProfile.id));
+      this.element.style.setProperty("--wh-text", layoutProfile.id === HUD_LAYOUTS.chaosTheme ? "#f5f5dc" : "#e6dcc5");
       this.element.style.setProperty("--wh-shadow", "rgba(0, 0, 0, 0.65)");
       this.element.style.setProperty("--wh-shadow-deep", "rgba(0, 0, 0, 0.85)");
 
       this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
     }
 
-    this.element.style.setProperty("--wh-text", getHudTextColor(layoutProfile.id));
-    this.element.style.setProperty("--wh-hover-text", getHudHoverTextColor(layoutProfile.id));
+    this.element.style.setProperty("--wh-text", layoutProfile.id === HUD_LAYOUTS.chaosTheme ? "#f5f5dc" : "#e6dcc5");
 
     this.element.style.backgroundColor = "var(--wh-metal)";
     this.element.style.backgroundImage = layoutProfile.useTextures
       ? `url("${layoutProfile.assets.hudBackground}"), linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 18%, rgba(0,0,0,0.12) 100%), linear-gradient(145deg, rgba(58,64,70,0.18) 0%, rgba(42,47,52,0.12) 38%, rgba(28,31,34,0.18) 100%)`
       : "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 18%, rgba(0,0,0,0.12) 100%), linear-gradient(145deg, rgba(58,64,70,0.18) 0%, rgba(42,47,52,0.12) 38%, rgba(28,31,34,0.18) 100%)";
-    this.element.style.backgroundSize = layoutProfile.useTextures ? "contain, auto, auto" : "auto, auto";
+    this.element.style.backgroundSize = layoutProfile.useTextures ? "cover, auto, auto" : "auto, auto";
     this.element.style.backgroundPosition = layoutProfile.useTextures ? "center, center, center" : "center, center";
     this.element.style.backgroundRepeat = layoutProfile.useTextures ? "no-repeat, repeat, repeat" : "repeat, repeat";
 
@@ -1696,7 +1682,7 @@ class WorkflowHud {
     buttonEl.style.backgroundImage = layoutProfile.useTextures
       ? `url("${layoutProfile.assets.buttonBackground}"), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)`
       : "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)";
-    buttonEl.style.backgroundSize = layoutProfile.useTextures ? "contain, auto, auto" : "auto, auto";
+    buttonEl.style.backgroundSize = layoutProfile.useTextures ? "cover, auto, auto" : "auto, auto";
     buttonEl.style.backgroundPosition = layoutProfile.useTextures ? "center, center, center" : "center, center";
     buttonEl.style.backgroundRepeat = layoutProfile.useTextures ? "no-repeat, repeat, repeat" : "repeat, repeat";
     buttonEl.style.border = "1px solid var(--wh-brass-dark)";
@@ -1726,10 +1712,10 @@ class WorkflowHud {
         buttonEl.style.backgroundImage = layoutProfile.useTextures
           ? `url("${layoutProfile.assets.buttonPressed}"), linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(207,192,155,0.18) 0%, rgba(183,169,130,0.20) 100%)`
           : "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(207,192,155,0.18) 0%, rgba(183,169,130,0.20) 100%)";
-        buttonEl.style.backgroundSize = layoutProfile.useTextures ? "contain, auto, auto" : "auto, auto";
+        buttonEl.style.backgroundSize = layoutProfile.useTextures ? "cover, auto, auto" : "auto, auto";
         buttonEl.style.backgroundPosition = layoutProfile.useTextures ? "center, center, center" : "center, center";
         buttonEl.style.backgroundRepeat = layoutProfile.useTextures ? "no-repeat, repeat, repeat" : "repeat, repeat";
-        buttonEl.style.color = "var(--wh-hover-text)";
+        buttonEl.style.color = "var(--wh-text)";
         buttonEl.style.textShadow = "0 1px 1px rgba(0,0,0,0.7)";
         buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -3px 6px rgba(0,0,0,0.35), 0 0 6px rgba(122,15,15,0.18)";
       });
@@ -1739,7 +1725,7 @@ class WorkflowHud {
         buttonEl.style.backgroundImage = layoutProfile.useTextures
           ? `url("${layoutProfile.assets.buttonBackground}"), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)`
           : "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)";
-        buttonEl.style.backgroundSize = layoutProfile.useTextures ? "contain, auto, auto" : "auto, auto";
+        buttonEl.style.backgroundSize = layoutProfile.useTextures ? "cover, auto, auto" : "auto, auto";
         buttonEl.style.backgroundPosition = layoutProfile.useTextures ? "center, center, center" : "center, center";
         buttonEl.style.backgroundRepeat = layoutProfile.useTextures ? "no-repeat, repeat, repeat" : "repeat, repeat";
         buttonEl.style.color = "var(--wh-text)";
