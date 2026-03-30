@@ -729,6 +729,7 @@ ${furyHtml}
           talentModifier: entry.state?.talentModifier ?? null,
           selectedTalents: entry.state?.selectedTalents ?? [],
           nowhereToHideActive: !!entry.state?.toggles?.nowhereToHide,
+          suppressingFireResolved: !!entry.state?.suppressingFireResolved,
           damageSummary
         };
 

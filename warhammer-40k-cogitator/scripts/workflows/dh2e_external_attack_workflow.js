@@ -275,6 +275,41 @@ const rollAgilityEvasionTest = async actorDoc => {
   return { target, roll: roll.total, success, evadeMeters: ab };
 };
 
+const resolveSuppressingFireWillpowerTests = async state => {
+  const suppressModeKey = String(state?.modeKey ?? "").toLowerCase();
+  const suppressingPenalty = suppressModeKey === "suppresssemi"
+    ? 10
+    : (suppressModeKey === "suppressfull" ? 20 : 0);
+  if (suppressingPenalty <= 0) return;
+
+  const summaries = [];
+  for (const tg of state.targets ?? []) {
+    const targetDoc = await fromUuid(tg.tokenUuid);
+    const targetActor = targetDoc?.actor;
+    if (!targetActor) continue;
+
+    const willpowerTotal = Math.max(1, Number(targetActor.system?.characteristics?.willpower?.total ?? 0));
+    const suppressingTarget = Math.max(1, willpowerTotal - suppressingPenalty);
+    const suppressingRoll = await animatedRoll("1d100");
+    const resisted = suppressingRoll.total <= suppressingTarget && suppressingRoll.total !== 100;
+
+    if (!resisted) {
+      await game.warhammer40kCogitator?.addConvenientEffectToActor?.({
+        actorUuid: targetActor.uuid,
+        effectId: "pinned",
+        effectName: "Pinned"
+      });
+    }
+
+    summaries.push(`${tg.name} ${resisted ? "passed" : "failed"} Suppressing WP (${suppressingRoll.total}/${suppressingTarget})${resisted ? "" : " [Pinned]"}`);
+  }
+
+  if (summaries.length) {
+    state.extraText = [state.extraText, `Suppressing Fire (${suppressingPenalty}): ${summaries.join("; ")}`].filter(Boolean).join(" | ");
+  }
+  state.suppressingFireResolved = true;
+};
+
 const getHitLocation = rollValue => {
   const reversed = Number(String(rollValue).padStart(2, "0").split("").reverse().join(""));
   if (reversed <= 10) return "Head";
@@ -1113,6 +1148,7 @@ const runAttackWorkflow = async setup => {
     return sum + hitValue;
   }, 0);
   state.statusText = jam ? "JAM" : (success ? (outOfAmmoAfter ? "HIT (OUT OF AMMO)" : "HIT") : "MISS");
+  await resolveSuppressingFireWillpowerTests(state);
 
   const isMaximal = String(state.powerModeLabel ?? "").toLowerCase() === "maximal";
   if ((jam || isMaximal) && !isMelee && game.warhammer40kCogitator?.applyWeaponRechargingEffect) {
