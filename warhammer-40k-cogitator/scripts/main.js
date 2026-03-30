@@ -273,14 +273,84 @@ async function applyFireTurnStartEffects(actor) {
   if (!actor || !game.user?.isGM) return;
   if (!actorHasCondition(actor, "fire")) return;
 
+  const wpTotal = Math.max(1, Number(actor.system?.characteristics?.willpower?.total ?? 0));
+  const wpRoll = await new Roll("1d100").evaluate({ async: true });
+  const wpSuccess = wpRoll.total === 1 ? true : (wpRoll.total === 100 ? false : wpRoll.total <= wpTotal);
+
+  await wpRoll.toMessage({
+    speaker: { alias: "System" },
+    flavor: `${actor.name} attempts to endure the <b>Fire</b> at turn start (Willpower Test)`
+  });
+
+  if (wpSuccess) {
+    const attemptExtinguish = await new Promise(resolve => {
+      new Dialog({
+        title: `${actor.name} — Fire Check`,
+        content: `<p><b>Willpower succeeded!</b><br>Do you want to attempt to extinguish the fire on you?</p>`,
+        buttons: {
+          yes: { label: "YES", callback: () => resolve(true) },
+          no: { label: "NO", callback: () => resolve(false) }
+        },
+        close: () => resolve(false)
+      }).render(true);
+    });
+
+    if (attemptExtinguish) {
+      const agTotalBase = Number(actor.system?.characteristics?.agility?.total ?? 0);
+      const agTarget = Math.max(1, agTotalBase - 10);
+      const agRoll = await new Roll("1d100").evaluate({ async: true });
+      const agSuccess = agRoll.total === 1 ? true : (agRoll.total === 100 ? false : agRoll.total <= agTarget);
+
+      await agRoll.toMessage({
+        speaker: { alias: "System" },
+        flavor: `${actor.name} attempts to extinguish the <b>Fire</b> (Agility -10)`
+      });
+
+      await ChatMessage.create({
+        speaker: { alias: "System" },
+        content: `<b>${actor.name}</b> is trying to extinguish the fire on them and <b>${agSuccess ? "succeeds" : "fails"}</b>.`
+      });
+
+      if (agSuccess) {
+        const fireEffectIds = actor.effects
+          .filter(effect => {
+            if (!effect || effect.disabled || effect.isSuppressed) return false;
+            const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+            const normalizedStatuses = statuses.map(status => String(status ?? "").trim().toLowerCase());
+            const coreStatus = String(effect.flags?.core?.statusId ?? "").trim().toLowerCase();
+            const ceStatus = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").trim().toLowerCase();
+            const name = String(effect.name ?? "").trim().toLowerCase();
+            return normalizedStatuses.includes("fire") || coreStatus === "fire" || ceStatus === "fire" || name.includes("fire");
+          })
+          .map(effect => effect.id)
+          .filter(Boolean);
+
+        if (fireEffectIds.length) {
+          await actor.deleteEmbeddedDocuments("ActiveEffect", fireEffectIds);
+        }
+
+        await ChatMessage.create({
+          speaker: { alias: "System" },
+          content: `<b>${actor.name}</b> extinguishes the fire and avoids fire turn-start damage and fatigue.`
+        });
+        return;
+      }
+    }
+  }
+
   const fireRoll = await new Roll("1d10").evaluate({ async: true });
   const fireDamage = Number(fireRoll.total ?? 0);
 
   const woundsMax = Number(actor.system?.wounds?.max ?? 0);
   const woundsCurrent = Number(actor.system?.wounds?.value ?? 0);
   const critCurrent = Number(actor.system?.wounds?.critical ?? 0);
-  const newWounds = Math.max(0, woundsCurrent - fireDamage);
-  const overflowToCritical = Math.max(0, fireDamage - woundsCurrent);
+  const tentativeWounds = woundsCurrent + fireDamage;
+  const newWounds = Number.isFinite(woundsMax) && woundsMax > 0
+    ? Math.min(tentativeWounds, woundsMax)
+    : tentativeWounds;
+  const overflowToCritical = Number.isFinite(woundsMax) && woundsMax > 0
+    ? Math.max(0, tentativeWounds - woundsMax)
+    : 0;
   const newCritical = critCurrent + overflowToCritical;
 
   const currentFatigue = Number(actor.system?.fatigue?.value ?? 0);
