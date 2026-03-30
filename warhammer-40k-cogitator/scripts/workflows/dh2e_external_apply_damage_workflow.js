@@ -900,7 +900,7 @@ const suppressingPenalty = suppressModeKey === "suppresssemi"
   ? 10
   : (suppressModeKey === "suppressfull" ? 20 : 0);
 
-if (suppressingPenalty > 0) {
+if (suppressingPenalty > 0 && !dmg.suppressingFireResolved) {
   const willpowerTotal = Math.max(1, Number(actor.system?.characteristics?.willpower?.total ?? 0));
   const suppressingTarget = Math.max(1, willpowerTotal - suppressingPenalty);
   const suppressingRoll = await new Roll("1d100").evaluate();
