@@ -2439,7 +2439,6 @@ hr{
             `${degrees} Degrees of Failure`;
 
           const successColor = success ? "#1aff1a" : "#ff2a2a";
-
           await show3dDiceRoll(roll);
 
           await ChatMessage.create({
@@ -2972,6 +2971,18 @@ async function openMedicalTest() {
           }
 
           const successColor = success ? "#1aff1a" : "#ff2a2a";
+          const clearBloodLoss = async () => {
+            await removeConvenientEffectFromActor({
+              actorUuid: patient.uuid,
+              effectId: "bleeding",
+              effectName: "Bleeding"
+            });
+            await removeConvenientEffectFromActor({
+              actorUuid: patient.uuid,
+              effectId: "blood loss",
+              effectName: "Blood Loss"
+            });
+          };
 
           await show3dDiceRoll(roll);
 
@@ -3025,6 +3036,9 @@ ${healText}
           if (success && (mode === "first" || mode === "extended") && rolledHealAmount > 0) {
             await promptApplyHealing(rolledHealAmount, `${actor.name} ${actionName}`);
           }
+          if (success && mode === "staunch") {
+            await clearBloodLoss();
+          }
 
           if (!success && (actor.system.fate?.value ?? 0) > 0) {
             const useFate = await askForFate();
@@ -3039,6 +3053,7 @@ ${healText}
               fateVal === 100 ? false :
               fateVal <= baseTarget;
             const fateDegrees = Math.floor(Math.abs(baseTarget - fateVal) / 10) + 1;
+            const fateSuccessColor = fateSuccess ? "#1aff1a" : "#ff2a2a";
 
             let fateHealAmount = 0;
             let fateHealText = "";
@@ -3102,7 +3117,7 @@ ${notes.length ? `<div style="font-size:1.0em;font-style:italic">${notes.join(" 
     0 0 1px black,
     0 0 2px black,
     1px 1px 0 black,
-   -1px -1px 0 black; font-weight:bold;color:${successColor}">
+   -1px -1px 0 black; font-weight:bold;color:${fateSuccessColor}">
 ${fateSuccess ? `${fateDegrees} Degrees of Success` : `${fateDegrees} Degrees of Failure`}
 </div>
 ${fateHealText}
@@ -3111,6 +3126,9 @@ ${fateHealText}
 
             if (fateSuccess && (mode === "first" || mode === "extended") && fateHealAmount > 0) {
               await promptApplyHealing(fateHealAmount, `${actor.name} ${actionName} (Fate)`);
+            }
+            if (fateSuccess && mode === "staunch") {
+              await clearBloodLoss();
             }
           }
 
