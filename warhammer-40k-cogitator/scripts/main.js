@@ -36,6 +36,8 @@ const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const REACTION_FLAG = "reactionUsedForDefense";
 const REACTION_COUNT_FLAG = "reactionUsedForDefenseCount";
 const USED_EVASION_EFFECT_ID = "ce-(whc)-used-evasion";
+const BLADEMASTER_USED_EFFECT_ID = "ce-(whc)-blademaster-used";
+const BLADEMASTER_USED_EFFECT_NAME = "Blademaster Used";
 const DEVASTATING_ASSAULT_EFFECT_ID = "ce-devastating-assault";
 const DEVASTATING_ASSAULT_EFFECT_NAME = "Devastating Assault";
 const DOUBLE_TAP_EFFECT_ID = "ce-(whc)-double-tap";
@@ -160,6 +162,7 @@ Hooks.once("ready", async () => {
     submitDamageResult,
     setPendingAttackContext,
     consumePendingAttackContext,
+    applyBlademasterUsedEffect,
     applyDevastatingAssaultEffect,
     applyDoubleTapEffect,
     clearDoubleTapEffect,
@@ -189,7 +192,7 @@ function registerCombatHooks() {
     }
     const actor = getUpdatedCombatTurnActor(combat, changed);
     if (!actor) return;
-    await clearDefenseReaction(actor);
+    await clearTurnStartCombatUseEffects(actor);
     await applyBleedingTurnStartFatigue(actor);
     await applyFireTurnStartEffects(actor);
     await clearExpiredTurnStartEffects(actor);
@@ -506,6 +509,43 @@ async function clearDefenseReaction(actor) {
   await actor.unsetFlag(COGITATOR_ID, REACTION_FLAG);
   await actor.unsetFlag(COGITATOR_ID, REACTION_COUNT_FLAG);
   await removeUsedEvasionEffect(actor);
+}
+
+async function applyBlademasterUsedEffect(actor) {
+  if (!actor) return false;
+  return addConvenientEffectToActor({
+    actorUuid: actor.uuid,
+    effectId: BLADEMASTER_USED_EFFECT_ID,
+    effectName: BLADEMASTER_USED_EFFECT_NAME
+  });
+}
+
+async function clearBlademasterUsedEffect(actor) {
+  if (!actor) return;
+
+  const actorEffectsToDelete = actor.effects
+    .filter(effect => {
+      const statusValues = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+      const statusIds = statusValues.map(status => String(status ?? "").toLowerCase());
+      const coreStatus = String(effect.flags?.core?.statusId ?? "").toLowerCase();
+      const effectId = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
+      const effectName = String(effect.name ?? "").toLowerCase();
+      return statusIds.includes(BLADEMASTER_USED_EFFECT_ID) || coreStatus === BLADEMASTER_USED_EFFECT_ID || effectId === BLADEMASTER_USED_EFFECT_ID || effectName.includes("blademaster used");
+    })
+    .map(effect => effect.id)
+    .filter(Boolean);
+
+  if (actorEffectsToDelete.length) {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", actorEffectsToDelete);
+  }
+
+  await removeConvenientEffectFromActor({ actorUuid: actor.uuid, effectId: BLADEMASTER_USED_EFFECT_ID, effectName: BLADEMASTER_USED_EFFECT_NAME });
+}
+
+async function clearTurnStartCombatUseEffects(actor) {
+  if (!actor) return;
+  await clearDefenseReaction(actor);
+  await clearBlademasterUsedEffect(actor);
 }
 
 async function applyUsedEvasionEffect(actor, stacks = 1) {
