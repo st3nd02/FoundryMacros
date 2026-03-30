@@ -482,7 +482,8 @@ new Dialog({
             .filter(r => r.active)
             .map(r => r.idx);
           const modDice = [...dice];
-          const dosReplacementValue = Math.min(Math.max(Number(dos ?? 0), 0), 10);
+          const dosReplacementCap = Number(dieType) || 10;
+          const dosReplacementValue = Math.min(Math.max(Number(dos ?? 0), 0), dosReplacementCap);
           if (!spray && activeIndexes.length) {
             const minActive = activeIndexes.reduce((best, idx) => (modDice[idx] < modDice[best] ? idx : best), activeIndexes[0]);
             modDice[minActive] = Math.max(modDice[minActive], dosReplacementValue);
