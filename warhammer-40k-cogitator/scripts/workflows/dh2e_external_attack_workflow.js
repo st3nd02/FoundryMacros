@@ -414,7 +414,7 @@ const computeJam = ({ result, targetNumber, weapon, traits }) => {
   if (reliable) jamLow = 100;
   if (unreliable) jamLow = 91;
 
-  if (craft.rangedBest) jamLow = 100;
+  if (craft.rangedBest) return false;
 
   return result >= jamLow;
 };
