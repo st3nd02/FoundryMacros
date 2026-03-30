@@ -235,6 +235,8 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
   if (!actorDoc) return false;
   const effectInterface = game.dfreds?.effectInterface;
   const preferredNames = [effectName, ...effectAliases].filter(Boolean);
+  const isUnconsciousEffect = [effectId, ...preferredNames]
+    .some(value => String(value ?? "").trim().toLowerCase() === "unconscious");
   const statusTemplate = Array.isArray(CONFIG?.statusEffects)
     ? CONFIG.statusEffects.find(status => String(status?.id ?? "").toLowerCase() === String(effectId ?? "").toLowerCase())
     : null;
@@ -359,6 +361,13 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
         "duration.startTurn": combatTurn
       });
     }
+  }
+
+  if (Boolean(findExistingEffect()) && isUnconsciousEffect && !actorHasCondition(actorDoc, "prone")) {
+    await applyConvenientEffect(actorDoc, {
+      effectId: "prone",
+      effectName: "Prone"
+    });
   }
 
   return Boolean(findExistingEffect());

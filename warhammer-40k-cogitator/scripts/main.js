@@ -749,6 +749,12 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
     })
     : null;
   const resolvedStatusId = String(statusTemplate?.id ?? effectId ?? "").trim();
+  const isUnconsciousEffect = [
+    resolvedStatusId,
+    effectId,
+    effectName,
+    ...preferredNames
+  ].some(value => String(value ?? "").trim().toLowerCase() === "unconscious");
   const hasAppliedEffect = () => {
     if (allowDuplicates) return false;
     return Boolean(findActorEffect(actor, resolvedStatusId, effectName) || preferredNames.map(name => findActorEffect(actor, resolvedStatusId, name)).find(Boolean));
@@ -848,6 +854,14 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
         "duration.startTurn": combatTurn
       });
     }
+  }
+
+  if (applied && isUnconsciousEffect && !actorHasCondition(actor, "prone")) {
+    await addConvenientEffectToActorLocal({
+      actorUuid: actor.uuid,
+      effectId: "prone",
+      effectName: "Prone"
+    });
   }
 
   return applied;
