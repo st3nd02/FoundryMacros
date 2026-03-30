@@ -724,7 +724,11 @@ for (let hit of dmg.hitsData){
   const baseDamage = targetIsUnconscious ? baseDamageRaw * 2 : baseDamageRaw;
   const damage = Math.max(baseDamage + extra, 0);
 
-  const inflicted = Math.max(damage - soak, 0);
+  let inflicted = Math.max(damage - soak, 0);
+  const righteousFuryChipWound = inflicted === 0 && Boolean(hit.fury);
+  if (righteousFuryChipWound) {
+    inflicted = 1;
+  }
   totalInflicted += inflicted;
 
   const woundsBefore = woundsCurrent;
@@ -748,7 +752,7 @@ for (let hit of dmg.hitsData){
     realCritToApply = critCurrent;
   }
 
-  if (hit.fury){
+  if (hit.fury && !righteousFuryChipWound){
     furyCrits.push({
       location: hit.location,
       value: Number(hit?.fury?.result ?? hit?.fury ?? 1) || 1
@@ -789,7 +793,9 @@ for (let hit of dmg.hitsData){
     font-size:1.0em;
     font-weight:bold;
     text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;
-  "> ${hit.fury ? "<br><i>Righteous Fury Applied</i>" : ""}</span>
+  "> ${righteousFuryChipWound
+    ? "<br><i>Righteous Fury converted to 1 inflicted wound (no critical effect).</i>"
+    : (hit.fury ? "<br><i>Righteous Fury Applied</i>" : "")}</span>
   `;
 
   coverRemaining--;
