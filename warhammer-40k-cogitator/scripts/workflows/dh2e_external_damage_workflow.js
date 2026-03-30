@@ -298,7 +298,7 @@ new Dialog({
         const accurate = hasTrait("accurate");
         const gauss = hasTrait("gauss");
         const force = hasTrait("force");
-        const razor = hasTrait("razor");
+        const razor = hasTrait("razor") || hasTrait("razor sharp");
         const melta = hasTrait("melta");
         const scatter = hasTrait("scatter");
         const spray = hasTrait("spray");
