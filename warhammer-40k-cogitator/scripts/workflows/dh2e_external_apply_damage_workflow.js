@@ -840,30 +840,38 @@ if (dmg.concussive?.resolved) {
 }
 
 if (dmg.toxic?.resolved) {
-  report += `
-  <hr>
-  <b>☣ TOXIC TEST</b><br>
-  Target: <b>${dmg.toxic.target}</b><br>
-  Roll: <b>${dmg.toxic.roll}</b><br>
-  Result: ${dmg.toxic.success
-    ? "<span style='color:#6EC1FF;font-weight:900;'>RESISTED</span>"
-    : "<span style='color:#66cc66;font-weight:900;'>FAILED</span>"}
-  `;
-
-  if (!dmg.toxic.success && Number(dmg.toxic.damage ?? 0) > 0){
-    const toxicDamage = Number(dmg.toxic.damage);
-    const { woundsBefore, critDamage } = applyDirectDamageWithCritical(toxicDamage);
-
+  if (totalInflicted <= 0) {
     report += `
-    <div style="font-size:1.1em; color:#66cc66; text-shadow:
-      0 0 2px #000,
-      0 0 4px #000,
-      0 0 6px #000;"><b>☣ TOXIC DAMAGE ☣</b><br>
-    Damage: ${toxicDamage}<br>
-    <span style="font-weight:900;">Inflicted: ${toxicDamage} (ignores armour & TB)</span></div><br>
-    Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}<br>
-    Critical Damage: ${critDamage} (${critCurrent} total)
+    <hr>
+    <b>☣ TOXIC</b><br>
+    Ignored: No damage inflicted from the triggering hit(s).
     `;
+  } else {
+    report += `
+    <hr>
+    <b>☣ TOXIC TEST</b><br>
+    Target: <b>${dmg.toxic.target}</b><br>
+    Roll: <b>${dmg.toxic.roll}</b><br>
+    Result: ${dmg.toxic.success
+      ? "<span style='color:#6EC1FF;font-weight:900;'>RESISTED</span>"
+      : "<span style='color:#66cc66;font-weight:900;'>FAILED</span>"}
+    `;
+
+    if (!dmg.toxic.success && Number(dmg.toxic.damage ?? 0) > 0){
+      const toxicDamage = Number(dmg.toxic.damage);
+      const { woundsBefore, critDamage } = applyDirectDamageWithCritical(toxicDamage);
+
+      report += `
+      <div style="font-size:1.1em; color:#66cc66; text-shadow:
+        0 0 2px #000,
+        0 0 4px #000,
+        0 0 6px #000;"><b>☣ TOXIC DAMAGE ☣</b><br>
+      Damage: ${toxicDamage}<br>
+      <span style="font-weight:900;">Inflicted: ${toxicDamage} (ignores armour & TB)</span></div><br>
+      Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}<br>
+      Critical Damage: ${critDamage} (${critCurrent} total)
+      `;
+    }
   }
 } else if (dmg.toxic?.result && totalInflicted > 0) {
   // Backward compatibility for old payloads
