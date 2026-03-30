@@ -407,6 +407,7 @@ const getCraftData = weapon => {
 const computeJam = ({ result, targetNumber, weapon, traits }) => {
   const isMelee = (weapon.system.class ?? "").toLowerCase() === "melee";
   if (isMelee) return false;
+  const gauss = hasTrait(traits, "gauss");
 
   const craft = getCraftData(weapon);
   let reliable = hasTrait(traits, "reliable");
@@ -421,7 +422,7 @@ const computeJam = ({ result, targetNumber, weapon, traits }) => {
   if (reliable) jamLow = 100;
   if (unreliable) jamLow = 91;
 
-  if (craft.rangedBest) return false;
+  if (craft.rangedBest || gauss) return false;
 
   return result >= jamLow;
 };
