@@ -13,6 +13,7 @@ const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const DOUBLE_TAP_TARGET_FLAG = "doubleTapEligibleTargetUuid";
 const WEAPON_RECHARGING_EFFECT_ID = "ce-(whc)-weapon-recharging";
 const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
+const BLADEMASTER_USED_EFFECT_ID = "ce-(whc)-blademaster-used";
 const JAM_EFFECT_ID = "ce-(whc)-jam";
 const JAM_EFFECT_NAME = "Jam";
 
@@ -1048,13 +1049,30 @@ const runAttackWorkflow = async setup => {
     state.extraText = [state.extraText, `${unconsciousMeleeTarget.name} is unconscious: melee attack auto-succeeds (${dos} DoS)`].filter(Boolean).join(" | ");
   }
 
-  if (!success && isMelee && hasWeaponSpecial(weapon, "blade") && setup.toggles?.blademaster && !attacker.effects.some(e => String(e.name ?? "").toLowerCase().includes("blademaster used"))) {
+  if (!success && isMelee && hasWeaponSpecial(weapon, "blade") && setup.toggles?.blademaster && !attacker.effects.some(e => {
+    const effectName = String(e.name ?? "").toLowerCase();
+    const statusValues = Array.isArray(e.statuses) ? e.statuses : Array.from(e.statuses ?? []);
+    const statusIds = statusValues.map(status => String(status ?? "").toLowerCase());
+    const coreStatus = String(e.flags?.core?.statusId ?? "").toLowerCase();
+    const effectId = String(e.flags?.["dfreds-convenient-effects"]?.effectId ?? "").toLowerCase();
+    return effectName.includes("blademaster used") || statusIds.includes(BLADEMASTER_USED_EFFECT_ID) || coreStatus === BLADEMASTER_USED_EFFECT_ID || effectId === BLADEMASTER_USED_EFFECT_ID;
+  })) {
     const reroll = (await animatedRoll("1d100", chatMessage.speaker)).total;
     const evalRe = evaluateAttackResult({ result: reroll, targets: state.targets, weapon, traits });
     state.extraText = [state.extraText, `Blademaster reroll: ${result} → ${reroll}`].filter(Boolean).join(" | ");
     result = reroll; success = evalRe.success; dos = evalRe.dos; jam = evalRe.jam; bestTN = evalRe.bestTN;
     state.bestTarget = bestTN;
-    await attacker.createEmbeddedDocuments("ActiveEffect", [{ name: "Blademaster Used", img: "icons/svg/sword.svg", origin: attacker.uuid }]);
+    if (game.warhammer40kCogitator?.applyBlademasterUsedEffect) {
+      await game.warhammer40kCogitator.applyBlademasterUsedEffect(attacker);
+    } else {
+      await attacker.createEmbeddedDocuments("ActiveEffect", [{
+        name: "Blademaster Used",
+        img: "icons/svg/sword.svg",
+        origin: attacker.uuid,
+        statuses: [BLADEMASTER_USED_EFFECT_ID],
+        flags: { core: { statusId: BLADEMASTER_USED_EFFECT_ID } }
+      }]);
+    }
   }
 
   if (!isSpray && !success) {
