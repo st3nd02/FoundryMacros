@@ -539,7 +539,13 @@ const coverStart = Number(html.find("#cover").val()) || 0;
 if (dmg.horde?.active) {
   const currentWounds = Number(actor.system?.wounds?.value ?? 0);
   const maxWounds = Number(actor.system?.wounds?.max ?? currentWounds);
-  const inflicted = Math.max(0, Number(dmg.horde.magnitudeHits ?? 0));
+  const baseMagnitudeHits = Math.max(0, Number(dmg.horde.baseMagnitudeHits ?? dmg.hits ?? 0));
+  const bonusExplosiveForcePower = Math.max(0, Number(dmg.horde.bonusExplosiveForcePower ?? 0));
+  const bonusWhirlwind = Math.max(0, Number(dmg.horde.bonusWhirlwind ?? 0));
+  const bonusDevastating = Math.max(0, Number(dmg.horde.bonusDevastating ?? 0));
+  const computedMagnitudeHits = Math.max(0, baseMagnitudeHits + bonusExplosiveForcePower + bonusWhirlwind + bonusDevastating);
+  const fallbackMagnitudeHits = Math.max(0, Number(dmg.horde.magnitudeHits ?? 0));
+  const inflicted = Math.max(computedMagnitudeHits, fallbackMagnitudeHits);
   const newWounds = Number.isFinite(maxWounds) && maxWounds >= 0
     ? Math.min(maxWounds, currentWounds + inflicted)
     : (currentWounds + inflicted);
@@ -552,6 +558,10 @@ if (dmg.horde?.active) {
 <div style="text-align:center;">
 
 <span style="font-weight:700;color:#000;">Magnitude done:</span> <span style="font-weight:700;color:#000;">${inflicted}</span><br>
+<b>Base Magnitude:</b> ${baseMagnitudeHits}<br>
+${bonusExplosiveForcePower ? `<b>Explosive/Force/Power Bonus:</b> +${bonusExplosiveForcePower}<br>` : ""}
+${bonusWhirlwind ? `<b>Whirlwind Bonus:</b> +${bonusWhirlwind}<br>` : ""}
+${bonusDevastating ? `<b>Devastating Bonus:</b> +${bonusDevastating}<br>` : ""}
 <b>Magnitude:</b> ${currentWounds} -> ${newWounds}${Number.isFinite(maxWounds) && maxWounds >= 0 ? ` / ${maxWounds}` : ""}<br>
 ${(dmg.properties ?? []).length ? `${(dmg.properties ?? []).map(p => p === "Horde Target" ? `<b>${p}</b>` : p).join(", ")}<br>` : ""}
 <i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i>

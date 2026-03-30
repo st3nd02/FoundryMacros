@@ -248,7 +248,13 @@ const getWeaponPenetration = weaponDoc => {
 const getHordeBonusFromMagnitude = magnitude => {
   const value = Number(magnitude ?? 0);
   if (!Number.isFinite(value) || value <= 0) return 0;
-  return Math.max(0, Math.min(60, Math.floor(value / 10) * 10));
+  if (value <= 9) return 0;
+  if (value <= 19) return 10;
+  if (value <= 29) return 20;
+  if (value <= 39) return 30;
+  if (value <= 60) return 40;
+  if (value <= 90) return 50;
+  return 60;
 };
 
 const getHordeMagnitudeValue = actorDoc => {
@@ -620,7 +626,7 @@ const getHordeDefenseThreshold = (targetActor, penetration = 0) => {
   const remainingArmour = Math.max(0, bodyArmour - Math.max(0, Number(penetration ?? 0)));
   return remainingArmour + tb + tUnnat;
 };
-const getHordeMagnitudeHits = ({ state, target }) => {
+const getHordeMagnitudeBreakdown = ({ state, target }) => {
   const traits = parseWeaponTraits({ system: { special: state.weaponSpecial ?? "" } });
   const inflictedHits = Number(target?.allocatedHits ?? 0);
   const blast = parseTraitNumber(traits, "blast", 0);
@@ -636,12 +642,27 @@ const getHordeMagnitudeHits = ({ state, target }) => {
   if (blast > 0) {
     magnitude = blast;
   }
-  let bonus = (explosive || forceOrPower) ? 1 : 0;
+  const bonusExplosiveForcePower = (explosive || forceOrPower) ? 1 : 0;
+  let bonusWhirlwind = 0;
   if (state.whirlwind?.active) {
     const wsb = Number(state.whirlwind.wsBonus ?? 0);
-    bonus += Math.floor(wsb / 2);
+    bonusWhirlwind = Math.max(0, Math.floor(wsb / 2));
   }
-  return Math.max(0, magnitude + bonus + devastating);
+  const baseMagnitudeHits = Math.max(0, Number(magnitude ?? 0));
+  const bonusDevastating = Math.max(0, Number(devastating ?? 0));
+  const totalMagnitudeHits = Math.max(0, baseMagnitudeHits + bonusExplosiveForcePower + bonusWhirlwind + bonusDevastating);
+  return {
+    baseMagnitudeHits,
+    bonusExplosiveForcePower,
+    bonusWhirlwind,
+    bonusDevastating,
+    totalMagnitudeHits
+  };
+};
+
+const getHordeMagnitudeHits = ({ state, target }) => {
+  const breakdown = getHordeMagnitudeBreakdown({ state, target });
+  return Math.max(0, Number(breakdown.totalMagnitudeHits ?? 0));
 };
 
 const openDamageWorkflow = async (state, chatMessage) => {
@@ -1305,6 +1326,7 @@ const runAttackWorkflow = async setup => {
     state.targets = state.targets.map(tg => {
       if ((tg.allocatedHits ?? 0) <= 0) return tg;
       const magnitudeHits = Math.max(0, Number(tg.hordeHitsPreview ?? tg.allocatedHits ?? 0));
+      const magnitudeBreakdown = getHordeMagnitudeBreakdown({ state, target: tg });
       tg.damageRolls = [{ total: magnitudeHits, loc: "Horde" }];
       tg.damageSummary = `<div style="text-align:center; color:#000;"><div><b>Magnitude Damage</b></div><div><span style="font-weight:700;color:#000;">Damage done:</span> <span style="font-weight:700;color:#000;">${magnitudeHits}</span></div><div style="margin-top:6px;"><b>Properties:</b> Horde Target</div><div><i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i></div></div>`;
       tg.damageResolved = true;
@@ -1326,7 +1348,11 @@ const runAttackWorkflow = async setup => {
         properties: ["Horde Target"],
         horde: {
           active: true,
-          magnitudeHits
+          magnitudeHits,
+          baseMagnitudeHits: Math.max(0, Number(magnitudeBreakdown.baseMagnitudeHits ?? 0)),
+          bonusExplosiveForcePower: Math.max(0, Number(magnitudeBreakdown.bonusExplosiveForcePower ?? 0)),
+          bonusWhirlwind: Math.max(0, Number(magnitudeBreakdown.bonusWhirlwind ?? 0)),
+          bonusDevastating: Math.max(0, Number(magnitudeBreakdown.bonusDevastating ?? 0))
         }
       };
       return tg;
