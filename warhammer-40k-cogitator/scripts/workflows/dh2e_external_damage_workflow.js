@@ -324,7 +324,8 @@ new Dialog({
         const primitiveVal = parseTraitVal("primitive", 9);
         const fellingVal = parseTraitVal("felling", 0);
         const snareVal = parseTraitVal("snare", 0);
-        const aim = Number(entry.state?.aimMod ?? 0) > 0 ? "yes" : "no";
+        const aimLabel = String(entry.state?.aimLabel ?? "").toLowerCase();
+        const aim = aimLabel.includes("half aim") || aimLabel.includes("full aim") ? "yes" : "no";
 
         const isD100Success = (roll, target) => roll === 1 ? true : (roll === 100 ? false : roll <= target);
         const calcDoS = (target, roll) => isD100Success(roll, target) ? (1 + Math.floor((target - roll) / 10)) : 0;
