@@ -273,14 +273,14 @@ async function applyFireTurnStartEffects(actor) {
   if (!actor || !game.user?.isGM) return;
   if (!actorHasCondition(actor, "fire")) return;
 
+  const summaryLines = [];
+  summaryLines.push(`<b>Sequence:</b> Willpower Test → (Success) Ask to attempt Agility -10 extinguish test → resolve fire effects.`);
+
   const wpTotal = Math.max(1, Number(actor.system?.characteristics?.willpower?.total ?? 0));
   const wpRoll = await new Roll("1d100").evaluate({ async: true });
   const wpSuccess = wpRoll.total === 1 ? true : (wpRoll.total === 100 ? false : wpRoll.total <= wpTotal);
-
-  await wpRoll.toMessage({
-    speaker: { alias: "System" },
-    flavor: `${actor.name} attempts to endure the <b>Fire</b> at turn start (Willpower Test)`
-  });
+  await show3dDiceRoll(wpRoll);
+  summaryLines.push(`<b>1) Willpower Test:</b> ${wpRoll.total} vs ${wpTotal} → <b>${wpSuccess ? "SUCCESS" : "FAILURE"}</b>.`);
 
   if (wpSuccess) {
     const attemptExtinguish = await new Promise(resolve => {
@@ -294,22 +294,15 @@ async function applyFireTurnStartEffects(actor) {
         close: () => resolve(false)
       }).render(true);
     });
+    summaryLines.push(`<b>2) Attempt Agility extinguish?</b> ${attemptExtinguish ? "<b>YES</b>" : "<b>NO</b>"}.`);
 
     if (attemptExtinguish) {
       const agTotalBase = Number(actor.system?.characteristics?.agility?.total ?? 0);
       const agTarget = Math.max(1, agTotalBase - 10);
       const agRoll = await new Roll("1d100").evaluate({ async: true });
       const agSuccess = agRoll.total === 1 ? true : (agRoll.total === 100 ? false : agRoll.total <= agTarget);
-
-      await agRoll.toMessage({
-        speaker: { alias: "System" },
-        flavor: `${actor.name} attempts to extinguish the <b>Fire</b> (Agility -10)`
-      });
-
-      await ChatMessage.create({
-        speaker: { alias: "System" },
-        content: `<b>${actor.name}</b> is trying to extinguish the fire on them and <b>${agSuccess ? "succeeds" : "fails"}</b>.`
-      });
+      await show3dDiceRoll(agRoll);
+      summaryLines.push(`<b>3) Agility -10 Test:</b> ${agRoll.total} vs ${agTarget} (Ag ${agTotalBase} - 10) → <b>${agSuccess ? "SUCCESS" : "FAILURE"}</b>.`);
 
       if (agSuccess) {
         const fireEffectIds = actor.effects
@@ -329,16 +322,20 @@ async function applyFireTurnStartEffects(actor) {
           await actor.deleteEmbeddedDocuments("ActiveEffect", fireEffectIds);
         }
 
+        summaryLines.push(`<b>Result:</b> ${actor.name} extinguishes the fire, takes <b>no</b> fire damage, and gains <b>no</b> fire fatigue this turn.`);
         await ChatMessage.create({
           speaker: { alias: "System" },
-          content: `<b>${actor.name}</b> extinguishes the fire and avoids fire turn-start damage and fatigue.`
+          content: `<div class="warhammer-fire-turn-card"><h3 style="margin:0 0 0.3em 0;">🔥 Fire Turn Start — ${actor.name}</h3>${summaryLines.join("<br>")}</div>`
         });
         return;
       }
     }
+  } else {
+    summaryLines.push(`<b>2) Action Status:</b> ${actor.name} failed the Willpower roll and cannot act this turn.`);
   }
 
   const fireRoll = await new Roll("1d10").evaluate({ async: true });
+  await show3dDiceRoll(fireRoll);
   const fireDamage = Number(fireRoll.total ?? 0);
 
   const woundsMax = Number(actor.system?.wounds?.max ?? 0);
@@ -362,21 +359,14 @@ async function applyFireTurnStartEffects(actor) {
     "system.fatigue.value": newFatigue
   });
 
-  await fireRoll.toMessage({
-    speaker: { alias: "System" },
-    flavor: `${actor.name} suffers <b>Fire</b> turn-start effects`
-  });
+  summaryLines.push(`<b>4) Fire Damage:</b> ${fireRoll.total} on 1d10 → <b>${fireDamage}</b> Energy damage (ignores Armour, Body hit).`);
+  summaryLines.push(`<b>5) Fatigue:</b> +1 fatigue from fire turn-start effects.`);
 
-  const critSummary = overflowToCritical > 0
-    ? `<br><b>Critical Damage (Body):</b> +${overflowToCritical} (Total ${newCritical})`
-    : "";
-  const deathSummary = Number(newCritical ?? 0) > 11
-    ? `<br><span style="color:#ff2a2a;font-weight:900;">${actor.name} exceeds 11 Critical Damage and dies.</span>`
-    : "";
+  summaryLines.push(`<b>Result:</b> Wounds ${woundsCurrent} → ${newWounds}${Number.isFinite(woundsMax) && woundsMax > 0 ? `/${woundsMax}` : ""}${overflowToCritical > 0 ? `, Critical +${overflowToCritical} (Total ${newCritical})` : ""}; Fatigue ${currentFatigue} → ${newFatigue}.${Number(newCritical ?? 0) > 11 ? ` <span style="color:#ff2a2a;font-weight:900;">${actor.name} dies.</span>` : ""}`);
 
   await ChatMessage.create({
     speaker: { alias: "System" },
-    content: `<b>${actor.name}</b> takes <b>${fireDamage}</b> <b>Energy</b> damage from <b>Fire</b> (ignores Armour, location: <b>Body</b>).<br><b>Wounds:</b> ${woundsCurrent} → ${newWounds}${Number.isFinite(woundsMax) && woundsMax > 0 ? `/${woundsMax}` : ""}${critSummary}<br><b>Fatigue:</b> ${currentFatigue} → ${newFatigue}${deathSummary}`
+    content: `<div class="warhammer-fire-turn-card"><h3 style="margin:0 0 0.3em 0;">🔥 Fire Turn Start — ${actor.name}</h3>${summaryLines.join("<br>")}</div>`
   });
 }
 
