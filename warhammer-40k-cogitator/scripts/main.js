@@ -1730,10 +1730,15 @@ class WorkflowHud {
 
     const buttonMap = new Map(buttons.map(button => [button.id, button]));
     const gridColumns = game.user.isGM ? 4 : 3;
-    this.element.style.gap = px(6);
-    this.element.style.padding = px(8);
+    const minColumnWidth = Math.round(105 * hudScale);
+    const hudGap = Math.round(15 * hudScale);
+    const hudPadding = Math.round(8 * hudScale);
+    const minimumHudWidth = (gridColumns * minColumnWidth) + ((gridColumns - 1) * hudGap) + (hudPadding * 2) + 2;
+    this.element.style.gap = `${hudGap}px`;
+    this.element.style.padding = `${hudPadding}px`;
     this.element.style.borderRadius = px(6);
-    this.element.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(${px(105)}, 1fr))`;
+    this.element.style.minWidth = `${minimumHudWidth}px`;
+    this.element.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(${minColumnWidth}px, 1fr))`;
 
     const iconCell = this.createIconCell(hudScale, this.locked, layoutProfile);
     const emptyCell = (colSpan = 1) => this.createEmptyCell(hudScale, colSpan);
