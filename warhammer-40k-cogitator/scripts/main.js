@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.1.73";
+const COGITATOR_VERSION = "2.2.03";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -19,7 +19,8 @@ const HUD_LAYOUTS = {
   original: "original",
   metalWarhammer: "metal-warhammer",
   cogitatorTheme: "Cogitator-Theme",
-  chaosTheme: "Chaos"
+  chaosTheme: "Chaos",
+  inquisitionTheme: "Inquisition"
 };
 
 const SOCKET_EVENTS = {
@@ -114,7 +115,8 @@ Hooks.once("init", () => {
       [HUD_LAYOUTS.original]: "Original",
       [HUD_LAYOUTS.metalWarhammer]: "Metal-Warhammer",
       [HUD_LAYOUTS.cogitatorTheme]: "Cogitator-Theme",
-      [HUD_LAYOUTS.chaosTheme]: "Chaos"
+      [HUD_LAYOUTS.chaosTheme]: "Chaos",
+      [HUD_LAYOUTS.inquisitionTheme]: "Inquisition"
     },
     default: HUD_LAYOUTS.metalWarhammer,
     onChange: () => refreshWorkflowHud()
@@ -1622,6 +1624,13 @@ function getWorkflowHudLayoutProfile() {
       buttonBackground: "Chaos-Button.png",
       buttonPressed: "Chaos-pressed-button.png",
       cogitatorButton: "Dark_Mechanicum_Icon.webp"
+    },
+    [HUD_LAYOUTS.inquisitionTheme]: {
+      textureFolder: "inquisition",
+      hudBackground: "Inquisition-Background.png",
+      buttonBackground: "Inquisition-Button.png",
+      buttonPressed: "Inquisiton-Button-Pressed.png",
+      cogitatorButton: "Inquisition-center.png"
     }
   };
 
@@ -1706,13 +1715,19 @@ class WorkflowHud {
       this.element.style.setProperty("--wh-yellow-dirty", "#9a7f00");
       this.element.style.setProperty("--wh-yellow", "#c7a300");
       this.element.style.setProperty("--wh-text", layoutProfile.id === HUD_LAYOUTS.chaosTheme ? "#f5f5dc" : "#e6dcc5");
+      this.element.style.setProperty("--wh-text-hover", layoutProfile.id === HUD_LAYOUTS.inquisitionTheme ? "#000000" : "var(--wh-text)");
       this.element.style.setProperty("--wh-shadow", "rgba(0, 0, 0, 0.65)");
       this.element.style.setProperty("--wh-shadow-deep", "rgba(0, 0, 0, 0.85)");
 
       this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
     }
 
-    this.element.style.setProperty("--wh-text", layoutProfile.id === HUD_LAYOUTS.chaosTheme ? "#f5f5dc" : "#e6dcc5");
+    const defaultTextColor = layoutProfile.id === HUD_LAYOUTS.chaosTheme
+      ? "#f5f5dc"
+      : (layoutProfile.id === HUD_LAYOUTS.inquisitionTheme ? "#d4af37" : "#e6dcc5");
+    const hoverTextColor = layoutProfile.id === HUD_LAYOUTS.inquisitionTheme ? "#000000" : defaultTextColor;
+    this.element.style.setProperty("--wh-text", defaultTextColor);
+    this.element.style.setProperty("--wh-text-hover", hoverTextColor);
 
     this.element.style.backgroundColor = "var(--wh-metal)";
     this.element.style.backgroundImage = layoutProfile.useTextures
@@ -1834,7 +1849,7 @@ class WorkflowHud {
         buttonEl.style.backgroundSize = layoutProfile.useTextures ? "cover, auto, auto" : "auto, auto";
         buttonEl.style.backgroundPosition = layoutProfile.useTextures ? "center, center, center" : "center, center";
         buttonEl.style.backgroundRepeat = layoutProfile.useTextures ? "no-repeat, repeat, repeat" : "repeat, repeat";
-        buttonEl.style.color = "var(--wh-text)";
+        buttonEl.style.color = "var(--wh-text-hover)";
         buttonEl.style.textShadow = "0 1px 1px rgba(0,0,0,0.7)";
         buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -3px 6px rgba(0,0,0,0.35), 0 0 6px rgba(122,15,15,0.18)";
       });
