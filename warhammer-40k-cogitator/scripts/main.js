@@ -1552,7 +1552,7 @@ async function openLauncher() {
 function getWorkflowHudButtons() {
   const buttons = [
     { id: "attack", label: "Attack", action: () => runStep("attack") },
-    { id: "psychic", label: "Psychic Powers", action: () => runStep("psychic") },
+    { id: "psychic", label: "Psychic", action: () => runStep("psychic") },
     { id: "defense", label: "Defense", action: () => runStep("defense") },
     { id: "damage", label: "Damage", action: () => runStep("damage") },
     { id: "skill", label: "Skill", action: () => openSkillTest() },
@@ -1743,10 +1743,10 @@ class WorkflowHud {
     const hoverTextShadow = layoutProfile.id === HUD_LAYOUTS.inquisitionTheme
       ? "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000"
       : (layoutProfile.id === HUD_LAYOUTS.deathwatchTheme
-        ? "-1px -1px 0 #c0c0c0, 1px -1px 0 #c0c0c0, -1px 1px 0 #c0c0c0, 1px 1px 0 #c0c0c0"
+        ? "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000"
         : "0 1px 1px rgba(0,0,0,0.7)");
     this.element.style.setProperty("--wh-text", defaultTextColor);
-    this.element.style.setProperty("--wh-text-hover", layoutProfile.id === HUD_LAYOUTS.deathwatchTheme ? "#000000" : hoverTextColor);
+    this.element.style.setProperty("--wh-text-hover", hoverTextColor);
     this.element.style.setProperty("--wh-text-hover-shadow", hoverTextShadow);
 
     this.element.style.backgroundColor = "var(--wh-metal)";
