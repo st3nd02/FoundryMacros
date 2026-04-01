@@ -1724,7 +1724,8 @@ class WorkflowHud {
       this.element.style.setProperty("--wh-yellow-dirty", "#9a7f00");
       this.element.style.setProperty("--wh-yellow", "#c7a300");
       this.element.style.setProperty("--wh-text", layoutProfile.id === HUD_LAYOUTS.chaosTheme ? "#f5f5dc" : "#e6dcc5");
-      this.element.style.setProperty("--wh-text-hover", layoutProfile.id === HUD_LAYOUTS.inquisitionTheme ? "#000000" : "var(--wh-text)");
+      this.element.style.setProperty("--wh-text-hover", layoutProfile.id === HUD_LAYOUTS.inquisitionTheme ? "#d4af37" : "var(--wh-text)");
+      this.element.style.setProperty("--wh-text-hover-shadow", "0 1px 1px rgba(0,0,0,0.7)");
       this.element.style.setProperty("--wh-shadow", "rgba(0, 0, 0, 0.65)");
       this.element.style.setProperty("--wh-shadow-deep", "rgba(0, 0, 0, 0.85)");
 
@@ -1739,8 +1740,14 @@ class WorkflowHud {
     const hoverTextColor = layoutProfile.id === HUD_LAYOUTS.inquisitionTheme || layoutProfile.id === HUD_LAYOUTS.deathwatchTheme
       ? "#d4af37"
       : defaultTextColor;
+    const hoverTextShadow = layoutProfile.id === HUD_LAYOUTS.inquisitionTheme
+      ? "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000"
+      : (layoutProfile.id === HUD_LAYOUTS.deathwatchTheme
+        ? "-1px -1px 0 #c0c0c0, 1px -1px 0 #c0c0c0, -1px 1px 0 #c0c0c0, 1px 1px 0 #c0c0c0"
+        : "0 1px 1px rgba(0,0,0,0.7)");
     this.element.style.setProperty("--wh-text", defaultTextColor);
-    this.element.style.setProperty("--wh-text-hover", hoverTextColor);
+    this.element.style.setProperty("--wh-text-hover", layoutProfile.id === HUD_LAYOUTS.deathwatchTheme ? "#000000" : hoverTextColor);
+    this.element.style.setProperty("--wh-text-hover-shadow", hoverTextShadow);
 
     this.element.style.backgroundColor = "var(--wh-metal)";
     this.element.style.backgroundImage = layoutProfile.useTextures
@@ -1863,7 +1870,7 @@ class WorkflowHud {
         buttonEl.style.backgroundPosition = layoutProfile.useTextures ? "center, center, center" : "center, center";
         buttonEl.style.backgroundRepeat = layoutProfile.useTextures ? "no-repeat, repeat, repeat" : "repeat, repeat";
         buttonEl.style.color = "var(--wh-text-hover)";
-        buttonEl.style.textShadow = "0 1px 1px rgba(0,0,0,0.7)";
+        buttonEl.style.textShadow = "var(--wh-text-hover-shadow)";
         buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -3px 6px rgba(0,0,0,0.35), 0 0 6px rgba(122,15,15,0.18)";
       });
       buttonEl.addEventListener("mouseleave", () => {
