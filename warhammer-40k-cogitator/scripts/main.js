@@ -5,7 +5,7 @@ import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_w
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.2.03";
+const COGITATOR_VERSION = "2.2.04";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -20,7 +20,8 @@ const HUD_LAYOUTS = {
   metalWarhammer: "metal-warhammer",
   cogitatorTheme: "Cogitator-Theme",
   chaosTheme: "Chaos",
-  inquisitionTheme: "Inquisition"
+  inquisitionTheme: "Inquisition",
+  deathwatchTheme: "Deathwatch"
 };
 
 const SOCKET_EVENTS = {
@@ -116,7 +117,8 @@ Hooks.once("init", () => {
       [HUD_LAYOUTS.metalWarhammer]: "Metal-Warhammer",
       [HUD_LAYOUTS.cogitatorTheme]: "Cogitator-Theme",
       [HUD_LAYOUTS.chaosTheme]: "Chaos",
-      [HUD_LAYOUTS.inquisitionTheme]: "Inquisition"
+      [HUD_LAYOUTS.inquisitionTheme]: "Inquisition",
+      [HUD_LAYOUTS.deathwatchTheme]: "Deathwatch"
     },
     default: HUD_LAYOUTS.metalWarhammer,
     onChange: () => refreshWorkflowHud()
@@ -1631,6 +1633,13 @@ function getWorkflowHudLayoutProfile() {
       buttonBackground: "Inquisition-Button.png",
       buttonPressed: "Inquisiton-Button-Pressed.png",
       cogitatorButton: "Inquisition-center.png"
+    },
+    [HUD_LAYOUTS.deathwatchTheme]: {
+      textureFolder: "deathwatch",
+      hudBackground: "Deathwatch-background.png",
+      buttonBackground: "Deathwatch-button.png",
+      buttonPressed: "Deathwatch-button-pressed.png",
+      cogitatorButton: "Deathwatch-center.png"
     }
   };
 
@@ -1724,8 +1733,12 @@ class WorkflowHud {
 
     const defaultTextColor = layoutProfile.id === HUD_LAYOUTS.chaosTheme
       ? "#f5f5dc"
-      : (layoutProfile.id === HUD_LAYOUTS.inquisitionTheme ? "#d4af37" : "#e6dcc5");
-    const hoverTextColor = layoutProfile.id === HUD_LAYOUTS.inquisitionTheme ? "#000000" : defaultTextColor;
+      : (layoutProfile.id === HUD_LAYOUTS.inquisitionTheme
+        ? "#d4af37"
+        : (layoutProfile.id === HUD_LAYOUTS.deathwatchTheme ? "#c0c0c0" : "#e6dcc5"));
+    const hoverTextColor = layoutProfile.id === HUD_LAYOUTS.inquisitionTheme || layoutProfile.id === HUD_LAYOUTS.deathwatchTheme
+      ? "#d4af37"
+      : defaultTextColor;
     this.element.style.setProperty("--wh-text", defaultTextColor);
     this.element.style.setProperty("--wh-text-hover", hoverTextColor);
 
