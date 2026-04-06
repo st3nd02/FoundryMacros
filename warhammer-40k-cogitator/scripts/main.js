@@ -399,11 +399,15 @@ async function applyFireTurnStartEffects(actor) {
   const fireRoll = await new Roll("1d10").evaluate({ async: true });
   await show3dDiceRoll(fireRoll);
   const fireDamage = Number(fireRoll.total ?? 0);
+  const toughnessBonus = Math.max(0, Number(actor.system?.characteristics?.toughness?.bonus ?? 0));
+  const unnaturalToughness = Math.max(0, Number(actor.system?.characteristics?.toughness?.unnatural ?? 0));
+  const fireMitigation = toughnessBonus + unnaturalToughness;
+  const appliedFireDamage = Math.max(0, fireDamage - fireMitigation);
 
   const woundsMax = Number(actor.system?.wounds?.max ?? 0);
   const woundsCurrent = Number(actor.system?.wounds?.value ?? 0);
   const critCurrent = Number(actor.system?.wounds?.critical ?? 0);
-  const tentativeWounds = woundsCurrent + fireDamage;
+  const tentativeWounds = woundsCurrent + appliedFireDamage;
   const newWounds = Number.isFinite(woundsMax) && woundsMax > 0
     ? Math.min(tentativeWounds, woundsMax)
     : tentativeWounds;
@@ -421,7 +425,7 @@ async function applyFireTurnStartEffects(actor) {
     "system.fatigue.value": newFatigue
   });
 
-  summaryLines.push(`<b>4) Fire Damage:</b> ${fireRoll.total} on 1d10 → <b>${fireDamage}</b> Energy damage (ignores Armour, Body hit).`);
+  summaryLines.push(`<b>4) Fire Damage:</b> ${fireRoll.total} on 1d10 - TB (${toughnessBonus}) - Unnatural TB (${unnaturalToughness}) → <b>${appliedFireDamage}</b> Energy damage (ignores Armour, Body hit).`);
   summaryLines.push(`<b>5) Fatigue:</b> +1 fatigue from fire turn-start effects.`);
 
   summaryLines.push(`<b>Result:</b> Wounds ${woundsCurrent} → ${newWounds}${Number.isFinite(woundsMax) && woundsMax > 0 ? `/${woundsMax}` : ""}${overflowToCritical > 0 ? `, Critical +${overflowToCritical} (Total ${newCritical})` : ""}; Fatigue ${currentFatigue} → ${newFatigue}.${Number(newCritical ?? 0) > 11 ? ` <span style="color:#ff2a2a;font-weight:900;">${actor.name} dies.</span>` : ""}`);
