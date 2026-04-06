@@ -657,16 +657,7 @@ new Dialog({
           properties.push("Flame");
         }
 
-        if (spray && !isHordeTarget) {
-          traitTests.spray = {
-            ...(await rollCharacteristicTest({
-              total: targetActor?.system?.characteristics?.agility?.total ?? 0,
-              label: "Agility",
-              actorDoc: targetActor,
-              rollType: "Agility to Resist Spray"
-            })),
-            resolved: true
-          };
+        if (spray) {
           properties.push("Spray");
         }
 
