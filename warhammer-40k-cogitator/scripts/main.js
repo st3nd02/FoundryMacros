@@ -10,7 +10,7 @@ import {
 } from "./fate_engine.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "3.0.0";
+const COGITATOR_VERSION = "3.0.1";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -224,6 +224,7 @@ function registerCombatHooks() {
     if (!actor) return;
     await clearTurnStartCombatUseEffects(actor);
     await applyBleedingTurnStartFatigue(actor);
+    await applyRegenerationTurnStartHealing(actor);
     await applyFireTurnStartEffects(actor);
     await clearExpiredTurnStartEffects(actor);
   });
@@ -296,6 +297,74 @@ async function applyBleedingTurnStartFatigue(actor) {
   await ChatMessage.create({
     speaker: { alias: "System" },
     content: `<b>${actor.name}</b> gains <b>+1 Fatigue</b> at turn start due to <b>Bleeding</b>.`
+  });
+}
+
+function getTraitNumericValue(actor, traitName) {
+  if (!actor || !traitName) return null;
+  const normalizedTraitName = String(traitName).trim().toLowerCase();
+  if (!normalizedTraitName) return null;
+
+  const traitItems = actor.items?.filter(item => item?.type === "trait") ?? [];
+  for (const trait of traitItems) {
+    const traitNameText = String(trait?.name ?? "").trim();
+    if (!traitNameText) continue;
+    const traitMatch = traitNameText.match(/^(.+?)\s*\(\s*(\d+)\s*\)\s*$/i);
+    if (!traitMatch) continue;
+    const matchedName = String(traitMatch[1] ?? "").trim().toLowerCase();
+    if (matchedName !== normalizedTraitName) continue;
+    const matchedValue = Number.parseInt(traitMatch[2], 10);
+    if (Number.isFinite(matchedValue)) return matchedValue;
+  }
+
+  return null;
+}
+
+async function applyRegenerationTurnStartHealing(actor) {
+  if (!actor || !game.user?.isGM) return;
+
+  const regenerationValue = getTraitNumericValue(actor, "Regeneration");
+  if (!Number.isFinite(regenerationValue) || regenerationValue <= 0) return;
+
+  const toughnessTarget = Math.max(1, Number(actor.system?.characteristics?.toughness?.total ?? 0));
+  const initialRoll = await new Roll("1d100").evaluate({ async: true });
+  let testOutcome = resolveD100Outcome({ targetNumber: toughnessTarget, rollResult: initialRoll.total });
+
+  if (!testOutcome.success && canActorSpendFate(actor)) {
+    testOutcome = await maybeApplyFateReroll({
+      actor,
+      rollType: "Regeneration Turn Start Toughness Roll",
+      targetNumber: toughnessTarget,
+      rollResult: initialRoll.total,
+      reroll: async () => {
+        const reroll = await new Roll("1d100").evaluate({ async: true });
+        await show3dDiceRoll(reroll);
+        return reroll.total;
+      },
+      speaker: ChatMessage.getSpeaker({ actor }),
+      postReport: true
+    });
+  }
+
+  await show3dDiceRoll(initialRoll);
+  const finalRoll = Number(testOutcome.roll ?? initialRoll.total ?? 0);
+
+  if (!testOutcome.success) {
+    await ChatMessage.create({
+      speaker: { alias: "System" },
+      content: `<div class="warhammer-regeneration-turn-card"><h3 style="margin:0 0 0.3em 0;">♻️ Regeneration — ${actor.name}</h3><b>Trait:</b> Regeneration (${regenerationValue})<br><b>Toughness Test:</b> ${finalRoll} vs ${toughnessTarget} → <b>FAILURE</b><br><b>Result:</b> No wounds are healed.</div>`
+    });
+    return;
+  }
+
+  const currentWounds = Math.max(0, Number(actor.system?.wounds?.value ?? 0));
+  const healedWounds = Math.min(regenerationValue, currentWounds);
+  const newWounds = Math.max(0, currentWounds - regenerationValue);
+
+  await actor.update({ "system.wounds.value": newWounds });
+  await ChatMessage.create({
+    speaker: { alias: "System" },
+    content: `<div class="warhammer-regeneration-turn-card"><h3 style="margin:0 0 0.3em 0;">♻️ Regeneration — ${actor.name}</h3><b>Trait:</b> Regeneration (${regenerationValue})<br><b>Toughness Test:</b> ${finalRoll} vs ${toughnessTarget} → <b>SUCCESS</b><br><b>Healing:</b> Wounds ${currentWounds} → ${newWounds} (healed ${healedWounds}).</div>`
   });
 }
 
