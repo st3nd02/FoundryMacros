@@ -787,13 +787,15 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
 
   const effectInterface = game.dfreds?.effectInterface;
   let applied = false;
+  const effectIdLc = String(effectId ?? "").toLowerCase();
+  const isWhcEffect = effectIdLc.startsWith("ce-(whc)-");
   const preferredNames = [effectName, ...effectNames].filter(Boolean);
   const statusTemplate = Array.isArray(CONFIG?.statusEffects)
     ? CONFIG.statusEffects.find(status => {
       const statusId = String(status?.id ?? "").toLowerCase();
       const statusName = String(status?.name ?? "").toLowerCase();
-      const effectIdLc = String(effectId ?? "").toLowerCase();
       if (effectIdLc && statusId === effectIdLc) return true;
+      if (isWhcEffect) return false;
       return preferredNames.some(name => {
         const normalized = String(name ?? "").toLowerCase();
         return normalized && (statusName === normalized || statusId === normalized);
@@ -807,18 +809,22 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
     effectName,
     ...preferredNames
   ].some(value => String(value ?? "").trim().toLowerCase() === "unconscious");
+  const hasMatchingEffect = (name = "") => findActorEffect(actor, resolvedStatusId, name);
   const hasAppliedEffect = () => {
     if (allowDuplicates) return false;
-    return Boolean(findActorEffect(actor, resolvedStatusId, effectName) || preferredNames.map(name => findActorEffect(actor, resolvedStatusId, name)).find(Boolean));
+    if (isWhcEffect) return Boolean(hasMatchingEffect());
+    return Boolean(hasMatchingEffect(effectName) || preferredNames.map(name => hasMatchingEffect(name)).find(Boolean));
   };
 
   if (!allowDuplicates && canModifyActorEffects(actor) && resolvedStatusId) {
-    const existingSystemStatus = findActorEffect(actor, resolvedStatusId, effectName) || preferredNames.map(name => findActorEffect(actor, resolvedStatusId, name)).find(Boolean);
+    const existingSystemStatus = isWhcEffect
+      ? hasMatchingEffect()
+      : hasMatchingEffect(effectName) || preferredNames.map(name => hasMatchingEffect(name)).find(Boolean);
     if (!existingSystemStatus) {
       try {
         if (typeof actor.toggleStatusEffect === "function") {
           await actor.toggleStatusEffect(resolvedStatusId, { active: true });
-          if (findActorEffect(actor, resolvedStatusId, effectName) || preferredNames.map(name => findActorEffect(actor, resolvedStatusId, name)).find(Boolean)) {
+          if (isWhcEffect ? hasMatchingEffect() : hasMatchingEffect(effectName) || preferredNames.map(name => hasMatchingEffect(name)).find(Boolean)) {
             applied = true;
           }
         }
@@ -833,12 +839,14 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
   if (effectInterface?.addEffect) {
     const paramsByPriority = [
       { effectId: resolvedStatusId || effectId, uuid: actor.uuid },
-      { effectId: resolvedStatusId || effectId, uuids: [actor.uuid] },
-      ...preferredNames.flatMap(name => ([
+      { effectId: resolvedStatusId || effectId, uuids: [actor.uuid] }
+    ].filter(params => params.effectId || params.effectName);
+    if (!isWhcEffect) {
+      paramsByPriority.push(...preferredNames.flatMap(name => ([
         { effectName: name, uuid: actor.uuid },
         { effectName: name, uuids: [actor.uuid] }
-      ]))
-    ].filter(params => params.effectId || params.effectName);
+      ])));
+    }
 
     for (const params of paramsByPriority) {
       try {
@@ -854,7 +862,11 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
   }
 
   if (!applied && canModifyActorEffects(actor)) {
-    const existing = allowDuplicates ? null : findActorEffect(actor, resolvedStatusId, effectName) || preferredNames.map(name => findActorEffect(actor, resolvedStatusId, name)).find(Boolean);
+    const existing = allowDuplicates
+      ? null
+      : (isWhcEffect
+        ? hasMatchingEffect()
+        : hasMatchingEffect(effectName) || preferredNames.map(name => hasMatchingEffect(name)).find(Boolean));
     if (!existing) {
       await actor.createEmbeddedDocuments("ActiveEffect", [{
         name: statusTemplate?.name || preferredNames[0] || resolvedStatusId || "Status Effect",
