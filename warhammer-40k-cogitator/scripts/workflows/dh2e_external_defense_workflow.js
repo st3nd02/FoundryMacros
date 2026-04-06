@@ -1,5 +1,7 @@
 import { getPerilsOfWarpEntry, getPsychicPhenomenaEntry, inlineRollPsychicText } from "../data/psychic_events.js";
 
+import { canActorSpendFate, getActorFateValue, maybeApplyFateReroll } from "../fate_engine.js";
+
 export async function runDefenseWorkflow() {
 try {
 /**
@@ -58,22 +60,6 @@ const updateUserTokenTargets = tokenIds => {
     const token = canvas.tokens?.get(tokenId);
     if (!token) continue;
     token.setTarget(true, { user: game.user, releaseOthers: false, groupSelection: true });
-  }
-};
-
-const getActorFateValue = actorDoc => {
-  const fate = actorDoc?.system?.fate;
-  if (typeof fate === "number") return fate;
-  return Number(fate?.value ?? 0);
-};
-
-const spendActorFate = async actorDoc => {
-  const current = getActorFateValue(actorDoc);
-  const next = Math.max(0, current - 1);
-  if (typeof actorDoc?.system?.fate === "number") {
-    await actorDoc.update({ "system.fate": next });
-  } else {
-    await actorDoc.update({ "system.fate.value": next });
   }
 };
 
@@ -398,22 +384,18 @@ const postResult = ({ usedFate }) => {
 
 let defenseResult = postResult({ usedFate: false });
 let dos = defenseResult.success ? defenseResult.degrees : 0;
-if (dos <= 0 && getActorFateValue(actor) > 0) {
-  const useFate = await new Promise(resolve => {
-    new Dialog({
-      title: "Spend Fate?",
-      content: `<p><b>Test Failed!</b><br>Spend 1 Fate Point to reroll?<br>Remaining: <b>${getActorFateValue(actor)}</b></p>`,
-      buttons: {
-        yes: { label: "Reroll (-1 Fate)", callback: () => resolve(true) },
-        no: { label: "Keep Result", callback: () => resolve(false) }
-      },
-      default: "no"
-    }).render(true);
+if (dos <= 0 && canActorSpendFate(actor)) {
+  const fateOutcome = await maybeApplyFateReroll({
+    actor,
+    rollType: `${actionText.replace(/<[^>]+>/g, "")} Defense Roll`,
+    targetNumber: target,
+    rollResult: roll.total,
+    reroll: async () => (await rollWithDiceSoNice("1d100")).total,
+    speaker: ChatMessage.getSpeaker({ actor }),
+    postReport: true
   });
-
-  if (useFate) {
-    await spendActorFate(actor);
-    roll = await rollWithDiceSoNice("1d100");
+  if (fateOutcome.usedFate) {
+    roll = { ...roll, total: fateOutcome.roll };
     defenseResult = postResult({ usedFate: true });
     dos = defenseResult.success ? defenseResult.degrees : 0;
   }
