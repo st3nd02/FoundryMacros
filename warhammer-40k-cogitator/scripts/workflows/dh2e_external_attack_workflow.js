@@ -1,3 +1,5 @@
+import { canActorSpendFate, maybeApplyFateReroll } from "../fate_engine.js";
+
 export async function runAttackWorkflow() {
 /**
  * DH2e External Attack Workflow (Foundry V13)
@@ -277,9 +279,25 @@ const rollAgilityEvasionTest = async actorDoc => {
   const ag = Number(actorDoc?.system?.characteristics?.agility?.total ?? 0);
   const target = Math.max(1, ag);
   const roll = await animatedRoll("1d100");
-  const success = roll.total === 1 ? true : (roll.total === 100 ? false : roll.total <= target);
+  let rollValue = roll.total;
+  let success = rollValue === 1 ? true : (rollValue === 100 ? false : rollValue <= target);
+  if (!success && canActorSpendFate(actorDoc)) {
+    const fateOutcome = await maybeApplyFateReroll({
+      actor: actorDoc,
+      rollType: "Agility to Resist Spray",
+      targetNumber: target,
+      rollResult: rollValue,
+      reroll: async () => (await animatedRoll("1d100")).total,
+      speaker: ChatMessage.getSpeaker({ actor: actorDoc }),
+      postReport: true
+    });
+    if (fateOutcome.usedFate) {
+      rollValue = fateOutcome.roll;
+      success = fateOutcome.success;
+    }
+  }
   const ab = Number(actorDoc?.system?.characteristics?.agility?.bonus ?? 0);
-  return { target, roll: roll.total, success, evadeMeters: ab };
+  return { target, roll: rollValue, success, evadeMeters: ab };
 };
 
 const resolveSuppressingFireWillpowerTests = async state => {
@@ -298,7 +316,23 @@ const resolveSuppressingFireWillpowerTests = async state => {
     const willpowerTotal = Math.max(1, Number(targetActor.system?.characteristics?.willpower?.total ?? 0));
     const suppressingTarget = Math.max(1, willpowerTotal - suppressingPenalty);
     const suppressingRoll = await animatedRoll("1d100");
-    const resisted = suppressingRoll.total <= suppressingTarget && suppressingRoll.total !== 100;
+    let suppressRollValue = suppressingRoll.total;
+    let resisted = suppressRollValue <= suppressingTarget && suppressRollValue !== 100;
+    if (!resisted && canActorSpendFate(targetActor)) {
+      const fateOutcome = await maybeApplyFateReroll({
+        actor: targetActor,
+        rollType: "Suppressing Fire Willpower Roll",
+        targetNumber: suppressingTarget,
+        rollResult: suppressRollValue,
+        reroll: async () => (await animatedRoll("1d100")).total,
+        speaker: ChatMessage.getSpeaker({ actor: targetActor }),
+        postReport: true
+      });
+      if (fateOutcome.usedFate) {
+        suppressRollValue = fateOutcome.roll;
+        resisted = fateOutcome.success;
+      }
+    }
 
     if (!resisted) {
       await game.warhammer40kCogitator?.addConvenientEffectToActor?.({
@@ -308,7 +342,7 @@ const resolveSuppressingFireWillpowerTests = async state => {
       });
     }
 
-    summaries.push(`${tg.name} ${resisted ? "passed" : "failed"} Suppressing WP (${suppressingRoll.total}/${suppressingTarget})${resisted ? "" : " [Pinned]"}`);
+    summaries.push(`${tg.name} ${resisted ? "passed" : "failed"} Suppressing WP (${suppressRollValue}/${suppressingTarget})${resisted ? "" : " [Pinned]"}`);
   }
 
   if (summaries.length) {
@@ -450,26 +484,6 @@ const rollGrenadeDamageTotal = async (weapon, speaker) => {
   if (!formula) return null;
   const roll = await animatedRoll(formula, speaker);
   return roll.total;
-};
-
-const promptAttackFateReroll = async ({ actorDoc, rollValue, bestTN }) => {
-  const fate = actorDoc.system.fate?.value ?? 0;
-  if (fate <= 0) return false;
-
-  return new Promise(resolve => {
-    new Dialog({
-      title: "Spend Fate?",
-      content: `<p><b>Attack Missed!</b></p>
-                <p>Attack Roll: <b>${rollValue}</b> vs Target <b>${bestTN}</b></p>
-                <p>Spend 1 Fate Point to reroll?</p>
-                <p>Remaining Fate: <b>${fate}</b></p>`,
-      buttons: {
-        yes: { label: "Reroll (-1 Fate)", callback: () => resolve(true) },
-        no: { label: "Keep Result", callback: () => resolve(false) }
-      },
-      default: "no"
-    }).render(true);
-  });
 };
 
 const evaluateAttackResult = ({ result, targets, weapon, traits }) => {
@@ -1097,14 +1111,21 @@ const runAttackWorkflow = async setup => {
     }
   }
 
-  if (!isSpray && !success) {
-    const useFate = await promptAttackFateReroll({ actorDoc: attacker, rollValue: result, bestTN });
-    if (useFate) {
-      await attacker.update({ "system.fate.value": Math.max(0, (attacker.system.fate?.value ?? 0) - 1) });
-      result = (await animatedRoll("1d100", chatMessage.speaker)).total;
+  if (!isSpray && !success && canActorSpendFate(attacker)) {
+    const fateOutcome = await maybeApplyFateReroll({
+      actor: attacker,
+      rollType: "Attack Roll",
+      targetNumber: bestTN,
+      rollResult: result,
+      reroll: async () => (await animatedRoll("1d100", chatMessage.speaker)).total,
+      speaker: chatMessage.speaker,
+      postReport: true
+    });
+    if (fateOutcome.usedFate) {
+      result = fateOutcome.roll;
       ({ success, dos, jam, bestTN } = evaluateAttackResult({ result, targets: state.targets, weapon, traits }));
       state.bestTarget = bestTN;
-      state.extraText = [state.extraText, `${attacker.name} spent Fate to reroll attack`].filter(Boolean).join(" | ");
+      state.extraText = [state.extraText, `${attacker.name} rerolled with Fate`].filter(Boolean).join(" | ");
     }
   }
 

@@ -3,16 +3,22 @@ import { runDefenseWorkflow } from "./workflows/dh2e_external_defense_workflow.j
 import { runDamageWorkflow } from "./workflows/dh2e_external_damage_workflow.js";
 import { runApplyDamageWorkflow } from "./workflows/dh2e_external_apply_damage_workflow.js";
 import { runPsychicPowerWorkflow } from "./workflows/dh2e_external_psychic_workflow.js";
+import {
+  canActorSpendFate,
+  maybeApplyFateReroll,
+  resolveD100Outcome
+} from "./fate_engine.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "2.2.04";
+const COGITATOR_VERSION = "3.0.0";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
   workflowHudLocked: "workflowHudLocked",
   workflowHudPosX: "workflowHudPosX",
   workflowHudPosY: "workflowHudPosY",
-  workflowHudLayout: "workflowHudLayout"
+  workflowHudLayout: "workflowHudLayout",
+  forceFieldFatePolicy: "forceFieldFatePolicy"
 };
 
 const HUD_LAYOUTS = {
@@ -22,6 +28,12 @@ const HUD_LAYOUTS = {
   chaosTheme: "Chaos",
   inquisitionTheme: "Inquisition",
   deathwatchTheme: "Deathwatch"
+};
+
+const FORCE_FIELD_FATE_POLICIES = {
+  disabled: "disabled",
+  failedOnly: "failedOnly",
+  failedAndOverloaded: "failedAndOverloaded"
 };
 
 const SOCKET_EVENTS = {
@@ -122,6 +134,20 @@ Hooks.once("init", () => {
     },
     default: HUD_LAYOUTS.metalWarhammer,
     onChange: () => refreshWorkflowHud()
+  });
+
+  game.settings.register(COGITATOR_ID, SETTINGS.forceFieldFatePolicy, {
+    name: "Force Field Fate Reroll Policy",
+    hint: "Controls whether failed/overloaded Force Field checks can be rerolled with Fate.",
+    scope: "world",
+    config: true,
+    type: String,
+    choices: {
+      [FORCE_FIELD_FATE_POLICIES.disabled]: "Disabled (no Fate rerolls)",
+      [FORCE_FIELD_FATE_POLICIES.failedOnly]: "Failed only",
+      [FORCE_FIELD_FATE_POLICIES.failedAndOverloaded]: "Failed and overloaded"
+    },
+    default: FORCE_FIELD_FATE_POLICIES.disabled
   });
 
   game.keybindings.register(COGITATOR_ID, "openLauncher", {
@@ -282,9 +308,25 @@ async function applyFireTurnStartEffects(actor) {
 
   const wpTotal = Math.max(1, Number(actor.system?.characteristics?.willpower?.total ?? 0));
   const wpRoll = await new Roll("1d100").evaluate({ async: true });
-  const wpSuccess = wpRoll.total === 1 ? true : (wpRoll.total === 100 ? false : wpRoll.total <= wpTotal);
+  let wpOutcome = resolveD100Outcome({ targetNumber: wpTotal, rollResult: wpRoll.total });
+  if (!wpOutcome.success && canActorSpendFate(actor)) {
+    wpOutcome = await maybeApplyFateReroll({
+      actor,
+      rollType: "Fire Turn Start Willpower Roll",
+      targetNumber: wpTotal,
+      rollResult: wpRoll.total,
+      reroll: async () => {
+        const reroll = await new Roll("1d100").evaluate({ async: true });
+        await show3dDiceRoll(reroll);
+        return reroll.total;
+      },
+      speaker: ChatMessage.getSpeaker({ actor }),
+      postReport: true
+    });
+  }
+  const wpSuccess = wpOutcome.success;
   await show3dDiceRoll(wpRoll);
-  summaryLines.push(`<b>1) Willpower Test:</b> ${wpRoll.total} vs ${wpTotal} → <b>${wpSuccess ? "SUCCESS" : "FAILURE"}</b>.`);
+  summaryLines.push(`<b>1) Willpower Test:</b> ${wpOutcome.roll} vs ${wpTotal} → <b>${wpSuccess ? "SUCCESS" : "FAILURE"}</b>.`);
 
   if (wpSuccess) {
     const attemptExtinguish = await new Promise(resolve => {
@@ -304,9 +346,25 @@ async function applyFireTurnStartEffects(actor) {
       const agTotalBase = Number(actor.system?.characteristics?.agility?.total ?? 0);
       const agTarget = Math.max(1, agTotalBase - 10);
       const agRoll = await new Roll("1d100").evaluate({ async: true });
-      const agSuccess = agRoll.total === 1 ? true : (agRoll.total === 100 ? false : agRoll.total <= agTarget);
+      let agOutcome = resolveD100Outcome({ targetNumber: agTarget, rollResult: agRoll.total });
+      if (!agOutcome.success && canActorSpendFate(actor)) {
+        agOutcome = await maybeApplyFateReroll({
+          actor,
+          rollType: "Fire Agility Extinguish Roll",
+          targetNumber: agTarget,
+          rollResult: agRoll.total,
+          reroll: async () => {
+            const reroll = await new Roll("1d100").evaluate({ async: true });
+            await show3dDiceRoll(reroll);
+            return reroll.total;
+          },
+          speaker: ChatMessage.getSpeaker({ actor }),
+          postReport: true
+        });
+      }
+      const agSuccess = agOutcome.success;
       await show3dDiceRoll(agRoll);
-      summaryLines.push(`<b>3) Agility -10 Test:</b> ${agRoll.total} vs ${agTarget} (Ag ${agTotalBase} - 10) → <b>${agSuccess ? "SUCCESS" : "FAILURE"}</b>.`);
+      summaryLines.push(`<b>3) Agility -10 Test:</b> ${agOutcome.roll} vs ${agTarget} (Ag ${agTotalBase} - 10) → <b>${agSuccess ? "SUCCESS" : "FAILURE"}</b>.`);
 
       if (agSuccess) {
         const fireEffectIds = actor.effects
@@ -2066,21 +2124,15 @@ class WorkflowHudResetMenu extends FormApplication {
   }
 }
 
-async function askForFateReroll(actor) {
-  const fateCurrent = actor.system.fate?.value ?? 0;
-  if (fateCurrent <= 0) return false;
-
-  return new Promise(resolve => {
-    new Dialog({
-      title: "Spend Fate?",
-      content: `<p><b>Test Failed!</b><br> Spend 1 Fate Point to reroll?<br>Remaining: <b>${fateCurrent}</b></p>`,
-      buttons: {
-        yes: { label: "Spend Fate (-1)", callback: () => resolve(true) },
-        no: { label: "Keep Result", callback: () => resolve(false) }
-      },
-      default: "no"
-    }).render(true);
-  });
+function shouldOfferForceFieldFate(outcome) {
+  const policy = String(game.settings.get(COGITATOR_ID, SETTINGS.forceFieldFatePolicy) ?? FORCE_FIELD_FATE_POLICIES.disabled);
+  if (policy === FORCE_FIELD_FATE_POLICIES.disabled) return false;
+  if (policy === FORCE_FIELD_FATE_POLICIES.failedOnly) return String(outcome ?? "").toLowerCase() === "failed";
+  if (policy === FORCE_FIELD_FATE_POLICIES.failedAndOverloaded) {
+    const normalized = String(outcome ?? "").toLowerCase();
+    return normalized === "failed" || normalized === "overloaded";
+  }
+  return false;
 }
 
 async function show3dDiceRoll(roll) {
@@ -2111,24 +2163,6 @@ async function openSkillTest() {
   const hasKeen = actor.items.some(i => i.type === "talent" && /keen intuition/i.test(i.name));
   const hasInfusedKnowledge = actor.items.some(i => i.type === "talent" && /infused knowledge/i.test(i.name));
   const hasHeightened = actor.items.some(i => i.type === "talent" && slug(i.name).startsWith("heightenedsenses"));
-
-  async function askForFate() {
-    const fateCurrent = actor.system.fate?.value ?? 0;
-    if (fateCurrent <= 0) return false;
-    if ((actor.system.fate?.value ?? 0) <= 0) return false;
-
-    return new Promise(resolve => {
-      new Dialog({
-        title: "Spend Fate?",
-        content: `<p><b>Test Failed!</b><br> Spend 1 Fate Point to reroll?<br>Remaining: <b>${fateCurrent}</b></p>`,
-        buttons: {
-          yes: { label: "Spend Fate (-1)", callback: () => resolve(true) },
-          no: { label: "Keep Result", callback: () => resolve(false) }
-        },
-        default: "no"
-      }).render(true);
-    });
-  }
 
   function prettyLabel(str) {
     return str
@@ -2588,100 +2622,21 @@ ${!keenData ? `
 `
           });
 
-          if (!success && (actor.system.fate?.value ?? 0) > 0) {
-            const useFate = await askForFate();
-
-            if (useFate) {
-              await actor.update({
-                "system.fate.value": actor.system.fate.value - 1
-              });
-
-              const fateRoll = await new Roll("1d100").roll({ async: true });
-              const fateVal = fateRoll.total;
-
-              const fateSuccess = fateVal <= target;
-              const fateDegrees = Math.floor(Math.abs(target - fateVal) / 10) + 1;
-
-              const fateText = fateSuccess ?
-                `${fateDegrees} Degrees of Success` :
-                `${fateDegrees} Degrees of Failure`;
-
-              const fateColor = fateSuccess ? "#1aff1a" : "#ff2a2a";
-
-              await show3dDiceRoll(fateRoll);
-
-              await ChatMessage.create({
-                speaker: ChatMessage.getSpeaker({ actor }),
-                content: `
-<div style="text-align:center;">
-
-<b style="
-  color:gold;
-  font-style:italic;
-  font-size:1.1em;
-   text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;
-">✦ ${actor.name} spends Fate and rerolls! ✦
-</b></div><hr>
-<div style="text-align:center; color:#000000; font-size:1.1em;">
-
-<div style="font-style:italic;font-size:1.1em;">
-<b>${actor.name}</b> performs a <b>${label}</b> Test
-</div>
-
-<hr>
-
-<div style="margin-top:6px;font-size:1.2em;">
-<b>Target:</b>
-<span style="
-  color:#3aa0ff;
-  font-weight:bold;
-  text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;
-">${target}</span>
-</div>
-
-<div style="font-size:1.2em;">
-<b>Roll:</b>
-<span style="
-  color:#ff9f1a;
-  font-weight:bold;
-  text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;
-">${fateVal}</span>
-  </div>
-
-  ${notes.length ? `
-  <div style="font-size:1.1em; font-style:italic; opacity:0.85; margin-bottom:6px;">
-    ${notes.join(" | ")}
-  </div>` : ""}
-
-  <div style="
-    font-size:1.2em;
-    font-weight:bold;
-    color:${fateColor};
-    text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;
-  ">
-    ${fateText}
-  </div>
-
-</div>
-`
-              });
-            }
+          if (!success && canActorSpendFate(actor)) {
+            const rerollOutcome = await maybeApplyFateReroll({
+              actor,
+              rollType: `${label} Roll`,
+              targetNumber: target,
+              rollResult: rollVal,
+              reroll: async () => {
+                const fateRoll = await new Roll("1d100").roll({ async: true });
+                await show3dDiceRoll(fateRoll);
+                return fateRoll.total;
+              },
+              speaker: ChatMessage.getSpeaker({ actor }),
+              postReport: true
+            });
+            if (!rerollOutcome.usedFate) return;
           }
         }
       }
@@ -2805,23 +2760,6 @@ async function openMedicalTest() {
       },
       default: "apply"
     }).render(true);
-  }
-
-  async function askForFate() {
-    const fateCurrent = actor.system.fate?.value ?? 0;
-    if (fateCurrent <= 0) return false;
-
-    return new Promise(resolve => {
-      new Dialog({
-        title: "Spend Fate?",
-        content: `<p><b>Test Failed!</b><br> Spend 1 Fate Point to reroll?<br>Remaining: <b>${fateCurrent}</b></p>`,
-        buttons: {
-          yes: { label: "Spend Fate (-1)", callback: () => resolve(true) },
-          no: { label: "Keep Result", callback: () => resolve(false) }
-        },
-        default: "no"
-      }).render(true);
-    });
   }
 
   const wounds = patient.system.wounds;
@@ -3084,94 +3022,33 @@ ${healText}
             await clearBloodLoss();
           }
 
-          if (!success && (actor.system.fate?.value ?? 0) > 0) {
-            const useFate = await askForFate();
-            if (!useFate) return;
-
-            await actor.update({ "system.fate.value": actor.system.fate.value - 1 });
-
-            const fateRoll = await new Roll("1d100").roll({ async: true });
-            const fateVal = fateRoll.total;
-            const fateSuccess =
-              fateVal === 1 ? true :
-              fateVal === 100 ? false :
-              fateVal <= baseTarget;
-            const fateDegrees = Math.floor(Math.abs(baseTarget - fateVal) / 10) + 1;
-            const fateSuccessColor = fateSuccess ? "#1aff1a" : "#ff2a2a";
+          if (!success && canActorSpendFate(actor)) {
+            const rerollOutcome = await maybeApplyFateReroll({
+              actor,
+              rollType: `${actionName} Roll`,
+              targetNumber: baseTarget,
+              rollResult: rollVal,
+              reroll: async () => {
+                const fateRoll = await new Roll("1d100").roll({ async: true });
+                await show3dDiceRoll(fateRoll);
+                return fateRoll.total;
+              },
+              speaker: ChatMessage.getSpeaker({ actor }),
+              postReport: true
+            });
+            if (!rerollOutcome.usedFate) return;
 
             let fateHealAmount = 0;
-            let fateHealText = "";
-            if (fateSuccess && (mode === "first" || mode === "extended")) {
-              const heal = await calcHeal(fateDegrees);
+            if (rerollOutcome.success && (mode === "first" || mode === "extended")) {
+              const heal = await calcHeal(rerollOutcome.dos);
               fateHealAmount = heal;
               rememberHealingRoll(heal, `${actor.name} → ${patient.name} (${actionName} Fate)`);
-              fateHealText = `
-      <div style="margin-top:6px;font-weight:bold;font-size:1.3em;"> Heals <span style=" color:#ff2a2a; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;">${heal}</span> wounds </div>`;
             }
 
-            await show3dDiceRoll(fateRoll);
-
-            await ChatMessage.create({
-              speaker: ChatMessage.getSpeaker({ actor }),
-              content: `
-      <div style="font-size:1.1em;text-align:center; color: #000000;"> <div> <b style="
-  color:gold;
-  font-style:italic;
-  font-size:1.1em;
-   text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;
-">✦ ${actor.name} spends Fate and rerolls! ✦
-</b></div><hr>
-<div style="font-style:italic;font-size:1.1em;"><b>${actor.name}</b> treats <b>${patient.name}</b></div>
-<div style="font-size:1.2em; text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black; color: #ff0000;">
-<b>${actionName}</b></div>
-${mode === "diagnose" ? `<b>Skill:</b> <i>${skillName.charAt(0).toUpperCase() + skillName.slice(1)}</i><br>` : ""}
-${(mode === "first" || mode === "extended") ? `<b>State:</b> <b>${state}</b><br>` : ""}
-${difficultyLabel ? `
-<span style="font-size:1.1em;">
-<b>Difficulty: </b><i>${difficultyLabel}</i>
-</span>` : ""}
-<div style="margin-top:6px;font-size:1.1em;"><b>Target: </b><span style="
-  color:#3aa0ff;
-  font-weight:bold;
-  text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;
-">${baseTarget}</span></div>
-<div style="font-size:1.1em;"><b>Roll:</b><span style="
-  color:#ff9f1a;
-  font-weight:bold;
-  text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;
-">${fateVal}</span>
-${notes.length ? `<div style="font-size:1.0em;font-style:italic">${notes.join(" | ")}</div>` : ""}
-<div style="text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black; font-weight:bold;color:${fateSuccessColor}">
-${fateSuccess ? `${fateDegrees} Degrees of Success` : `${fateDegrees} Degrees of Failure`}
-</div>
-${fateHealText}
-</div>`
-            });
-
-            if (fateSuccess && (mode === "first" || mode === "extended") && fateHealAmount > 0) {
+            if (rerollOutcome.success && (mode === "first" || mode === "extended") && fateHealAmount > 0) {
               await promptApplyHealing(fateHealAmount, `${actor.name} ${actionName} (Fate)`);
             }
-            if (fateSuccess && mode === "staunch") {
+            if (rerollOutcome.success && mode === "staunch") {
               await clearBloodLoss();
             }
           }
@@ -3850,96 +3727,20 @@ text-shadow:
 </div></div>`
           });
 
-          if (!success && actor.system.fate?.value > 0) {
-            const useFate = await askForFateReroll(actor);
-
-            if (useFate) {
-              await actor.update({ "system.fate.value": actor.system.fate.value - 1 });
-
-              const roll2 = await new Roll("1d100").roll({ async: true });
-              await show3dDiceRoll(roll2);
-              const result2 = roll2.total;
-
-              let dos2 = 0;
-              let dof2 = 0;
-
-              if (result2 <= target) dos2 = 1 + Math.floor((target - result2) / 10);
-              else dof2 = 1 + Math.floor((result2 - target) / 10);
-
-              const unnatural2 = actor.system.characteristics[key].unnatural || 0;
-              const unnaturalBonus2 = dos2 > 0 ? Math.floor(unnatural2 / 2) : 0;
-              const finalDoS2 = dos2 + unnaturalBonus2;
-
-              ChatMessage.create({
-                speaker: ChatMessage.getSpeaker({ actor }),
-                content: `
-<div style="text-align:center; font-size:1.1em;">
-<b style="color:gold;">${actor.name} spends Fate and rerolls!</b>
-<hr>
-<div style="text-align:center;">
-
-<div style="font-style:italic;font-size:1.1em;">
-<b>${actor.name}</b> performs a <b>${label}</b> Test
-</div>
-
-<hr>
-
-<div style="font-size:1.0em;">${modLine}</div>
-
-<div style="margin-top:6px;font-size:1.2em;">
-<b>Target:</b>
-<span style="
-  color:#3aa0ff;
-  font-weight:bold;
-  text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;
-">${displayTarget}</span>
-</div>
-
-<div style="font-size:1.2em;">
-<b>Roll:</b>
-<span style="
-  color:#ff9f1a;
-  font-weight:bold;
-  text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;
-">${result2}</span>
-</div>
-
-${dos2 ? `<div style="font-weight:bold;font-size:1.3em;">
-<span style="color:#1aff1a;text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;">
-${finalDoS2} Degrees of Success
-</span>
-${unnaturalBonus2 ? `<br><span style="font-size:0.8em;color:#8fe38f; text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;">
-(+${unnaturalBonus2} Unnatural)
-</span>` : ""}
-</div>` : ""}
-${dof2 ? `<div style="font-weight:bold;font-size:1.3em;">
-<span style="color:#ff2a2a;
-text-shadow:
-    0 0 1px black,
-    0 0 2px black,
-    1px 1px 0 black,
-   -1px -1px 0 black;"> ${dof2} Degrees of Failure</span><br>
-</div>` : ""}
-
-</div>`
-              });
-            }
+          if (!success && canActorSpendFate(actor)) {
+            await maybeApplyFateReroll({
+              actor,
+              rollType: `${label} Roll`,
+              targetNumber: target,
+              rollResult: result,
+              reroll: async () => {
+                const roll2 = await new Roll("1d100").roll({ async: true });
+                await show3dDiceRoll(roll2);
+                return roll2.total;
+              },
+              speaker: ChatMessage.getSpeaker({ actor }),
+              postReport: true
+            });
           }
         }
       }
@@ -3952,7 +3753,6 @@ async function openFearTest() {
   if (!token) return ui.notifications.warn("Select your character first.");
 
   const actor = token.actor;
-  let fate = actor.system.fate?.value ?? 0;
 
   const roll3d = game.dice3d;
 
@@ -4229,29 +4029,26 @@ ${insanityBlock}
 
           await postResult("Initial Test", roll, rollHistory, notes, dof, wpbReduction, success, comparisonTarget);
 
-          if (!success && fate > 0) {
-            new Dialog({
-              title: "Spend Fate?",
-              content: `Spend 1 Fate to reroll?<br><b>(Current: ${fate})</b>`,
-              buttons: {
-                yes: {
-                  label: "Reroll (Fate -1)",
-                  callback: async () => {
-                    fate--;
-                    await actor.update({ "system.fate.value": fate });
-                    rollHistory = [];
-                    roll = await d100();
-                    rollHistory.push({ label: "Fate Roll", value: roll });
-                    notes = ["Fate reroll"];
-                    ({ dof, forcedSuccess, wpbReduction } = getDoF(roll, notes, target));
-                    success = (roll <= target) || forcedSuccess;
-                    await postResult("Fate Reroll", roll, rollHistory, notes, dof, wpbReduction, success, target);
-                    if (!success) await rollFear(dof);
-                  }
-                },
-                no: { label: "No", callback: async () => { await rollFear(dof); } }
-              }
-            }).render(true);
+          if (!success && canActorSpendFate(actor)) {
+            const rerollOutcome = await maybeApplyFateReroll({
+              actor,
+              rollType: "Fear Willpower Roll",
+              targetNumber: target,
+              rollResult: roll,
+              reroll: async () => d100(),
+              speaker: ChatMessage.getSpeaker({ actor }),
+              postReport: true
+            });
+            if (rerollOutcome.usedFate) {
+              rollHistory = [{ label: "Fate Roll", value: rerollOutcome.roll }];
+              notes = ["Fate reroll"];
+              ({ dof, forcedSuccess, wpbReduction } = getDoF(rerollOutcome.roll, notes, target));
+              success = (rerollOutcome.roll <= target) || forcedSuccess;
+              await postResult("Fate Reroll", rerollOutcome.roll, rollHistory, notes, dof, wpbReduction, success, target);
+              if (!success) await rollFear(dof);
+              return;
+            }
+            await rollFear(dof);
           } else if (!success) {
             await rollFear(dof);
           }
@@ -4309,8 +4106,34 @@ async function evaluateForceFieldForActor({ actor, token = null, field = null, p
   await show3dDiceRoll(roll);
   const result = Number(roll.total ?? 0);
 
-  const overloadedNow = result <= overload;
-  const protectedHit = !overloadedNow && result <= protection;
+  let finalRollResult = result;
+  let overloadedNow = result <= overload;
+  let protectedHit = !overloadedNow && result <= protection;
+  let usedFate = false;
+
+  const initialOutcome = overloadedNow ? "overloaded" : (protectedHit ? "protected" : "failed");
+  if (shouldOfferForceFieldFate(initialOutcome) && canActorSpendFate(actor)) {
+    const fateOutcome = await maybeApplyFateReroll({
+      actor,
+      rollType: `${selectedField.name} Force Field Roll`,
+      targetNumber: protection,
+      rollResult: result,
+      reroll: async () => {
+        const reroll = await new Roll("1d100").roll({ async: true });
+        await show3dDiceRoll(reroll);
+        return Number(reroll.total ?? 0);
+      },
+      speaker: ChatMessage.getSpeaker({ actor, token }),
+      postReport: true,
+      allow: shouldOfferForceFieldFate(initialOutcome)
+    });
+    if (fateOutcome.usedFate) {
+      usedFate = true;
+      finalRollResult = Number(fateOutcome.roll);
+      overloadedNow = finalRollResult <= overload;
+      protectedHit = !overloadedNow && finalRollResult <= protection;
+    }
+  }
 
   let text = "❌ FAILED";
   let color = "#ff2a2a";
@@ -4346,7 +4169,7 @@ async function evaluateForceFieldForActor({ actor, token = null, field = null, p
   <div><b>Protection:</b> ≤ ${buildForceFieldOutlined(protection, "#ffad55")}</div>
   <div><b>Overload:</b> ≤ ${buildForceFieldOutlined(overload, "#ffad55")}</div>
   <hr>
-  <div><b>Roll:</b> ${buildForceFieldOutlined(result, "#bd7548")}</div>
+  <div><b>Roll:</b> ${buildForceFieldOutlined(finalRollResult, "#bd7548")}</div>
   <hr>
   <div style="font-size:1.35em; font-weight:900; color:${color}; text-shadow:0 0 2px black;">${text}</div>
   ${reason === "workflow" ? `<div style="margin-top:6px; font-style:italic;">Attack interception check</div>` : ""}
@@ -4357,7 +4180,7 @@ async function evaluateForceFieldForActor({ actor, token = null, field = null, p
   return {
     skipped: false,
     outcome: overloadedNow ? "overloaded" : (protectedHit ? "protected" : "failed"),
-    result,
+    result: finalRollResult,
     protection,
     overload,
     fieldId: selectedField.id,

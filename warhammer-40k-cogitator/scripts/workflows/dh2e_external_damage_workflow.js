@@ -1,3 +1,5 @@
+import { canActorSpendFate, maybeApplyFateReroll } from "../fate_engine.js";
+
 export async function runDamageWorkflow() {
 try {
 /**
@@ -532,11 +534,34 @@ new Dialog({
         const targetActor = targetDoc?.actor;
         const traitTests = { toxic: null, flame: null, spray: null, concussive: null, hallucinogenic: null, force: null };
 
-        const rollCharacteristicTest = async ({ total, label, modifier = 0 }) => {
+        const rollCharacteristicTest = async ({ total, label, modifier = 0, actorDoc = null, rollType = null }) => {
           const target = Math.max(1, Number(total || 0) + Number(modifier || 0));
           const roll = await new Roll("1d100").evaluate();
           if (game.dice3d) await game.dice3d.showForRoll(roll, game.user, true);
-          return { label, target, roll: roll.total, success: isD100Success(roll.total, target), dos: calcDoS(target, roll.total) };
+          let rollValue = roll.total;
+          let success = isD100Success(rollValue, target);
+          let dos = calcDoS(target, rollValue);
+          if (!success && canActorSpendFate(actorDoc)) {
+            const fateOutcome = await maybeApplyFateReroll({
+              actor: actorDoc,
+              rollType: rollType ?? `${label} Roll`,
+              targetNumber: target,
+              rollResult: rollValue,
+              reroll: async () => {
+                const reroll = await new Roll("1d100").evaluate();
+                if (game.dice3d) await game.dice3d.showForRoll(reroll, game.user, true);
+                return reroll.total;
+              },
+              speaker: ChatMessage.getSpeaker({ actor: actorDoc }),
+              postReport: true
+            });
+            if (fateOutcome.usedFate) {
+              rollValue = fateOutcome.roll;
+              success = fateOutcome.success;
+              dos = fateOutcome.dos;
+            }
+          }
+          return { label, target, roll: rollValue, success, dos };
         };
 
         if (toxic && !isHordeTarget) {
@@ -544,7 +569,9 @@ new Dialog({
           const test = await rollCharacteristicTest({
             total: targetActor?.system?.characteristics?.toughness?.total ?? 0,
             label: "Toughness",
-            modifier: -10 * toxicValue
+            modifier: -10 * toxicValue,
+            actorDoc: targetActor,
+            rollType: "Toughness to Resist Toxic"
           });
           let toxicDamage = 0;
           if (!test.success) {
@@ -577,7 +604,9 @@ new Dialog({
           const test = await rollCharacteristicTest({
             total: targetActor?.system?.characteristics?.toughness?.total ?? 0,
             label: "Toughness",
-            modifier: respiratorBonus - hallucinogenicPenalty
+            modifier: respiratorBonus - hallucinogenicPenalty,
+            actorDoc: targetActor,
+            rollType: "Toughness to Resist Hallucinogenic"
           });
 
           let effectRollTotal = null;
@@ -617,7 +646,12 @@ new Dialog({
 
         if (flame && !isHordeTarget) {
           traitTests.flame = {
-            ...(await rollCharacteristicTest({ total: targetActor?.system?.characteristics?.agility?.total ?? 0, label: "Agility" })),
+            ...(await rollCharacteristicTest({
+              total: targetActor?.system?.characteristics?.agility?.total ?? 0,
+              label: "Agility",
+              actorDoc: targetActor,
+              rollType: "Agility to Resist Flame"
+            })),
             resolved: true
           };
           properties.push("Flame");
@@ -625,7 +659,12 @@ new Dialog({
 
         if (spray && !isHordeTarget) {
           traitTests.spray = {
-            ...(await rollCharacteristicTest({ total: targetActor?.system?.characteristics?.agility?.total ?? 0, label: "Agility" })),
+            ...(await rollCharacteristicTest({
+              total: targetActor?.system?.characteristics?.agility?.total ?? 0,
+              label: "Agility",
+              actorDoc: targetActor,
+              rollType: "Agility to Resist Spray"
+            })),
             resolved: true
           };
           properties.push("Spray");
@@ -637,7 +676,9 @@ new Dialog({
           const concussiveTest = await rollCharacteristicTest({
             total: targetActor?.system?.characteristics?.toughness?.total ?? 0,
             label: "Toughness",
-            modifier: -10 * concussiveValue
+            modifier: -10 * concussiveValue,
+            actorDoc: targetActor,
+            rollType: "Toughness to Resist Concussive"
           });
           const concussiveDof = concussiveTest.success ? 0 : Math.max(1, 1 + Math.floor((concussiveTest.roll - concussiveTest.target) / 10));
           traitTests.concussive = {
@@ -653,10 +694,46 @@ new Dialog({
           const targetWP = Number(targetActor?.system?.characteristics?.willpower?.total ?? 0);
           const attackerRoll = await new Roll("1d100").evaluate();
           if (game.dice3d) await game.dice3d.showForRoll(attackerRoll, game.user, true);
+          let attackerRollValue = attackerRoll.total;
+          if (!isD100Success(attackerRollValue, attackerWP) && canActorSpendFate(actor)) {
+            const attackerFateOutcome = await maybeApplyFateReroll({
+              actor,
+              rollType: "Force Opposed Willpower Roll",
+              targetNumber: attackerWP,
+              rollResult: attackerRollValue,
+              reroll: async () => {
+                const reroll = await new Roll("1d100").evaluate();
+                if (game.dice3d) await game.dice3d.showForRoll(reroll, game.user, true);
+                return reroll.total;
+              },
+              speaker: ChatMessage.getSpeaker({ actor }),
+              postReport: true
+            });
+            if (attackerFateOutcome.usedFate) attackerRollValue = attackerFateOutcome.roll;
+          }
+
           const targetRoll = await new Roll("1d100").evaluate();
           if (game.dice3d) await game.dice3d.showForRoll(targetRoll, game.user, true);
-          const attackerDoS = calcDoS(attackerWP, attackerRoll.total);
-          const targetDoS = calcDoS(targetWP, targetRoll.total);
+          let targetRollValue = targetRoll.total;
+          if (!isD100Success(targetRollValue, targetWP) && canActorSpendFate(targetActor)) {
+            const targetFateOutcome = await maybeApplyFateReroll({
+              actor: targetActor,
+              rollType: "Force Opposed Willpower Roll",
+              targetNumber: targetWP,
+              rollResult: targetRollValue,
+              reroll: async () => {
+                const reroll = await new Roll("1d100").evaluate();
+                if (game.dice3d) await game.dice3d.showForRoll(reroll, game.user, true);
+                return reroll.total;
+              },
+              speaker: ChatMessage.getSpeaker({ actor: targetActor }),
+              postReport: true
+            });
+            if (targetFateOutcome.usedFate) targetRollValue = targetFateOutcome.roll;
+          }
+
+          const attackerDoS = calcDoS(attackerWP, attackerRollValue);
+          const targetDoS = calcDoS(targetWP, targetRollValue);
           const won = attackerDoS > targetDoS;
           let forceDamage = 0;
           if (won) {
@@ -664,9 +741,9 @@ new Dialog({
             const forceRoll = await new Roll(`${forceDice}d10`).evaluate();
             if (game.dice3d) await game.dice3d.showForRoll(forceRoll, game.user, true);
             forceDamage = forceRoll.total;
-            traitTests.force = { resolved: true, attackerWP, targetWP, attackerRoll: attackerRoll.total, targetRoll: targetRoll.total, attackerDoS, targetDoS, won, dos: forceDice, result: forceDamage, ignoresSoak: true };
+            traitTests.force = { resolved: true, attackerWP, targetWP, attackerRoll: attackerRollValue, targetRoll: targetRollValue, attackerDoS, targetDoS, won, dos: forceDice, result: forceDamage, ignoresSoak: true };
           } else {
-            traitTests.force = { resolved: true, attackerWP, targetWP, attackerRoll: attackerRoll.total, targetRoll: targetRoll.total, attackerDoS, targetDoS, won, dos: 0, result: 0, ignoresSoak: true };
+            traitTests.force = { resolved: true, attackerWP, targetWP, attackerRoll: attackerRollValue, targetRoll: targetRollValue, attackerDoS, targetDoS, won, dos: 0, result: 0, ignoresSoak: true };
           }
           properties.push("Force");
         }

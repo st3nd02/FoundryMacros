@@ -1,5 +1,7 @@
 import { getPerilsOfWarpEntry, getPsychicPhenomenaEntry, inlineRollPsychicText } from "../data/psychic_events.js";
 
+import { canActorSpendFate, maybeApplyFateReroll } from "../fate_engine.js";
+
 export async function runPsychicPowerWorkflow() {
   const WORKFLOW_NS = "warhammer-40k-cogitator";
   const WORKFLOW_KEY = "dh2eExternalWorkflow";
@@ -568,26 +570,18 @@ export async function runPsychicPowerWorkflow() {
   let manifestSuccess = manifestRoll !== 100 && manifestRoll <= targetNumber && !(pick.isBlackCrusade && manifestRoll >= 91);
   let manifestDoS = calcDoS(targetNumber, manifestRoll);
 
-  if (!manifestSuccess && Number(actor.system.fate?.value ?? 0) > 0) {
-    const useFate = await new Promise(resolve => {
-      let settled = false;
-      const finish = value => {
-        if (settled) return;
-        settled = true;
-        resolve(value);
-      };
-      new Dialog({
-        title: "Spend Fate?",
-        content: `<p><b>Focus Power Test Failed!</b><br>Spend 1 Fate Point to reroll?</p>`,
-        buttons: { yes: { label: "Spend Fate (-1)", callback: () => finish(true) }, no: { label: "Keep Result", callback: () => finish(false) } },
-        default: "no",
-        close: () => finish(false)
-      }).render(true);
+  if (!manifestSuccess && canActorSpendFate(actor)) {
+    const fateOutcome = await maybeApplyFateReroll({
+      actor,
+      rollType: "Psychic Focus Power Roll",
+      targetNumber,
+      rollResult: manifestRoll,
+      reroll: async () => (await rollWithDice("1d100")).total,
+      speaker: ChatMessage.getSpeaker({ actor, token: token.document }),
+      postReport: true
     });
-
-    if (useFate) {
-      await actor.update({ "system.fate.value": Math.max(0, Number(actor.system.fate?.value ?? 0) - 1) });
-      manifestRoll = (await rollWithDice("1d100")).total;
+    if (fateOutcome.usedFate) {
+      manifestRoll = fateOutcome.roll;
       manifestSuccess = manifestRoll !== 100 && manifestRoll <= targetNumber && !(pick.isBlackCrusade && manifestRoll >= 91);
       manifestDoS = calcDoS(targetNumber, manifestRoll);
     }
@@ -611,9 +605,25 @@ export async function runPsychicPowerWorkflow() {
   let opposedResult = null;
   if (manifestSuccess && opposed && targetActor) {
     const defTarget = getStatValue(targetActor, focusTestType);
-    const defRoll = (await rollWithDice("1d100")).total;
-    const defSuccess = defRoll !== 100 && defRoll <= defTarget;
-    const defDoS = calcDoS(defTarget, defRoll);
+    let defRoll = (await rollWithDice("1d100")).total;
+    let defSuccess = defRoll !== 100 && defRoll <= defTarget;
+    let defDoS = calcDoS(defTarget, defRoll);
+    if (!defSuccess && canActorSpendFate(targetActor)) {
+      const targetFateOutcome = await maybeApplyFateReroll({
+        actor: targetActor,
+        rollType: `Psychic Opposed ${focusTestType} Roll`,
+        targetNumber: defTarget,
+        rollResult: defRoll,
+        reroll: async () => (await rollWithDice("1d100")).total,
+        speaker: ChatMessage.getSpeaker({ actor: targetActor, token: targetToken?.document }),
+        postReport: true
+      });
+      if (targetFateOutcome.usedFate) {
+        defRoll = targetFateOutcome.roll;
+        defSuccess = defRoll !== 100 && defRoll <= defTarget;
+        defDoS = calcDoS(defTarget, defRoll);
+      }
+    }
     const attackerWins = manifestDoS >= 1 && (!defSuccess || manifestDoS > defDoS);
     opposedResult = { target: defTarget, roll: defRoll, success: defSuccess, dos: defDoS, attackerWins };
   }
