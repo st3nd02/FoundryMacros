@@ -1879,6 +1879,85 @@ function getWorkflowHudCenterPosition() {
   };
 }
 
+function getLayoutButtonStyleProfile(layoutId, useTextures) {
+  const defaultProfile = {
+    idle: {
+      backgroundColor: "#23282d",
+      backgroundImage: useTextures
+        ? "textureIdle"
+        : "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)",
+      borderColor: "var(--wh-brass-dark)"
+    },
+    hover: {
+      backgroundColor: "#b7a982",
+      backgroundImage: useTextures
+        ? "textureHover"
+        : "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(207,192,155,0.18) 0%, rgba(183,169,130,0.20) 100%)",
+      borderColor: "var(--wh-brass-light)"
+    }
+  };
+
+  const overrides = {
+    [HUD_LAYOUTS.ecclesiarchyTheme]: {
+      idle: {
+        backgroundColor: "#000000",
+        backgroundImage: "none",
+        borderColor: "transparent"
+      },
+      hover: {
+        backgroundColor: "#4b0000",
+        backgroundImage: "none",
+        borderColor: "#000000"
+      }
+    },
+    [HUD_LAYOUTS.khorneTheme]: {
+      idle: {
+        backgroundColor: "#4b0000",
+        backgroundImage: "none",
+        borderColor: "transparent"
+      }
+    },
+    [HUD_LAYOUTS.nurgleTheme]: {
+      idle: {
+        backgroundColor: "#c7c56b",
+        backgroundImage: "none",
+        borderColor: "transparent"
+      },
+      hover: {
+        backgroundColor: "#cc7722",
+        backgroundImage: "none",
+        borderColor: "#000000"
+      }
+    },
+    [HUD_LAYOUTS.slaaneshTheme]: {
+      idle: {
+        backgroundColor: "transparent",
+        backgroundImage: "none",
+        borderColor: "transparent"
+      },
+      hover: {
+        backgroundColor: "#000000",
+        backgroundImage: "none",
+        borderColor: "#4b0082"
+      }
+    },
+    [HUD_LAYOUTS.tzeentchTheme]: {
+      idle: {
+        backgroundColor: "transparent",
+        backgroundImage: "none",
+        borderColor: "transparent"
+      },
+      hover: {
+        backgroundColor: "transparent",
+        backgroundImage: "none",
+        borderColor: "#000000"
+      }
+    }
+  };
+
+  return foundry.utils.mergeObject(defaultProfile, overrides[layoutId] ?? {}, { inplace: false });
+}
+
 async function resetWorkflowHudToCenter() {
   const { x, y } = getWorkflowHudCenterPosition();
   await game.settings.set(COGITATOR_ID, SETTINGS.workflowHudPosX, x);
@@ -2091,6 +2170,35 @@ class WorkflowHud {
 
   createActionCell(hudScale, button, fallbackLabel, layoutProfile) {
     const px = value => `${Math.round(value * hudScale)}px`;
+    const buttonStyleProfile = getLayoutButtonStyleProfile(layoutProfile.id, layoutProfile.useTextures);
+    const getStateBackgroundImage = (state, textureUrl) => {
+      const stateImage = buttonStyleProfile[state].backgroundImage;
+      if (stateImage === "none") return "none";
+      if (stateImage === "textureIdle") {
+        return `url("${textureUrl}"), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)`;
+      }
+      if (stateImage === "textureHover") {
+        return `url("${textureUrl}"), linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(207,192,155,0.18) 0%, rgba(183,169,130,0.20) 100%)`;
+      }
+      return stateImage;
+    };
+    const applyStateStyles = state => {
+      buttonEl.style.borderColor = buttonStyleProfile[state].borderColor;
+      buttonEl.style.backgroundColor = buttonStyleProfile[state].backgroundColor;
+      buttonEl.style.backgroundImage = getStateBackgroundImage(
+        state,
+        state === "hover" ? layoutProfile.assets.buttonPressed : layoutProfile.assets.buttonBackground
+      );
+      if (buttonEl.style.backgroundImage === "none") {
+        buttonEl.style.backgroundSize = "auto";
+        buttonEl.style.backgroundPosition = "center";
+        buttonEl.style.backgroundRepeat = "repeat";
+      } else {
+        buttonEl.style.backgroundSize = layoutProfile.useTextures ? "cover, auto, auto" : "auto, auto";
+        buttonEl.style.backgroundPosition = layoutProfile.useTextures ? "center, center, center" : "center, center";
+        buttonEl.style.backgroundRepeat = layoutProfile.useTextures ? "no-repeat, repeat, repeat" : "repeat, repeat";
+      }
+    };
     const buttonEl = document.createElement("button");
     buttonEl.type = "button";
     buttonEl.dataset.role = "workflow-action";
@@ -2098,13 +2206,6 @@ class WorkflowHud {
     buttonEl.style.padding = `${px(6)} ${px(8)}`;
     buttonEl.style.fontSize = px(10);
     buttonEl.style.minHeight = px(34);
-    buttonEl.style.backgroundColor = "#23282d";
-    buttonEl.style.backgroundImage = layoutProfile.useTextures
-      ? `url("${layoutProfile.assets.buttonBackground}"), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)`
-      : "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)";
-    buttonEl.style.backgroundSize = layoutProfile.useTextures ? "cover, auto, auto" : "auto, auto";
-    buttonEl.style.backgroundPosition = layoutProfile.useTextures ? "center, center, center" : "center, center";
-    buttonEl.style.backgroundRepeat = layoutProfile.useTextures ? "no-repeat, repeat, repeat" : "repeat, repeat";
     buttonEl.style.border = "1px solid var(--wh-brass-dark)";
     buttonEl.style.borderRadius = px(4);
     buttonEl.style.color = "var(--wh-text)";
@@ -2115,6 +2216,7 @@ class WorkflowHud {
     buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
     buttonEl.style.cursor = button ? "pointer" : "default";
     buttonEl.style.transition = "border-color 120ms ease, color 120ms ease, box-shadow 120ms ease";
+    applyStateStyles("idle");
     if (!button) {
       buttonEl.disabled = true;
       buttonEl.style.opacity = "0.82";
@@ -2127,27 +2229,13 @@ class WorkflowHud {
         await button.action();
       });
       buttonEl.addEventListener("mouseenter", () => {
-        buttonEl.style.borderColor = "var(--wh-brass-light)";
-        buttonEl.style.backgroundColor = "#b7a982";
-        buttonEl.style.backgroundImage = layoutProfile.useTextures
-          ? `url("${layoutProfile.assets.buttonPressed}"), linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(207,192,155,0.18) 0%, rgba(183,169,130,0.20) 100%)`
-          : "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(207,192,155,0.18) 0%, rgba(183,169,130,0.20) 100%)";
-        buttonEl.style.backgroundSize = layoutProfile.useTextures ? "cover, auto, auto" : "auto, auto";
-        buttonEl.style.backgroundPosition = layoutProfile.useTextures ? "center, center, center" : "center, center";
-        buttonEl.style.backgroundRepeat = layoutProfile.useTextures ? "no-repeat, repeat, repeat" : "repeat, repeat";
+        applyStateStyles("hover");
         buttonEl.style.color = "var(--wh-text-hover)";
         buttonEl.style.textShadow = "var(--wh-text-hover-shadow)";
         buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -3px 6px rgba(0,0,0,0.35), 0 0 6px rgba(122,15,15,0.18)";
       });
       buttonEl.addEventListener("mouseleave", () => {
-        buttonEl.style.borderColor = "var(--wh-brass-dark)";
-        buttonEl.style.backgroundColor = "#23282d";
-        buttonEl.style.backgroundImage = layoutProfile.useTextures
-          ? `url("${layoutProfile.assets.buttonBackground}"), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)`
-          : "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 12%, rgba(0,0,0,0.08) 100%), linear-gradient(145deg, rgba(49,55,61,0.20) 0%, rgba(35,40,45,0.12) 55%, rgba(27,31,35,0.20) 100%)";
-        buttonEl.style.backgroundSize = layoutProfile.useTextures ? "cover, auto, auto" : "auto, auto";
-        buttonEl.style.backgroundPosition = layoutProfile.useTextures ? "center, center, center" : "center, center";
-        buttonEl.style.backgroundRepeat = layoutProfile.useTextures ? "no-repeat, repeat, repeat" : "repeat, repeat";
+        applyStateStyles("idle");
         buttonEl.style.color = "var(--wh-text)";
         buttonEl.style.textShadow = "var(--wh-text-shadow)";
         buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
