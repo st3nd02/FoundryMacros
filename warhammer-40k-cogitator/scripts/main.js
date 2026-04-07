@@ -1900,56 +1900,61 @@ function getLayoutButtonStyleProfile(layoutId, useTextures) {
   const overrides = {
     [HUD_LAYOUTS.ecclesiarchyTheme]: {
       idle: {
-        backgroundColor: "#000000",
-        backgroundImage: "none",
+        backgroundColor: "transparent",
+        backgroundImage: "textureIdle",
         borderColor: "transparent"
       },
       hover: {
-        backgroundColor: "#4b0000",
-        backgroundImage: "none",
+        backgroundColor: "transparent",
+        backgroundImage: "textureHover",
         borderColor: "#000000"
       }
     },
     [HUD_LAYOUTS.khorneTheme]: {
       idle: {
-        backgroundColor: "#4b0000",
-        backgroundImage: "none",
+        backgroundColor: "transparent",
+        backgroundImage: "textureIdle",
+        borderColor: "transparent"
+      },
+      hover: {
+        backgroundColor: "transparent",
+        backgroundImage: "textureHover",
         borderColor: "transparent"
       }
     },
     [HUD_LAYOUTS.nurgleTheme]: {
       idle: {
-        backgroundColor: "#c7c56b",
-        backgroundImage: "none",
+        backgroundColor: "transparent",
+        backgroundImage: "textureIdle",
         borderColor: "transparent"
       },
       hover: {
-        backgroundColor: "#cc7722",
-        backgroundImage: "none",
+        backgroundColor: "transparent",
+        backgroundImage: "textureHover",
         borderColor: "#000000"
       }
     },
     [HUD_LAYOUTS.slaaneshTheme]: {
       idle: {
         backgroundColor: "transparent",
-        backgroundImage: "none",
+        backgroundImage: "textureIdle",
         borderColor: "transparent"
       },
       hover: {
-        backgroundColor: "#000000",
-        backgroundImage: "none",
+        backgroundColor: "transparent",
+        backgroundImage: "textureHover",
         borderColor: "#4b0082"
       }
     },
     [HUD_LAYOUTS.tzeentchTheme]: {
       idle: {
         backgroundColor: "transparent",
-        backgroundImage: "none",
+        backgroundImage: "textureIdle",
         borderColor: "transparent"
       },
       hover: {
         backgroundColor: "transparent",
-        backgroundImage: "none",
+        backgroundImage: "textureHover",
         borderColor: "#000000"
       }
     }
