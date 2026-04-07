@@ -10,7 +10,7 @@ import {
 } from "./fate_engine.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "3.0.2";
+const COGITATOR_VERSION = "3.0.3";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -125,10 +125,10 @@ Hooks.once("init", () => {
     config: true,
     type: String,
     choices: {
-      [HUD_LAYOUTS.original]: "Original",
-      [HUD_LAYOUTS.metalWarhammer]: "Metal-Warhammer",
-      [HUD_LAYOUTS.cogitatorTheme]: "Cogitator-Theme",
-      [HUD_LAYOUTS.chaosTheme]: "Chaos",
+      [HUD_LAYOUTS.original]: "Default",
+      [HUD_LAYOUTS.metalWarhammer]: "Industrial",
+      [HUD_LAYOUTS.cogitatorTheme]: "Cogitator",
+      [HUD_LAYOUTS.chaosTheme]: "Dark Mechanicum",
       [HUD_LAYOUTS.inquisitionTheme]: "Inquisition",
       [HUD_LAYOUTS.deathwatchTheme]: "Deathwatch"
     },
