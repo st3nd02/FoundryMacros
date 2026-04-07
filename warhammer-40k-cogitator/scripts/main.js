@@ -10,7 +10,7 @@ import {
 } from "./fate_engine.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "3.0.3";
+const COGITATOR_VERSION = "3.0.4";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -27,7 +27,14 @@ const HUD_LAYOUTS = {
   cogitatorTheme: "Cogitator-Theme",
   chaosTheme: "Chaos",
   inquisitionTheme: "Inquisition",
-  deathwatchTheme: "Deathwatch"
+  deathwatchTheme: "Deathwatch",
+  ecclesiarchyTheme: "Ecclesiarchy",
+  astraMilitarumTheme: "Astra Militarum",
+  khorneTheme: "Khorne",
+  nurgleTheme: "Nurgle",
+  slaaneshTheme: "Slaanesh",
+  tzeentchTheme: "Tzeentch",
+  chaosUndividedTheme: "Chaos Undivided"
 };
 
 const FORCE_FIELD_FATE_POLICIES = {
@@ -130,7 +137,14 @@ Hooks.once("init", () => {
       [HUD_LAYOUTS.cogitatorTheme]: "Cogitator",
       [HUD_LAYOUTS.chaosTheme]: "Dark Mechanicum",
       [HUD_LAYOUTS.inquisitionTheme]: "Inquisition",
-      [HUD_LAYOUTS.deathwatchTheme]: "Deathwatch"
+      [HUD_LAYOUTS.deathwatchTheme]: "Deathwatch",
+      [HUD_LAYOUTS.ecclesiarchyTheme]: "Ecclesiarchy",
+      [HUD_LAYOUTS.astraMilitarumTheme]: "Astra Militarum",
+      [HUD_LAYOUTS.khorneTheme]: "Khorne",
+      [HUD_LAYOUTS.nurgleTheme]: "Nurgle",
+      [HUD_LAYOUTS.slaaneshTheme]: "Slaanesh",
+      [HUD_LAYOUTS.tzeentchTheme]: "Tzeentch",
+      [HUD_LAYOUTS.chaosUndividedTheme]: "Chaos Undivided"
     },
     default: HUD_LAYOUTS.metalWarhammer,
     onChange: () => refreshWorkflowHud()
@@ -1783,6 +1797,55 @@ function getWorkflowHudLayoutProfile() {
       buttonBackground: "Deathwatch-button.png",
       buttonPressed: "Deathwatch-button-pressed.png",
       cogitatorButton: "Deathwatch-center.png"
+    },
+    [HUD_LAYOUTS.ecclesiarchyTheme]: {
+      textureFolder: "Ecclesiarchy",
+      hudBackground: "Ecclesiarchy-background.png",
+      buttonBackground: "Ecclesiarchy-button.png",
+      buttonPressed: "Ecclesiarchy-button-pressed.png",
+      cogitatorButton: "Ecclesiarchy-central.png"
+    },
+    [HUD_LAYOUTS.astraMilitarumTheme]: {
+      textureFolder: "Militarum",
+      hudBackground: "Militarum-background.png",
+      buttonBackground: "Militarum-button.png",
+      buttonPressed: "Militarum-button-pressed.png",
+      cogitatorButton: "Militarum-central.png"
+    },
+    [HUD_LAYOUTS.khorneTheme]: {
+      textureFolder: "chaos-khorne",
+      hudBackground: "Khorne-background.png",
+      buttonBackground: "Khorne-button.png",
+      buttonPressed: "Khorne-button-pressed.png",
+      cogitatorButton: "Khorne-central.png"
+    },
+    [HUD_LAYOUTS.nurgleTheme]: {
+      textureFolder: "chaos-nurgle",
+      hudBackground: "Nurgle-background.png",
+      buttonBackground: "Nurgle-button.png",
+      buttonPressed: "Nurgle-button-pressed.png",
+      cogitatorButton: "Nurgle-central.png"
+    },
+    [HUD_LAYOUTS.slaaneshTheme]: {
+      textureFolder: "chaos-slaanesh",
+      hudBackground: "Slaanesh-background.png",
+      buttonBackground: "Slaanesh-button.png",
+      buttonPressed: "Slaanesh-button-pressed.png",
+      cogitatorButton: "Slaanesh-central.png"
+    },
+    [HUD_LAYOUTS.tzeentchTheme]: {
+      textureFolder: "chaos-tzeentch",
+      hudBackground: "Tzeentch-Background.png",
+      buttonBackground: "Tzeentch-Button.png",
+      buttonPressed: "Tzeentch-Button-Pressed.png",
+      cogitatorButton: "Tzeentch-Center.png"
+    },
+    [HUD_LAYOUTS.chaosUndividedTheme]: {
+      textureFolder: "chaos-undivided",
+      hudBackground: "Undivided-background.png",
+      buttonBackground: "Undivided-button.png",
+      buttonPressed: "Undivided-button-pressed.png",
+      cogitatorButton: "Undivided-central.png"
     }
   };
 
@@ -1875,22 +1938,82 @@ class WorkflowHud {
       this.element.addEventListener("pointerdown", event => this.onPointerDown(event));
     }
 
-    const defaultTextColor = layoutProfile.id === HUD_LAYOUTS.chaosTheme
-      ? "#f5f5dc"
-      : (layoutProfile.id === HUD_LAYOUTS.inquisitionTheme
-        ? "#d4af37"
-        : (layoutProfile.id === HUD_LAYOUTS.deathwatchTheme ? "#c0c0c0" : "#e6dcc5"));
-    const hoverTextColor = layoutProfile.id === HUD_LAYOUTS.inquisitionTheme || layoutProfile.id === HUD_LAYOUTS.deathwatchTheme
-      ? "#d4af37"
-      : defaultTextColor;
-    const hoverTextShadow = layoutProfile.id === HUD_LAYOUTS.inquisitionTheme
-      ? "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000"
-      : (layoutProfile.id === HUD_LAYOUTS.deathwatchTheme
-        ? "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000"
-        : "0 1px 1px rgba(0,0,0,0.7)");
+    const layoutTextStyles = {
+      [HUD_LAYOUTS.chaosTheme]: {
+        defaultTextColor: "#f5f5dc",
+        defaultTextShadow: "0 1px 1px rgba(0,0,0,0.7)",
+        hoverTextColor: "#f5f5dc",
+        hoverTextShadow: "0 1px 1px rgba(0,0,0,0.7)"
+      },
+      [HUD_LAYOUTS.inquisitionTheme]: {
+        defaultTextColor: "#d4af37",
+        defaultTextShadow: "0 1px 1px rgba(0,0,0,0.7)",
+        hoverTextColor: "#d4af37",
+        hoverTextShadow: "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000"
+      },
+      [HUD_LAYOUTS.deathwatchTheme]: {
+        defaultTextColor: "#c0c0c0",
+        defaultTextShadow: "0 1px 1px rgba(0,0,0,0.7)",
+        hoverTextColor: "#d4af37",
+        hoverTextShadow: "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000"
+      },
+      [HUD_LAYOUTS.ecclesiarchyTheme]: {
+        defaultTextColor: "#c0c0c0",
+        defaultTextShadow: "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000",
+        hoverTextColor: "#000000",
+        hoverTextShadow: "-1px -1px 0 #4b0000, 1px -1px 0 #4b0000, -1px 1px 0 #4b0000, 1px 1px 0 #4b0000"
+      },
+      [HUD_LAYOUTS.astraMilitarumTheme]: {
+        defaultTextColor: "#000000",
+        defaultTextShadow: "-1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff",
+        hoverTextColor: "#f2d64b",
+        hoverTextShadow: "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000"
+      },
+      [HUD_LAYOUTS.khorneTheme]: {
+        defaultTextColor: "#000000",
+        defaultTextShadow: "-1px -1px 0 #d4af37, 1px -1px 0 #d4af37, -1px 1px 0 #d4af37, 1px 1px 0 #d4af37",
+        hoverTextColor: "#d4af37",
+        hoverTextShadow: "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000"
+      },
+      [HUD_LAYOUTS.nurgleTheme]: {
+        defaultTextColor: "#cc7722",
+        defaultTextShadow: "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000",
+        hoverTextColor: "#f2d64b",
+        hoverTextShadow: "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000"
+      },
+      [HUD_LAYOUTS.slaaneshTheme]: {
+        defaultTextColor: "#ff69b4",
+        defaultTextShadow: "-1px -1px 0 #c0c0c0, 1px -1px 0 #c0c0c0, -1px 1px 0 #c0c0c0, 1px 1px 0 #c0c0c0",
+        hoverTextColor: "#c0c0c0",
+        hoverTextShadow: "-1px -1px 0 #ff69b4, 1px -1px 0 #ff69b4, -1px 1px 0 #ff69b4, 1px 1px 0 #ff69b4"
+      },
+      [HUD_LAYOUTS.tzeentchTheme]: {
+        defaultTextColor: "#add8e6",
+        defaultTextShadow: "-1px -1px 0 #d4af37, 1px -1px 0 #d4af37, -1px 1px 0 #d4af37, 1px 1px 0 #d4af37",
+        hoverTextColor: "#d4af37",
+        hoverTextShadow: "-1px -1px 0 #add8e6, 1px -1px 0 #add8e6, -1px 1px 0 #add8e6, 1px 1px 0 #add8e6"
+      },
+      [HUD_LAYOUTS.chaosUndividedTheme]: {
+        defaultTextColor: "#000000",
+        defaultTextShadow: "-1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff",
+        hoverTextColor: "#ffffff",
+        hoverTextShadow: "-1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000, 1px 1px 0 #000000"
+      }
+    };
+    const textStyle = layoutTextStyles[layoutProfile.id] ?? {
+      defaultTextColor: "#e6dcc5",
+      defaultTextShadow: "0 1px 1px rgba(0,0,0,0.7)",
+      hoverTextColor: "#e6dcc5",
+      hoverTextShadow: "0 1px 1px rgba(0,0,0,0.7)"
+    };
+    const defaultTextColor = textStyle.defaultTextColor;
+    const hoverTextColor = textStyle.hoverTextColor;
+    const defaultTextShadow = textStyle.defaultTextShadow;
+    const hoverTextShadow = textStyle.hoverTextShadow;
     this.element.style.setProperty("--wh-text", defaultTextColor);
     this.element.style.setProperty("--wh-text-hover", hoverTextColor);
     this.element.style.setProperty("--wh-text-hover-shadow", hoverTextShadow);
+    this.element.style.setProperty("--wh-text-shadow", defaultTextShadow);
 
     this.element.style.backgroundColor = "var(--wh-metal)";
     this.element.style.backgroundImage = layoutProfile.useTextures
@@ -1988,7 +2111,7 @@ class WorkflowHud {
     buttonEl.style.fontFamily = "\"IM Fell English SC\", \"Times New Roman\", serif";
     buttonEl.style.textTransform = "uppercase";
     buttonEl.style.letterSpacing = "0.06em";
-    buttonEl.style.textShadow = "0 1px 1px rgba(0,0,0,0.7)";
+    buttonEl.style.textShadow = "var(--wh-text-shadow)";
     buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
     buttonEl.style.cursor = button ? "pointer" : "default";
     buttonEl.style.transition = "border-color 120ms ease, color 120ms ease, box-shadow 120ms ease";
@@ -2026,7 +2149,7 @@ class WorkflowHud {
         buttonEl.style.backgroundPosition = layoutProfile.useTextures ? "center, center, center" : "center, center";
         buttonEl.style.backgroundRepeat = layoutProfile.useTextures ? "no-repeat, repeat, repeat" : "repeat, repeat";
         buttonEl.style.color = "var(--wh-text)";
-        buttonEl.style.textShadow = "0 1px 1px rgba(0,0,0,0.7)";
+        buttonEl.style.textShadow = "var(--wh-text-shadow)";
         buttonEl.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -3px 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.35)";
       });
     }
