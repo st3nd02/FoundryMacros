@@ -12,9 +12,10 @@ try {
 
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
+const COLOR_TEXT_OUTLINE = "0px 0px 1px #000000, 1px 1px 1px #000000";
 
 const buildWorkflowHtml = state => {
-  const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${text}</span>`;
+  const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:${COLOR_TEXT_OUTLINE};">${text}</span>`;
   const statusColor = status => {
     const normalized = String(status ?? "").toLowerCase();
     if (normalized.includes("jam")) return "#b267ff";
@@ -77,7 +78,7 @@ const buildWorkflowHtml = state => {
     const hitsLabel = state.horde?.active ? "Hits vs Horde" : "Hits";
     const damageSummary = t.damageSummary
       ? `<div style="margin-top:4px;padding:6px;border:1px solid #777;border-radius:6px;">${t.damageSummary}</div>`
-      : `<div style="text-align:center;"><b>Damage</b><div>—</div></div>`;
+      : `<div style="text-align:center;"><b>Damage</b><div></div></div>`;
 
     return `<div style="border:1px solid #555;border-radius:6px;padding:6px;margin:6px 0;">
       <div><b>${t.name}</b></div>
@@ -93,7 +94,7 @@ const buildWorkflowHtml = state => {
 
   const showPowerMode = ["las", "plasma"].includes(String(state.weaponClass ?? "").toLowerCase()) || ["las", "plasma"].includes(String(state.weaponType ?? "").toLowerCase());
   const aimPowerLine = `<div><b>Aim:</b> ${state.aimLabel}${showPowerMode ? ` | <b>Power:</b> ${state.powerModeLabel}` : ""}</div>`;
-  return `<div data-workflow-id="${state.id}">
+  return `<div data-workflow-id="${state.id}" style="line-height:0;">
     <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;">${buildDescription()}</div>
     <div><b>Attack Mode:</b> ${state.modeLabel}</div>
     ${aimPowerLine}
@@ -758,7 +759,7 @@ new Dialog({
           : "";
 
         const furyHtml = furyResults.length
-          ? `<hr><div style="color:gold;font-size:1.1em;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">✦ RIGHTEOUS FURY ✦</div>${furyResults.map((f, i) => `<div>${i + 1}. <b>Location:</b> <i>${f.location}</i> — Righteous Fury: <b>${f.result}</b></div>`).join("")}`
+          ? `<hr><div style="color:gold;font-size:1.1em;font-weight:bold;text-shadow:${COLOR_TEXT_OUTLINE};">✦ RIGHTEOUS FURY ✦</div>${furyResults.map((f, i) => `<div>${i + 1}. <b>Location:</b> <i>${f.location}</i> — Righteous Fury: <b>${f.result}</b></div>`).join("")}`
           : "";
 
         const formulaInline = formula;
@@ -766,7 +767,7 @@ new Dialog({
 <div><b>Damage</b></div>
 <div><i style="color:#000;">(${formulaInline})</i></div>
 <div><b>Penetration:</b> ${pen}</div>
-${damageResults.map((d, i) => `<div><span style="font-weight:700;color:#000;">Damage done:</span> <span style="color:#bd7548;font-weight:900;font-size:1.1em;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${d}</span> <i style="font-weight:400;color:#000;">${hitLocations[i]}</i></div>`).join("")}
+${damageResults.map((d, i) => `<div><span style="font-weight:700;color:#000;">Damage done:</span> <span style="color:#bd7548;font-weight:900;font-size:1.1em;text-shadow:${COLOR_TEXT_OUTLINE};">${d}</span> <i style="font-weight:400;color:#000;">${hitLocations[i]}</i></div>`).join("")}
 <div style="margin-top:6px;"><b>Properties:</b> ${properties.join(", ") || "None"}</div>
 ${testSummary}${hallucinogenicSummary}${forceSummary}${sprayJamHtml}
 ${furyHtml}

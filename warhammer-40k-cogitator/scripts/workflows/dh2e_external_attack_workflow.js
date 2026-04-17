@@ -18,6 +18,7 @@ const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
 const BLADEMASTER_USED_EFFECT_ID = "ce-(whc)-blademaster-used";
 const JAM_EFFECT_ID = "ce-(whc)-jam";
 const JAM_EFFECT_NAME = "Jam";
+const COLOR_TEXT_OUTLINE = "0px 0px 1px #000000, 1px 1px 1px #000000";
 
 const createTalentModifierState = () => ({
   attack: { attackRoll: 0, penetration: 0, damage: 0, defense: 0, notes: [] },
@@ -303,7 +304,42 @@ const rollAgilityEvasionTest = async actorDoc => {
 const promptSprayDefenseFollowup = async ({ targetActor, sprayDefense, inescapablePenalty = 0 }) => {
   if (!targetActor) return { choice: "keep" };
 
-  const reactionUsed = !!game.warhammer40kCogitator?.hasDefenseReaction?.(targetActor);
+  const getUsedEvasionStacks = actor => {
+    if (!actor) return 0;
+    const matchingEffects = actor.effects.filter(effect => {
+      const statuses = Array.isArray(effect.statuses) ? effect.statuses : Array.from(effect.statuses ?? []);
+      const normalizedStatuses = statuses.map(status => String(status ?? "").trim().toLowerCase());
+      const coreStatus = String(effect.flags?.core?.statusId ?? "").trim().toLowerCase();
+      const ceStatus = String(effect.flags?.["dfreds-convenient-effects"]?.effectId ?? "").trim().toLowerCase();
+      const name = String(effect.name ?? "").trim().toLowerCase();
+      return normalizedStatuses.includes("ce-(whc)-used-evasion")
+        || coreStatus === "ce-(whc)-used-evasion"
+        || ceStatus === "ce-(whc)-used-evasion"
+        || name.includes("used evasion");
+    });
+    if (!matchingEffects.length) return 0;
+    return matchingEffects.reduce((total, effect) => {
+      const counter = Number(
+        effect.flags?.statuscounter?.counter?.value
+        ?? effect.flags?.statuscounter?.counter
+        ?? effect.flags?.statusIconCounters?.value
+        ?? effect.flags?.statusIconCounters?.counter
+        ?? effect.flags?.["status-icon-counters"]?.value
+        ?? effect.flags?.["status-icon-counters"]?.counter
+        ?? effect.flags?.["status-icon-counter"]?.value
+        ?? effect.flags?.["status-icon-counter"]?.counter
+        ?? 0
+      );
+      return total + (Number.isFinite(counter) && counter > 0 ? counter : 1);
+    }, 0);
+  };
+  const hasStepAside = targetActor.items.some(item => {
+    const itemName = String(item?.name ?? "").trim().toLowerCase();
+    return itemName === "step aside" || itemName === "wall of steel";
+  });
+  const reactionLimit = hasStepAside ? 2 : 1;
+  const usedEvasionStacks = getUsedEvasionStacks(targetActor);
+  const reactionUsed = usedEvasionStacks >= reactionLimit || !!game.warhammer40kCogitator?.hasDefenseReaction?.(targetActor);
   const dodgeBase = Number(targetActor.system?.skills?.dodge?.total ?? 0);
   const perceptionBase = Number(targetActor.system?.characteristics?.perception?.total ?? 0);
   const psyRating = Number(targetActor.system?.psy?.rating ?? 0);
@@ -353,16 +389,16 @@ const promptSprayDefenseFollowup = async ({ targetActor, sprayDefense, inescapab
           label: "Apply",
           callback: html => {
             const selected = html.find('input[name="sprayChoice"]:checked').val() || "keep";
-            resolve({ choice: selected, reactionUsed, dodgeBase, forebodingBase, inescapablePenalty });
+            resolve({ choice: selected, reactionUsed, dodgeBase, forebodingBase, inescapablePenalty, usedEvasionStacks, reactionLimit });
           }
         },
         cancel: {
           label: "Keep Result",
-          callback: () => resolve({ choice: "keep", reactionUsed, dodgeBase, forebodingBase, inescapablePenalty })
+          callback: () => resolve({ choice: "keep", reactionUsed, dodgeBase, forebodingBase, inescapablePenalty, usedEvasionStacks, reactionLimit })
         }
       },
       default: "submit",
-      close: () => resolve({ choice: "keep", reactionUsed, dodgeBase, forebodingBase, inescapablePenalty })
+      close: () => resolve({ choice: "keep", reactionUsed, dodgeBase, forebodingBase, inescapablePenalty, usedEvasionStacks, reactionLimit })
     }).render(true, { width: 500 });
   });
 };
@@ -416,9 +452,7 @@ const resolveSprayDefenseFollowup = async ({ targetActor, sprayDefense, inescapa
 
     const defenseRoll = await animatedRoll("1d100");
     const success = isD100Success(defenseRoll.total, defenseTarget);
-    if (success) {
-      await game.warhammer40kCogitator?.consumeDefenseReaction?.(targetActor);
-    }
+    await game.warhammer40kCogitator?.consumeDefenseReaction?.(targetActor);
     const actionLabel = decision.choice === "foreboding" ? "Foreboding" : "Dodge";
     return {
       success,
@@ -634,7 +668,7 @@ const evaluateAttackResult = ({ result, targets, weapon, traits }) => {
 const isD100Success = (roll, target) => roll === 1 ? true : (roll === 100 ? false : roll <= target);
 
 const buildWorkflowHtml = state => {
-  const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${text}</span>`;
+  const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:${COLOR_TEXT_OUTLINE};">${text}</span>`;
   const statusColor = status => {
     const normalized = String(status ?? "").toLowerCase();
     if (normalized.includes("jam")) return "#b267ff";
@@ -725,7 +759,7 @@ const buildWorkflowHtml = state => {
 
   const showPowerMode = ["las", "plasma"].includes(String(state.weaponClass ?? "").toLowerCase()) || ["las", "plasma"].includes(String(state.weaponType ?? "").toLowerCase());
   const aimPowerLine = `<div><b>Aim:</b> ${state.aimLabel}${showPowerMode ? ` | <b>Power:</b> ${state.powerModeLabel}` : ""}</div>`;
-  return `<div data-workflow-id="${state.id}">
+  return `<div data-workflow-id="${state.id}" style="line-height:0;">
     <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;">${buildDescription()}</div>
     <div><b>Attack Mode:</b> ${state.modeLabel}</div>
     ${aimPowerLine}

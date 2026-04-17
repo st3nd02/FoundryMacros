@@ -44,6 +44,7 @@ function getDamageTypeHTML(damageType){
 }
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
+const COLOR_TEXT_OUTLINE = "0px 0px 1px #000000, 1px 1px 1px #000000";
 const CONDITION_MAP = {
   bleeding: { id: "bleeding", name: "Bleeding", aliases: ["Blood Loss"] },
   blinded: { id: "blinded", name: "Blinded" },
@@ -77,7 +78,7 @@ const actorHasCondition = (actorDoc, conditionIdOrName) => {
 };
 
 const buildWorkflowHtml = state => {
-  const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${text}</span>`;
+  const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:${COLOR_TEXT_OUTLINE};">${text}</span>`;
   const statusColor = status => {
     const normalized = String(status ?? "").toLowerCase();
     if (normalized.includes("jam")) return "#b267ff";
@@ -136,7 +137,7 @@ const buildWorkflowHtml = state => {
 
   const showPowerMode = ["las", "plasma"].includes(String(state.weaponClass ?? "").toLowerCase()) || ["las", "plasma"].includes(String(state.weaponType ?? "").toLowerCase());
   const aimPowerLine = `<div><b>Aim:</b> ${state.aimLabel}${showPowerMode ? ` | <b>Power:</b> ${state.powerModeLabel}` : ""}</div>`;
-  return `<div data-workflow-id="${state.id}">
+  return `<div data-workflow-id="${state.id}" style="line-height:0;">
     <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;">${buildDescription()}</div>
     <div><b>Attack Mode:</b> ${state.modeLabel}</div>
     ${aimPowerLine}
@@ -468,7 +469,7 @@ function extractFatigueLevelsFromText(text) {
 }
 
 function styleCriticalEffectKeywords(text) {
-  const outlined = (label, color) => `<span style="font-weight:900;color:${color};text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">${label}</span>`;
+  const outlined = (label, color) => `<span style="font-weight:900;color:${color};text-shadow:${COLOR_TEXT_OUTLINE};">${label}</span>`;
   const stylers = [
     { regex: /\bStunned\b/g, color: "#00b3ff" },
     { regex: /\bBlinded\b/g, color: "#6c63ff" },
@@ -782,16 +783,16 @@ for (let hit of dmg.hitsData){
   color:#bd7548;
   font-weight:bold;
   font-size:1.1em;
-  text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;
+  text-shadow:${COLOR_TEXT_OUTLINE};
 ">${baseDamageRaw}${targetIsUnconscious ? " × 2 (Unconscious)" : ""}${extra?` + ${extra}`:""}</span><br>
   ${hit.keptDisplay ? `<span style="font-style:italic;color:#000;">${hit.keptDisplay}</span><br>` : ""}
 
   ${corrosiveHitHtml}
   <b>Soak:</b> ${soak}<br>
 
-  <b>Inflicted:</b> <span style="color:#ff2a2a;font-weight:900; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${inflicted}</span><br>
+  <b>Inflicted:</b> <span style="color:#ff2a2a;font-weight:900; text-shadow:${COLOR_TEXT_OUTLINE};">${inflicted}</span><br>
 
-  <b>Wounds:</b> ${woundsBefore} → ${woundsCurrent}/${woundsMax}<br>
+  <b>Wounds:</b> ${inflicted} → ${woundsCurrent}/${woundsMax}<br>
 
   <b>Critical Damage:</b> ${critDamage} (${critCurrent} total)
 
@@ -801,7 +802,7 @@ for (let hit of dmg.hitsData){
     color:gold;
     font-size:1.0em;
     font-weight:bold;
-    text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;
+    text-shadow:${COLOR_TEXT_OUTLINE};
   "> ${righteousFuryChipWound
     ? "<br><i>Righteous Fury converted to 1 inflicted wound (no critical effect).</i>"
     : (hit.fury ? "<br><i>Righteous Fury Applied</i>" : "")}</span>
@@ -821,6 +822,9 @@ if (dmg.flame?.resolved) {
   Roll: <b>${dmg.flame.roll}</b><br>
   Result: ${dmg.flame.success ? "<span style='color:#6EC1FF;font-weight:900;'>SUCCESS</span>" : "<span style='color:#ff9f1a;font-weight:900;'>FAILED</span>"}
   `;
+  if (!dmg.flame.success) {
+    pendingConditionCounts.fire = (pendingConditionCounts.fire ?? 0) + 1;
+  }
 }
 
 if (dmg.spray?.resolved) {
@@ -871,10 +875,7 @@ if (dmg.toxic?.resolved) {
       const { woundsBefore, critDamage } = applyDirectDamageWithCritical(toxicDamage);
 
       report += `
-      <div style="font-size:1.1em; color:#66cc66; text-shadow:
-        0 0 2px #000,
-        0 0 4px #000,
-        0 0 6px #000;"><b>☣ TOXIC DAMAGE ☣</b><br>
+      <div style="font-size:1.1em; color:#66cc66; text-shadow:${COLOR_TEXT_OUTLINE};"><b>☣ TOXIC DAMAGE ☣</b><br>
       Damage: ${toxicDamage}<br>
       <span style="font-weight:900;">Inflicted: ${toxicDamage} (ignores armour & TB)</span></div><br>
       Wounds: ${woundsBefore} → ${woundsCurrent}/${woundsMax}<br>
@@ -1189,7 +1190,7 @@ const damageTypeHTML = getDamageTypeHTML(dmg.damageType);
 // WORKFLOW CARD INTEGRATION
 // ===============================
 const applySummary = `
-<div style="text-align:center;">
+<div style="text-align:center;line-height:0;">
 <b>Armour:</b><br>${armourBlock}<br>
 <b>Toughness Bonus:</b> ${TBBonus}<br>
 <b>Unnatural Toughness:</b> ${TBunnat}${felling > 0 ? ` (Felling ${felling} → ${effectiveUnnaturalTB})` : ""}
