@@ -300,6 +300,142 @@ const rollAgilityEvasionTest = async actorDoc => {
   return { target, roll: rollValue, success, evadeMeters: ab };
 };
 
+const promptSprayDefenseFollowup = async ({ targetActor, sprayDefense, inescapablePenalty = 0 }) => {
+  if (!targetActor) return { choice: "keep" };
+
+  const reactionUsed = !!game.warhammer40kCogitator?.hasDefenseReaction?.(targetActor);
+  const dodgeBase = Number(targetActor.system?.skills?.dodge?.total ?? 0);
+  const perceptionBase = Number(targetActor.system?.characteristics?.perception?.total ?? 0);
+  const psyRating = Number(targetActor.system?.psy?.rating ?? 0);
+  const hasForeboding = psyRating > 0 && targetActor.items.some(item =>
+    item.type === "psychicPower" && String(item.name ?? "").toLowerCase().includes("foreboding")
+  );
+  const forebodingBase = Math.max(1, perceptionBase - 10);
+  const canFate = canActorSpendFate(targetActor);
+
+  const dodgeAvailable = !reactionUsed;
+  const forebodingAvailable = !reactionUsed && hasForeboding;
+  const fateAvailable = canFate;
+
+  return new Promise(resolve => {
+    new Dialog({
+      title: "Spray Defense Follow-up",
+      content: `
+<style>
+  .spray-followup .option { display:flex; align-items:center; gap:6px; margin:4px 0; }
+  .spray-followup .option.disabled { opacity:.45; }
+  .spray-followup .meta { opacity:.8; font-size:.95em; margin-top:8px; }
+</style>
+<form class="spray-followup">
+  <div><b>Spray Agility test failed:</b> ${sprayDefense.roll}/${sprayDefense.target}</div>
+  <div class="meta">Inescapable Attack penalty applied to defense options: <b>-${Math.max(0, Number(inescapablePenalty ?? 0))}</b></div>
+  ${reactionUsed ? `<div class="meta" style="color:#ffb3b3;"><b>Evasion reaction already used this round.</b></div>` : ""}
+  <hr>
+  <label class="option ${dodgeAvailable ? "" : "disabled"}">
+    <input type="radio" name="sprayChoice" value="dodge" ${dodgeAvailable ? "" : "disabled"} ${dodgeAvailable ? "checked" : ""}/>
+    Dodge (${dodgeBase}${inescapablePenalty > 0 ? ` - ${inescapablePenalty}` : ""})
+  </label>
+  <label class="option ${forebodingAvailable ? "" : "disabled"}">
+    <input type="radio" name="sprayChoice" value="foreboding" ${forebodingAvailable ? "" : "disabled"} ${!dodgeAvailable && forebodingAvailable ? "checked" : ""}/>
+    Foreboding (${forebodingBase}${inescapablePenalty > 0 ? ` - ${inescapablePenalty}` : ""})
+  </label>
+  <label class="option ${fateAvailable ? "" : "disabled"}">
+    <input type="radio" name="sprayChoice" value="fate" ${fateAvailable ? "" : "disabled"} ${!dodgeAvailable && !forebodingAvailable && fateAvailable ? "checked" : ""}/>
+    Reroll Spray test with Fate
+  </label>
+  <label class="option">
+    <input type="radio" name="sprayChoice" value="keep" ${!dodgeAvailable && !forebodingAvailable && !fateAvailable ? "checked" : ""}/>
+    Keep Result
+  </label>
+</form>`,
+      buttons: {
+        submit: {
+          label: "Apply",
+          callback: html => {
+            const selected = html.find('input[name="sprayChoice"]:checked').val() || "keep";
+            resolve({ choice: selected, reactionUsed, dodgeBase, forebodingBase, inescapablePenalty });
+          }
+        },
+        cancel: {
+          label: "Keep Result",
+          callback: () => resolve({ choice: "keep", reactionUsed, dodgeBase, forebodingBase, inescapablePenalty })
+        }
+      },
+      default: "submit",
+      close: () => resolve({ choice: "keep", reactionUsed, dodgeBase, forebodingBase, inescapablePenalty })
+    }).render(true, { width: 500 });
+  });
+};
+
+const resolveSprayDefenseFollowup = async ({ targetActor, sprayDefense, inescapablePenalty = 0 }) => {
+  const decision = await promptSprayDefenseFollowup({ targetActor, sprayDefense, inescapablePenalty });
+  const penalty = Math.max(0, Number(inescapablePenalty ?? 0));
+
+  if (decision.choice === "fate" && canActorSpendFate(targetActor)) {
+    const fateOutcome = await maybeApplyFateReroll({
+      actor: targetActor,
+      rollType: "Agility to Resist Spray",
+      targetNumber: sprayDefense.target,
+      rollResult: sprayDefense.roll,
+      reroll: async () => (await animatedRoll("1d100")).total,
+      speaker: ChatMessage.getSpeaker({ actor: targetActor }),
+      postReport: true
+    });
+    if (fateOutcome.usedFate && fateOutcome.success) {
+      return {
+        success: true,
+        roll: fateOutcome.roll,
+        target: sprayDefense.target,
+        outcome: `Success (Spray Agility test ${fateOutcome.roll}/${sprayDefense.target} after Fate reroll; can move ${sprayDefense.evadeMeters}m)`
+      };
+    }
+    if (fateOutcome.usedFate) {
+      return {
+        success: false,
+        roll: fateOutcome.roll,
+        target: sprayDefense.target,
+        outcome: `Failed (Spray Agility test ${fateOutcome.roll}/${sprayDefense.target} after Fate reroll)`
+      };
+    }
+    return {
+      success: false,
+      roll: sprayDefense.roll,
+      target: sprayDefense.target,
+      outcome: `Failed (Spray Agility test ${sprayDefense.roll}/${sprayDefense.target})`
+    };
+  }
+
+  if (decision.choice === "dodge" || decision.choice === "foreboding") {
+    const baseTarget = decision.choice === "foreboding" ? decision.forebodingBase : decision.dodgeBase;
+    const defenderIsProne = actorHasCondition(targetActor, "prone");
+    const defenderIsBlinded = actorHasCondition(targetActor, "blinded");
+    let defenseTarget = Math.max(1, baseTarget - penalty);
+    if (defenderIsProne) defenseTarget -= 20;
+    if (defenderIsBlinded) defenseTarget -= 30;
+    defenseTarget = Math.max(1, defenseTarget);
+
+    const defenseRoll = await animatedRoll("1d100");
+    const success = isD100Success(defenseRoll.total, defenseTarget);
+    if (success) {
+      await game.warhammer40kCogitator?.consumeDefenseReaction?.(targetActor);
+    }
+    const actionLabel = decision.choice === "foreboding" ? "Foreboding" : "Dodge";
+    return {
+      success,
+      roll: defenseRoll.total,
+      target: defenseTarget,
+      outcome: `${success ? "Success" : "Failed"} (${actionLabel} ${defenseRoll.total}/${defenseTarget}${penalty > 0 ? `, includes Inescapable -${penalty}` : ""})`
+    };
+  }
+
+  return {
+    success: false,
+    roll: sprayDefense.roll,
+    target: sprayDefense.target,
+    outcome: `Failed (Spray Agility test ${sprayDefense.roll}/${sprayDefense.target})`
+  };
+};
+
 const resolveSuppressingFireWillpowerTests = async state => {
   const suppressModeKey = String(state?.modeKey ?? "").toLowerCase();
   const suppressingPenalty = suppressModeKey === "suppresssemi"
@@ -1310,7 +1446,16 @@ const runAttackWorkflow = async setup => {
         tg.defenseOutcome = `Success (Spray Agility test ${sprayDefense.roll}/${sprayDefense.target}; can move ${sprayDefense.evadeMeters}m)`;
         continue;
       }
-      tg.defenseOutcome = `Failed (Spray Agility test ${sprayDefense.roll}/${sprayDefense.target})`;
+      const sprayFollowup = await resolveSprayDefenseFollowup({
+        targetActor,
+        sprayDefense,
+        inescapablePenalty: tg.inescapableAttackPenalty ?? 0
+      });
+      tg.defenseRoll = sprayFollowup.roll;
+      tg.defenseOutcome = sprayFollowup.outcome;
+      if (sprayFollowup.success) {
+        tg.allocatedHits = 0;
+      }
       continue;
     }
 
