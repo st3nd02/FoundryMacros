@@ -34,7 +34,7 @@ export async function runPsychicPowerWorkflow() {
   const actorWeapons = actor.items.filter(i => i.type === "weapon");
   const hasTalent = name => actorTalents.some(t => t.name.toLowerCase().trim() === name.toLowerCase());
   const actorHasWarpSense = hasTalent("Warp Sense");
-  const actorHasFavoredWarp = hasTalent("Favored of the Warp");
+  const actorHasFavoredWarp = hasTalent("Favoured by the Warp");
   const actorHasFocusWeapon = actorWeapons.some(w => /\bfocus\b/i.test(String(w.system?.special ?? "")));
 
   const psychicPowers = actor.items
@@ -349,7 +349,7 @@ export async function runPsychicPowerWorkflow() {
 <hr><div class="section-title"><h3>Talents</h3></div>
 <div style="display:flex; gap:20px; margin-bottom:10px;">
   <label><input type="checkbox" id="talentWarpSense" ${actorHasWarpSense ? "checked" : ""}> Warp Sense</label>
-  <label><input type="checkbox" id="talentFavoredWarp" ${actorHasFavoredWarp ? "checked" : ""}> Favored of the Warp</label>
+  <label><input type="checkbox" id="talentFavoredWarp" ${actorHasFavoredWarp ? "checked" : ""}> Favoured by the Warp</label>
 </div><hr>
 <div class="psychic-grid">
   <div class="field-block"><div class="section-title">Action</div><input id="action" type="text"></div>

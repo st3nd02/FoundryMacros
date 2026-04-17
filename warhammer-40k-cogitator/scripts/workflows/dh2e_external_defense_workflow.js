@@ -345,7 +345,7 @@ let forebodingPsychicNotes = [];
 if (pick.type === "foreboding") {
   const isDouble = roll.total % 11 === 0;
   const psyClassType = String(actor.system.psy?.class ?? "").toLowerCase().trim();
-  const hasFavoredWarp = hasActorItemNamed(actor, "talent", "Favored of the Warp");
+  const hasFavoredWarp = hasActorItemNamed(actor, "talent", "Favoured by the Warp");
   let triggersPhenomena = false;
   let phenomenaModifier = 0;
 
