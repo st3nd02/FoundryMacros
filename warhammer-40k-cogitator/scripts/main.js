@@ -212,6 +212,7 @@ Hooks.once("ready", async () => {
     clearDoubleTapEffect,
     applyWeaponRechargingEffect,
     addConvenientEffectToActor,
+    requestFateRerollDecision,
     refreshWorkflowHud
   };
 
@@ -823,6 +824,7 @@ function initializeSocketlib() {
   cogitatorSocket.register("socketHandleMirrorAttackReady", socketHandleMirrorAttackReady);
   cogitatorSocket.register("socketClearWorkflowContexts", socketClearWorkflowContexts);
   cogitatorSocket.register("socketAddConvenientEffect", socketAddConvenientEffect);
+  cogitatorSocket.register("socketPromptFateRerollDecision", socketPromptFateRerollDecision);
 }
 
 async function socketApplyDefenseResult(payload) {
@@ -858,6 +860,70 @@ function socketClearWorkflowContexts() {
 async function socketAddConvenientEffect(payload) {
   if (!game.user.isGM) throw new Error("Only a GM may apply effects.");
   return addConvenientEffectToActorLocal(payload);
+}
+
+async function socketPromptFateRerollDecision(payload) {
+  return promptFateRerollDecisionLocal(payload);
+}
+
+async function promptFateRerollDecisionLocal({ actorUuid, rollType = "Test Roll", targetNumber, rollResult, dof = 0 }) {
+  const actor = await resolveActorFromUuid(actorUuid);
+  if (!actor) return { handled: false, useFate: false };
+  if (!actor.isOwner && !game.user.isGM) return { handled: false, useFate: false };
+
+  const fateCurrent = canActorSpendFate(actor)
+    ? Number(actor.system?.fate?.value ?? actor.system?.fate ?? 0)
+    : 0;
+  if (fateCurrent <= 0) return { handled: true, useFate: false };
+
+  const useFate = await new Promise(resolve => {
+    new Dialog({
+      title: "Spend Fate?",
+      content: `
+<div style="font-size:1.02em;">
+  <div><b>Test Failed:</b> ${rollType}</div>
+  <div style="margin-top:6px;"><b>Roll Target:</b> <span style="color:#3aa0ff;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${targetNumber}</span></div>
+  <div><b>Roll Result:</b> <span style="color:#ff9f1a;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${rollResult}</span></div>
+  <div><b>Degrees of Failure:</b> <span style="color:#ff2a2a;font-weight:bold;text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${dof}</span></div>
+  <hr>
+  <div>Current Fate: <b>${fateCurrent}</b></div>
+</div>`,
+      buttons: {
+        yes: { label: "Reroll with Fate", callback: () => resolve(true) },
+        no: { label: "Keep Result", callback: () => resolve(false) }
+      },
+      default: "no",
+      close: () => resolve(false)
+    }).render(true);
+  });
+
+  return { handled: true, useFate };
+}
+
+async function requestFateRerollDecision({ actorUuid, rollType = "Test Roll", targetNumber, rollResult, dof = 0 }) {
+  const actor = await resolveActorFromUuid(actorUuid);
+  if (!actor) return false;
+
+  const recipients = getDefenseRecipients(actor);
+  const ownerRecipient = recipients.find(user => !user.isGM);
+
+  if (ownerRecipient && ownerRecipient.id !== game.user.id && cogitatorSocket?.executeAsUser) {
+    try {
+      const remoteDecision = await cogitatorSocket.executeAsUser("socketPromptFateRerollDecision", ownerRecipient.id, {
+        actorUuid,
+        rollType,
+        targetNumber,
+        rollResult,
+        dof
+      });
+      if (remoteDecision?.handled) return !!remoteDecision.useFate;
+    } catch (err) {
+      console.warn("Warhammer 40k Cogitator | Owner fate prompt failed, falling back locally.", err);
+    }
+  }
+
+  const localDecision = await promptFateRerollDecisionLocal({ actorUuid, rollType, targetNumber, rollResult, dof });
+  return !!localDecision.useFate;
 }
 
 async function addConvenientEffectToActor(payload) {

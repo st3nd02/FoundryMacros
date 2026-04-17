@@ -36,8 +36,22 @@ export const spendActorFate = async actorDoc => {
 
 export const askForFateReroll = async ({ actor, rollType = "Test Roll", targetNumber, rollResult, dof }) => {
   if (!canActorSpendFate(actor)) return false;
-  const fateCurrent = getActorFateValue(actor);
+  const decisionRouter = game.warhammer40kCogitator?.requestFateRerollDecision;
+  if (typeof decisionRouter === "function") {
+    try {
+      return !!(await decisionRouter({
+        actorUuid: actor.uuid,
+        rollType,
+        targetNumber,
+        rollResult,
+        dof
+      }));
+    } catch (err) {
+      console.warn("Warhammer 40k Cogitator | Fate decision routing failed, falling back locally.", err);
+    }
+  }
 
+  const fateCurrent = getActorFateValue(actor);
   return new Promise(resolve => {
     new Dialog({
       title: "Spend Fate?",
