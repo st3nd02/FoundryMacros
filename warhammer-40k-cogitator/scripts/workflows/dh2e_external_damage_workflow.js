@@ -145,7 +145,7 @@ const optionHtml = pending.map((p, i) => {
 const pick = await new Promise(resolve => {
   new Dialog({
     title: "Damage Workflow",
-    content: `<form style="line-height:85%;"><div class="form-group"><label><b>Pending Damage</b></label><select id="pick">${optionHtml}</select></div></form>`,
+    content: `<form style="line-height:normal;"><div class="form-group"><label><b>Pending Damage</b></label><select id="pick">${optionHtml}</select></div></form>`,
     buttons: {
       ok: { label: "Continue", callback: html => resolve(Number(html.find("#pick").val() || 0)) },
       cancel: { label: "Cancel", callback: () => resolve(null) }
@@ -225,7 +225,7 @@ function getHitLocation(rollValue) {
 new Dialog({
   title: "Damage Roll Card",
   content: `
-<form style="line-height:85%;">
+<form style="line-height:normal;">
 <b>Weapon</b><br>
 <input id="weaponName" type="text" style="width:100%" readonly value="${attackData.weapon}"><br><br>
 
