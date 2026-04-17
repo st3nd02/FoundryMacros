@@ -94,7 +94,7 @@ const buildWorkflowHtml = state => {
 
   const showPowerMode = ["las", "plasma"].includes(String(state.weaponClass ?? "").toLowerCase()) || ["las", "plasma"].includes(String(state.weaponType ?? "").toLowerCase());
   const aimPowerLine = `<div><b>Aim:</b> ${state.aimLabel}${showPowerMode ? ` | <b>Power:</b> ${state.powerModeLabel}` : ""}</div>`;
-  return `<div data-workflow-id="${state.id}" style="line-height:0;">
+  return `<div data-workflow-id="${state.id}" style="line-height:80%;">
     <div style="margin:0 0 6px 0;font-size:1.05em;font-style:italic;">${buildDescription()}</div>
     <div><b>Attack Mode:</b> ${state.modeLabel}</div>
     ${aimPowerLine}
