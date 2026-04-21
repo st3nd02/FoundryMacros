@@ -230,7 +230,7 @@ const actorHasCondition = (actorDoc, conditionIdOrName) => {
 const parseTraitNumber = (traits, key, fallback = 0) => {
   const escapedKey = String(key ?? "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (!escapedKey) return fallback;
-  const matcher = new RegExp(`(?:^|[^a-z])${escapedKey}\\s*\\((\\d+)\\)`, "gi");
+  const matcher = new RegExp(`(?:^|[^a-z])${escapedKey}\\s*[\\(\\[]\\s*([+-]?\\d+)\\s*[\\)\\]]`, "gi");
   const haystack = Array.isArray(traits) ? traits.join(",") : String(traits ?? "");
   let total = 0;
   let found = false;
@@ -822,8 +822,9 @@ const getHordeDefenseThreshold = (targetActor, penetration = 0) => {
 const getHordeMagnitudeBreakdown = ({ state, target }) => {
   const traits = parseWeaponTraits({ system: { special: state.weaponSpecial ?? "" } });
   const inflictedHits = Number(target?.allocatedHits ?? 0);
-  const blast = parseTraitNumber(traits, "blast", 0);
-  const devastating = parseTraitNumber(traits, "devastating", 0);
+  const rawSpecial = String(state.weaponSpecial ?? "");
+  const blast = Math.max(parseTraitNumber(traits, "blast", 0), parseTraitNumber(rawSpecial, "blast", 0));
+  const devastating = Math.max(parseTraitNumber(traits, "devastating", 0), parseTraitNumber(rawSpecial, "devastating", 0));
   const isFlame = hasTrait(traits, "flame");
   const explosive = hasTrait(traits, "explosive") || String(state.weaponType ?? "").toLowerCase().includes("explosive");
   const forceOrPower = hasTrait(traits, "force") || hasTrait(traits, "power");
