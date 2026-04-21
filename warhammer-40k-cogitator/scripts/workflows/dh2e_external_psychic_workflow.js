@@ -33,6 +33,13 @@ export async function runPsychicPowerWorkflow() {
   const actorTalents = actor.items.filter(i => i.type === "talent");
   const actorWeapons = actor.items.filter(i => i.type === "weapon");
   const hasTalent = name => actorTalents.some(t => t.name.toLowerCase().trim() === name.toLowerCase());
+  const hasResistanceTalent = (actorDoc, resistanceType) => {
+    const escapedType = String(resistanceType ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const resistanceRegex = new RegExp(`^resistance\\s*\\(\\s*${escapedType}\\s*\\)$`, "i");
+    return actorDoc?.items?.some(item =>
+      item.type === "talent" && resistanceRegex.test(String(item.name ?? "").trim())
+    ) ?? false;
+  };
   const actorHasWarpSense = hasTalent("Warp Sense");
   const actorHasFavoredWarp = hasTalent("Favoured by the Warp");
   const actorHasFocusWeapon = actorWeapons.some(w => /\bfocus\b/i.test(String(w.system?.special ?? "")));
@@ -604,7 +611,9 @@ export async function runPsychicPowerWorkflow() {
 
   let opposedResult = null;
   if (manifestSuccess && opposed && targetActor) {
-    const defTarget = getStatValue(targetActor, focusTestType);
+    const hasResistancePsychicPowers = hasResistanceTalent(targetActor, "Psychic Powers");
+    const defResistanceBonus = hasResistancePsychicPowers ? 10 : 0;
+    const defTarget = getStatValue(targetActor, focusTestType) + defResistanceBonus;
     let defRoll = (await rollWithDice("1d100")).total;
     let defSuccess = defRoll !== 100 && defRoll <= defTarget;
     let defDoS = calcDoS(defTarget, defRoll);
@@ -625,7 +634,14 @@ export async function runPsychicPowerWorkflow() {
       }
     }
     const attackerWins = manifestDoS >= 1 && (!defSuccess || manifestDoS > defDoS);
-    opposedResult = { target: defTarget, roll: defRoll, success: defSuccess, dos: defDoS, attackerWins };
+    opposedResult = {
+      target: defTarget,
+      roll: defRoll,
+      success: defSuccess,
+      dos: defDoS,
+      attackerWins,
+      notes: hasResistancePsychicPowers ? ["Resistance (Psychic Powers) +10"] : []
+    };
   }
 
   const shape = String(data.damage?.zone ?? "").toLowerCase();
@@ -729,6 +745,7 @@ export async function runPsychicPowerWorkflow() {
       <div style="font-weight:bold;">Opposed Check</div>
       <div><b>Caster:</b> <span style="${styleBlue}">${targetNumber}</span> vs <span style="${styleOrange}">${manifestRoll}</span></div>
       <div style="margin-top:4px;"><b>Target(s):</b> <span style="${styleBlue}">${opposedResult.target}</span> vs <span style="${styleOrange}">${opposedResult.roll}</span></div>
+      ${opposedResult.notes?.length ? `<div><b>Opposed Modifiers:</b> ${opposedResult.notes.join(", ")}</div>` : ""}
       <div><span style="${targetDegreeStyle}">${opposedResult.dos} ${targetDegreeLabel}</span></div>
       <div style="margin-top:4px;"><span style="${opposedOutcomeStyle}">${opposedOutcomeLabel}</span></div>` : ""}
       ${hasDamage ? `<hr><div><b>Damage:</b> ${finalFormula} | <b>Type:</b> ${rawType} | <b>Pen:</b> ${finalPenValue} | <b>Shape:</b> ${shape || "—"} | <b>Hits:</b> ${hits}</div>` : ""}

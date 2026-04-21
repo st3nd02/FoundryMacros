@@ -13,6 +13,13 @@ try {
 const WORKFLOW_NS = "warhammer-40k-cogitator";
 const WORKFLOW_KEY = "dh2eExternalWorkflow";
 const COLOR_TEXT_OUTLINE = "0px 0px 1px #000000, 1px 1px 1px #000000";
+const hasResistanceTalent = (actorDoc, resistanceType) => {
+  const escapedType = String(resistanceType ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const resistanceRegex = new RegExp(`^resistance\\s*\\(\\s*${escapedType}\\s*\\)$`, "i");
+  return actorDoc?.items?.some(item =>
+    item.type === "talent" && resistanceRegex.test(String(item.name ?? "").trim())
+  ) ?? false;
+};
 
 const buildWorkflowHtml = state => {
   const outlined = (text, color) => `<span style="font-weight:700;color:${color};text-shadow:${COLOR_TEXT_OUTLINE};">${text}</span>`;
@@ -555,7 +562,7 @@ new Dialog({
           });
         };
 
-        const rollCharacteristicTest = async ({ total, label, modifier = 0, actorDoc = null, rollType = null }) => {
+        const rollCharacteristicTest = async ({ total, label, modifier = 0, actorDoc = null, rollType = null, notes = [] }) => {
           const target = Math.max(1, Number(total || 0) + Number(modifier || 0));
           const roll = await new Roll("1d100").evaluate();
           if (game.dice3d) await game.dice3d.showForRoll(roll, game.user, true);
@@ -582,17 +589,20 @@ new Dialog({
               dos = fateOutcome.dos;
             }
           }
-          return { label, target, roll: rollValue, success, dos };
+          return { label, target, roll: rollValue, success, dos, notes };
         };
 
         if (toxic && !isHordeTarget) {
           const toxicValue = parseTraitVal("toxic", 1);
+          const hasResistancePoison = hasResistanceTalent(targetActor, "Poison");
+          const toxicResistanceBonus = hasResistancePoison ? 10 : 0;
           const test = await rollCharacteristicTest({
             total: targetActor?.system?.characteristics?.toughness?.total ?? 0,
             label: "Toughness",
-            modifier: -10 * toxicValue,
+            modifier: (-10 * toxicValue) + toxicResistanceBonus,
             actorDoc: targetActor,
-            rollType: "Toughness to Resist Toxic"
+            rollType: "Toughness to Resist Toxic",
+            notes: hasResistancePoison ? ["Resistance (Poison) +10"] : []
           });
           let toxicDamage = 0;
           if (!test.success) {
@@ -777,7 +787,10 @@ new Dialog({
         if (snare) properties.push(snareVal > 0 ? `Snare (${snareVal})` : "Snare");
 
         const testSummary = [traitTests.flame, traitTests.spray, traitTests.toxic, traitTests.concussive].filter(Boolean)
-          .map(t => `<div><b>${t.label} Test</b> (${t.target}) Roll ${t.roll}: <b>${t.success ? "Success" : "Failure"}</b>${typeof t.damage === "number" ? ` | Extra Damage: <b>${t.damage}</b>` : ""}</div>`)
+          .map(t => {
+            const noteSummary = Array.isArray(t.notes) && t.notes.length ? ` | ${t.notes.join(", ")}` : "";
+            return `<div><b>${t.label} Test</b> (${t.target}) Roll ${t.roll}: <b>${t.success ? "Success" : "Failure"}</b>${typeof t.damage === "number" ? ` | Extra Damage: <b>${t.damage}</b>` : ""}${noteSummary}</div>`;
+          })
           .join("");
         const hallucinogenicSummary = traitTests.hallucinogenic
           ? `<div><b>Hallucinogenic (${traitTests.hallucinogenic.value}) Toughness Test</b> (Target ${traitTests.hallucinogenic.target}${traitTests.hallucinogenic.respiratorBonus ? ` = Toughness ${traitTests.hallucinogenic.target + traitTests.hallucinogenic.penalty - traitTests.hallucinogenic.respiratorBonus} - ${traitTests.hallucinogenic.penalty} + ${traitTests.hallucinogenic.respiratorBonus} (Respirator)` : ""}) Roll ${traitTests.hallucinogenic.roll}: <b>${traitTests.hallucinogenic.success ? "Target resisted the hallucinogenic effect" : `FAILED | Duration: <b>${traitTests.hallucinogenic.duration}</b> round${traitTests.hallucinogenic.duration === 1 ? "" : "s"}`}</b>${traitTests.hallucinogenic.success ? "" : `<div style="margin-top:4px;">${traitTests.hallucinogenic.resultText ?? ""}</div>${traitTests.hallucinogenic.resultInlineRolls ? `<div>${traitTests.hallucinogenic.resultInlineRolls}</div>` : ""}`}</div>`
