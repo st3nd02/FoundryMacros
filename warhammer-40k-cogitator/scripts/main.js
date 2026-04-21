@@ -990,7 +990,7 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
     }
   }
 
-  if (effectInterface?.addEffect) {
+  if (!applied && effectInterface?.addEffect) {
     const paramsByPriority = [
       { effectId: resolvedStatusId || effectId, uuid: actor.uuid },
       { effectId: resolvedStatusId || effectId, uuids: [actor.uuid] }
