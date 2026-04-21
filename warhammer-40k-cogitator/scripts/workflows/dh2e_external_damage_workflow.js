@@ -323,6 +323,7 @@ new Dialog({
         const hammer = !!entry.state?.toggles?.hammer;
         const flesh = !!entry.state?.toggles?.flesh;
         const raptor = !!entry.state?.toggles?.raptor;
+        const weaponTech = !!entry.state?.toggles?.weaponTech;
         const mighty = !!entry.state?.toggles?.mighty;
         const crushing = !!entry.state?.toggles?.crushing;
         const forceChannel = !!entry.state?.forceChanneling;
@@ -336,6 +337,8 @@ new Dialog({
         const snareVal = parseTraitVal("snare", 0);
         const aimLabel = String(entry.state?.aimLabel ?? "").toLowerCase();
         const aim = aimLabel.includes("half aim") || aimLabel.includes("full aim") ? "yes" : "no";
+        const weaponType = String(weapon.system?.type ?? "").trim().toLowerCase();
+        const weaponTechEligible = ["melta", "plasma", "power"].includes(weaponType);
 
         const isD100Success = (roll, target) => roll === 1 ? true : (roll === 100 ? false : roll <= target);
         const calcDoS = (target, roll) => isD100Success(roll, target) ? (1 + Math.floor((target - roll) / 10)) : 0;
@@ -363,6 +366,20 @@ new Dialog({
           entry.state.talentModifier.damage.damage += bonus;
           entry.state.talentModifier.damage.notes.push(`Crushing Blow +${bonus}`);
           properties.push(`Crushing Blow +${bonus}`);
+        }
+
+        if (weaponTech && weaponTechEligible && (isMelee || isRanged)) {
+          const intBonus = Number(actor.system?.characteristics?.intelligence?.bonus ?? 0);
+          const intUnnatural = Math.max(0, Number(actor.system?.characteristics?.intelligence?.unnatural ?? 0));
+          const bonus = intBonus + Math.ceil(intUnnatural / 2);
+          if (bonus > 0) {
+            flat += bonus;
+            pen += bonus;
+            entry.state.talentModifier.damage.damage += bonus;
+            entry.state.talentModifier.damage.penetration += bonus;
+            entry.state.talentModifier.damage.notes.push(`Weapon-Tech +${bonus} Damage / +${bonus} Pen`);
+            properties.push(`Weapon-Tech +${bonus} Damage / +${bonus} Pen`);
+          }
         }
 
         if (hammer && isMelee) {

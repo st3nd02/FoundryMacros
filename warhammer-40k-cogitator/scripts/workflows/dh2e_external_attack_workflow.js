@@ -16,6 +16,8 @@ const DOUBLE_TAP_TARGET_FLAG = "doubleTapEligibleTargetUuid";
 const WEAPON_RECHARGING_EFFECT_ID = "ce-(whc)-weapon-recharging";
 const WEAPON_RECHARGING_EFFECT_NAME = "Weapon Recharging";
 const BLADEMASTER_USED_EFFECT_ID = "ce-(whc)-blademaster-used";
+const WEAPON_TECH_USED_EFFECT_ID = "ce-(whc)-weapon-tech-used";
+const WEAPON_TECH_USED_EFFECT_NAME = "(WHC) Weapon Tech Used";
 const JAM_EFFECT_ID = "ce-(whc)-jam";
 const JAM_EFFECT_NAME = "Jam";
 const COLOR_TEXT_OUTLINE = "0px 0px 1px #000000, 1px 1px 1px #000000";
@@ -185,6 +187,10 @@ const parseWeaponTraits = weapon =>
   (weapon.system.special ?? "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
 const hasTrait = (traits, key) => traits.some(t => t.includes(key));
 const hasWeaponSpecial = (weapon, keyword) => String(weapon?.system?.special ?? "").toLowerCase().includes(String(keyword).toLowerCase());
+const isWeaponTechEligibleWeapon = weaponDoc => {
+  const weaponType = String(weaponDoc?.system?.type ?? "").trim().toLowerCase();
+  return ["melta", "plasma", "power"].includes(weaponType);
+};
 const weaponBlockedByRecharging = weaponDoc => {
   const special = String(weaponDoc?.system?.special ?? "").toLowerCase();
   return special.includes("recharge") || special.includes("maximal");
@@ -1112,6 +1118,7 @@ const runAttackWorkflow = async setup => {
   if (t.raptor) selectedTalents.push("Raptor");
   if (t.oneOnOne && isMelee) selectedTalents.push("One-on-One");
   if (t.forceChannel) selectedTalents.push("Force Channeling");
+  if (t.weaponTech && isWeaponTechEligibleWeapon(weapon)) selectedTalents.push("Weapon-Tech");
   if (t.nowhereToHide) selectedTalents.push("Nowhere to Hide (auto)");
   const inescapableApplies = !!(
     (
@@ -1137,6 +1144,24 @@ const runAttackWorkflow = async setup => {
     talentModifier.attack.attackRoll += 20;
     talentModifier.attack.notes.push("Double Tap +20 (same target follow-up)");
     selectedTalents.push("Double Tap +20 (same target follow-up)");
+  }
+
+  if (t.weaponTech && isWeaponTechEligibleWeapon(weapon)) {
+    if (game.warhammer40kCogitator?.addConvenientEffectToActor) {
+      await game.warhammer40kCogitator.addConvenientEffectToActor({
+        actorUuid: attacker.uuid,
+        effectId: WEAPON_TECH_USED_EFFECT_ID,
+        effectName: WEAPON_TECH_USED_EFFECT_NAME
+      });
+    } else {
+      await attacker.createEmbeddedDocuments("ActiveEffect", [{
+        name: WEAPON_TECH_USED_EFFECT_NAME,
+        img: "icons/svg/aura.svg",
+        origin: attacker.uuid,
+        statuses: [WEAPON_TECH_USED_EFFECT_ID],
+        flags: { core: { statusId: WEAPON_TECH_USED_EFFECT_ID } }
+      }]);
+    }
   }
 
   const targets = setup.targetConfigs.map(conf => {
@@ -1684,6 +1709,7 @@ const showAttackDialog = async () => {
             <label class="talent-toggle" data-needle="deadeye"><input type="checkbox" id="talent_deadeye"/> Deadeye Shot</label>
             <label class="talent-toggle" data-needle="precision killer (ranged)"><input type="checkbox" id="talent_precision_ranged"/> Precision Killer (Ranged)</label>
             <label class="talent-toggle" data-needle="inescapable attack (ranged)"><input type="checkbox" id="talent_inescapable_ranged"/> Inescapable Attack (Ranged)</label>
+            <label class="talent-toggle" data-needle="weapon-tech"><input type="checkbox" id="talent_weapon_tech"/> Weapon-Tech</label>
           </div>
           <div class="attack-talents-col">
             <label class="talent-toggle" data-needle="one-on-one"><input type="checkbox" id="talent_one_on_one"/> One-on-One</label>
@@ -1746,6 +1772,7 @@ const showAttackDialog = async () => {
           const traits = parseWeaponTraits(weaponDoc ?? { system: { special: "" } });
           const isTearingWeapon = hasTrait(traits, "tearing");
           const isBladeWeapon = hasWeaponSpecial(weaponDoc, "blade");
+          const isWeaponTechWeapon = isWeaponTechEligibleWeapon(weaponDoc);
           const twoWeaponAttack = !!html.find("#twoWeaponAttack")[0]?.checked;
 
           const shootingMelee = !!html.find("#shootMelee")[0]?.checked;
@@ -1758,6 +1785,7 @@ const showAttackDialog = async () => {
             talent_deadeye: !isMelee && modeKey === "called",
             talent_precision_ranged: !isMelee && modeKey === "called",
             talent_inescapable_ranged: !isMelee && ["single", "called"].includes(modeKey),
+            talent_weapon_tech: isWeaponTechWeapon,
             talent_one_on_one: isMelee,
             talent_blademaster: isMelee && isBladeWeapon,
             talent_whirlwind: isMelee && modeKey === "standard",
@@ -1787,6 +1815,7 @@ const showAttackDialog = async () => {
             talent_deadeye: true,
             talent_precision_ranged: true,
             talent_inescapable_ranged: true,
+            talent_weapon_tech: false,
             talent_one_on_one: false,
             talent_blademaster: true,
             talent_whirlwind: hasHordeTargetNow,
@@ -1941,6 +1970,7 @@ const showAttackDialog = async () => {
           html.find("#talent_precision_melee").prop("checked", !!pt.precisionMelee);
           html.find("#talent_precision_ranged").prop("checked", !!pt.precisionRanged);
           html.find("#talent_nowhere_to_hide").prop("checked", !!pt.nowhereToHide);
+          html.find("#talent_weapon_tech").prop("checked", !!pt.weaponTech);
           html.find("#talent_force_channel").prop("checked", !!pt.forceChannel);
         }
 
@@ -2018,6 +2048,7 @@ const showAttackDialog = async () => {
                 raptor: html.find("#talent_raptor")[0].checked,
                 inescapableMelee: html.find("#talent_inescapable_melee")[0].checked,
                 inescapableRanged: html.find("#talent_inescapable_ranged")[0].checked,
+                weaponTech: html.find("#talent_weapon_tech")[0].checked,
                 precisionMelee: html.find("#talent_precision_melee")[0].checked,
                 precisionRanged: html.find("#talent_precision_ranged")[0].checked,
                 nowhereToHide: html.find("#talent_nowhere_to_hide")[0].checked,
