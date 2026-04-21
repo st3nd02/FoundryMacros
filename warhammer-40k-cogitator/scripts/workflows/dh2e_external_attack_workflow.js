@@ -228,10 +228,18 @@ const actorHasCondition = (actorDoc, conditionIdOrName) => {
   });
 };
 const parseTraitNumber = (traits, key, fallback = 0) => {
-  const trait = traits.find(t => t.includes(key));
-  if (!trait) return fallback;
-  const match = trait.match(/\((\d+)\)/);
-  return match ? Number(match[1]) : fallback;
+  const escapedKey = String(key ?? "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!escapedKey) return fallback;
+  const matcher = new RegExp(`(?:^|[^a-z])${escapedKey}\\s*\\((\\d+)\\)`, "gi");
+  const haystack = Array.isArray(traits) ? traits.join(",") : String(traits ?? "");
+  let total = 0;
+  let found = false;
+  let match;
+  while ((match = matcher.exec(haystack)) !== null) {
+    total += Number(match[1] ?? 0);
+    found = true;
+  }
+  return found ? total : fallback;
 };
 
 const getWeaponPenetration = weaponDoc => {
