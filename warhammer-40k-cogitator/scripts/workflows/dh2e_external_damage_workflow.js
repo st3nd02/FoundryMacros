@@ -684,45 +684,43 @@ new Dialog({
         if (force && forceChannel && !isHordeTarget) {
           const attackerWP = Number(actor.system?.characteristics?.willpower?.total ?? 0);
           const targetWP = Number(targetActor?.system?.characteristics?.willpower?.total ?? 0);
-          const attackerRoll = await new Roll("1d100").evaluate();
-          if (game.dice3d) await game.dice3d.showForRoll(attackerRoll, game.user, true);
-          let attackerRollValue = attackerRoll.total;
-          if (!isD100Success(attackerRollValue, attackerWP) && canActorSpendFate(actor)) {
-            const attackerFateOutcome = await maybeApplyFateReroll({
-              actor,
-              rollType: "Force Opposed Willpower Roll",
-              targetNumber: attackerWP,
-              rollResult: attackerRollValue,
-              reroll: async () => {
-                const reroll = await new Roll("1d100").evaluate();
-                if (game.dice3d) await game.dice3d.showForRoll(reroll, game.user, true);
-                return reroll.total;
-              },
-              speaker: ChatMessage.getSpeaker({ actor }),
-              postReport: true
-            });
-            if (attackerFateOutcome.usedFate) attackerRollValue = attackerFateOutcome.roll;
-          }
 
-          const targetRoll = await new Roll("1d100").evaluate();
-          if (game.dice3d) await game.dice3d.showForRoll(targetRoll, game.user, true);
-          let targetRollValue = targetRoll.total;
-          if (!isD100Success(targetRollValue, targetWP) && canActorSpendFate(targetActor)) {
-            const targetFateOutcome = await maybeApplyFateReroll({
-              actor: targetActor,
+          const resolveForceOpposedRoll = async ({ rollerActor, wpTarget, speaker }) => {
+            const initialRoll = await new Roll("1d100").evaluate();
+            if (game.dice3d) await game.dice3d.showForRoll(initialRoll, game.user, true);
+            let selectedRoll = Number(initialRoll.total ?? 0);
+
+            if (isD100Success(selectedRoll, wpTarget) || !canActorSpendFate(rollerActor)) {
+              return selectedRoll;
+            }
+
+            const fateOutcome = await maybeApplyFateReroll({
+              actor: rollerActor,
               rollType: "Force Opposed Willpower Roll",
-              targetNumber: targetWP,
-              rollResult: targetRollValue,
+              targetNumber: wpTarget,
+              rollResult: selectedRoll,
               reroll: async () => {
                 const reroll = await new Roll("1d100").evaluate();
                 if (game.dice3d) await game.dice3d.showForRoll(reroll, game.user, true);
                 return reroll.total;
               },
-              speaker: ChatMessage.getSpeaker({ actor: targetActor }),
+              speaker,
               postReport: true
             });
-            if (targetFateOutcome.usedFate) targetRollValue = targetFateOutcome.roll;
-          }
+
+            return fateOutcome.usedFate ? fateOutcome.roll : selectedRoll;
+          };
+
+          const attackerRollValue = await resolveForceOpposedRoll({
+            rollerActor: actor,
+            wpTarget: attackerWP,
+            speaker: ChatMessage.getSpeaker({ actor })
+          });
+          const targetRollValue = await resolveForceOpposedRoll({
+            rollerActor: targetActor,
+            wpTarget: targetWP,
+            speaker: ChatMessage.getSpeaker({ actor: targetActor })
+          });
 
           const attackerDoS = calcDoS(attackerWP, attackerRollValue);
           const targetDoS = calcDoS(targetWP, targetRollValue);
