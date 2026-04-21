@@ -10,7 +10,7 @@ import {
 } from "./fate_engine.js";
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "3.0.11";
+const COGITATOR_VERSION = "3.0.15";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
