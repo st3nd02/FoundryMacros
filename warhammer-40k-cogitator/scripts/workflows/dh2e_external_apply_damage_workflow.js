@@ -873,6 +873,12 @@ if (dmg.toxic?.resolved) {
     if (!dmg.toxic.success && Number(dmg.toxic.damage ?? 0) > 0){
       const toxicDamage = Number(dmg.toxic.damage);
       const { woundsBefore, critDamage } = applyDirectDamageWithCritical(toxicDamage);
+      if (dmg.toxic.fury) {
+        furyCrits.push({
+          location: dmg.toxic.location || resolveCriticalLocation(),
+          value: Number(dmg.toxic?.fury?.result ?? dmg.toxic?.fury ?? 1) || 1
+        });
+      }
 
       report += `
       <div style="font-size:1.1em; color:#66cc66; text-shadow:${COLOR_TEXT_OUTLINE};"><b>☣ TOXIC DAMAGE ☣</b><br>
@@ -1042,6 +1048,12 @@ if (dmg.force?.resolved) {
   if (dmg.force.won && Number(dmg.force.result ?? 0) > 0) {
     const forceDamage = Number(dmg.force.result);
     const { woundsBefore, critDamage } = applyDirectDamageWithCritical(forceDamage);
+    if (dmg.force.fury) {
+      furyCrits.push({
+        location: dmg.force.location || resolveCriticalLocation(),
+        value: Number(dmg.force?.fury?.result ?? dmg.force?.fury ?? 1) || 1
+      });
+    }
 
     report += `
     <span style="color:#66cc66;font-weight:900;">ATTACKER WINS</span><br>
