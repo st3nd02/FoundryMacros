@@ -1663,6 +1663,7 @@ const showAttackDialog = async () => {
           <div class="form-group"><label><input type="checkbox" id="horde"/> Horde?</label></div>
           <div class="form-group"><label><b>Horde Size</b></label><input id="hordeBonus" type="number" value="0"/></div>
           <div class="form-group"><label><input type="checkbox" id="runningTarget"/> Running Target?</label></div>
+          <div class="form-group"><label><input type="checkbox" id="reactionAttack"/> Reaction Attack?</label></div>
           <div class="form-group"><label><input type="checkbox" id="shootMelee"/> Attacking into Melee?</label></div>
           <div class="form-group"><label><input type="checkbox" id="twoWeaponAttack"/> Two-Weapon Attack?</label></div>
           <div class="form-group"><label><b>Ganging Up:</b></label><select id="gangingUp"><option value="0" selected>0</option><option value="10">+10</option><option value="20">+20</option></select></div>
@@ -1912,6 +1913,7 @@ const showAttackDialog = async () => {
           html.find("#shootMelee").prop("checked", !!pendingMirrorSetup.shootingMelee);
           html.find("#twoWeaponAttack").prop("checked", !!pendingMirrorSetup.twoWeaponAttack);
           html.find("#runningTarget").prop("checked", !!pendingMirrorSetup.runningTarget);
+          html.find("#reactionAttack").prop("checked", !!pendingMirrorSetup.reactionAttack);
           html.find("#gangingUp").val(String(Number(pendingMirrorSetup.gangingUp ?? 0)));
           html.find("#calledShotLocation").val(String(pendingMirrorSetup.calledShotLocation ?? "Body"));
           html.find("#powerMode").val(Number(pendingMirrorSetup.powerModeKey ?? 1));
@@ -1987,6 +1989,7 @@ const showAttackDialog = async () => {
               isHorde: html.find("#horde")[0].checked,
               hordeBonus: Number(html.find("#hordeBonus").val() || 0),
               runningTarget: html.find("#runningTarget")[0].checked,
+              reactionAttack: html.find("#reactionAttack")[0].checked,
               shootingMelee: html.find("#shootMelee")[0].checked,
               twoWeaponAttack: html.find("#twoWeaponAttack")[0].checked,
               gangingUp: Number(html.find("#gangingUp").val() || 0),
@@ -2084,6 +2087,13 @@ if (setup.isHorde && !isSprayWeapon && !isBlastWeapon && !isGrenadeWeapon && set
   return;
 }
 await runAttackWorkflow(setup);
+if (setup.reactionAttack) {
+  await game.warhammer40kCogitator?.addConvenientEffectToActor?.({
+    actorUuid: attacker.uuid,
+    effectId: "ce-(whc)-used-evasion",
+    effectName: "(WHC) Used Evasion"
+  });
+}
 } catch (err) {
   console.error("DH2E external attack workflow failed", err);
   ui.notifications.error("DH2E workflow failed. Check console for details.");
