@@ -340,6 +340,8 @@ async function applyRegenerationTurnStartHealing(actor) {
 
   const regenerationValue = getTraitNumericValue(actor, "Regeneration");
   if (!Number.isFinite(regenerationValue) || regenerationValue <= 0) return;
+  const currentWounds = Math.max(0, Number(actor.system?.wounds?.value ?? 0));
+  if (currentWounds === 0) return;
 
   const toughnessTarget = Math.max(1, Number(actor.system?.characteristics?.toughness?.total ?? 0));
   const initialRoll = await new Roll("1d100").evaluate({ async: true });
@@ -372,7 +374,6 @@ async function applyRegenerationTurnStartHealing(actor) {
     return;
   }
 
-  const currentWounds = Math.max(0, Number(actor.system?.wounds?.value ?? 0));
   const healedWounds = Math.min(regenerationValue, currentWounds);
   const newWounds = Math.max(0, currentWounds - regenerationValue);
 
