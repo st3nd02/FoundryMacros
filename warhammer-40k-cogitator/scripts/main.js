@@ -4121,6 +4121,9 @@ async function openFearTest() {
   if (!token) return ui.notifications.warn("Select your character first.");
 
   const actor = token.actor;
+  const hasResistanceFear = actor.items.some(item =>
+    item.type === "talent" && /^resistance\s*\(\s*fear\s*\)$/i.test(String(item.name ?? "").trim())
+  );
 
   const roll3d = game.dice3d;
 
@@ -4256,6 +4259,7 @@ Custom Modifier:<br>
           const baseFearMod = Number(html.find("#fearMod").val());
           let testFearMod = baseFearMod;
           if (html.find("#heretic")[0].checked) testFearMod += 10;
+          if (hasResistanceFear) testFearMod += 10;
           const customMod = Number(html.find("#mod").val()) || 0;
           target += testFearMod + customMod;
           target = Math.max(1, target);
@@ -4288,6 +4292,7 @@ Custom Modifier:<br>
             const fearLine = baseFearMod >= 0 ? `+${baseFearMod}` : `${baseFearMod}`;
             const modsLine = customMod >= 0 ? `+${customMod}` : `${customMod}`;
             const heretic = html.find("#heretic")[0].checked;
+            const resistanceFearLine = hasResistanceFear ? " | Resistance (Fear) +10" : "";
             const dos = success ? Math.floor((testTarget - roll) / 10) + 1 : 0;
 
             const fateLine = title === "Fate Reroll"
@@ -4307,7 +4312,7 @@ ${fateLine}
 <b>${actor.name}</b> performs a <b>Fear Test</b> ${selectedTarget ? `against <b>${selectedTarget.name}</b>` : ""}
 </div>
 <hr>
-<div><b>Fear Level:</b> ${fearText} (${fearLine})${heretic ? " | Heretic +10" : ""}</div>
+<div><b>Fear Level:</b> ${fearText} (${fearLine})${heretic ? " | Heretic +10" : ""}${resistanceFearLine}</div>
 <div><b>Modifier:</b> ${modsLine}</div>
 <div style="margin-top:6px;font-size:1.2em;">
 <b>Target:</b> <span style="color:#3aa0ff; font-weight:bold; text-shadow:0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black;">${testTarget}</span>
