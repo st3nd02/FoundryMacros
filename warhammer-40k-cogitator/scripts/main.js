@@ -3290,7 +3290,7 @@ async function openMedicalTest() {
           async function calcHeal(deg) {
             const intBonus =
               (actor.system.characteristics.intelligence?.bonus ?? 0) +
-              Math.floor((actor.system.characteristics.intelligence?.unnatural ?? 0) / 2);
+              Math.ceil((actor.system.characteristics.intelligence?.unnatural ?? 0) / 2);
 
             let heal = deg + intBonus;
 
