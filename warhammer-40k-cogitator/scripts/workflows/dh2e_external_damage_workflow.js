@@ -468,6 +468,7 @@ new Dialog({
         const hits = attackData.hits;
         const firstLocation = spray ? "Body" : (attackData.location || "Body");
         const hitLocations = buildHitLocations(firstLocation, hits);
+        const specialDamageLocation = hitLocations[0] ?? firstLocation ?? "Body";
         const hitsData = [];
         const damageResults = [];
         const furyQueue = [];
@@ -534,6 +535,25 @@ new Dialog({
         const targetDoc = await fromUuid(attackData.targetTokenUuid);
         const targetActor = targetDoc?.actor;
         const traitTests = { toxic: null, flame: null, spray: null, concussive: null, hallucinogenic: null, force: null };
+        const rollSpecialDamageFury = async ({ source, location }) => {
+          const furyRoll = new Roll("1d5");
+          await furyRoll.evaluate();
+          if (game.dice3d) await game.dice3d.showForRoll(furyRoll, game.user, true);
+          const furyData = { result: furyRoll.total, source, location };
+          furyResults.push(furyData);
+          return furyData;
+        };
+        const specialDamageTriggersFury = (roll) => {
+          const terms = Array.isArray(roll?.dice) ? roll.dice : [];
+          return terms.some(term => {
+            const faces = Number(term?.faces ?? 0);
+            if (!faces) return false;
+            return (term?.results ?? []).some(result => {
+              if (result?.active === false || result?.discarded) return false;
+              return Number(result?.result ?? 0) === faces;
+            });
+          });
+        };
 
         const rollCharacteristicTest = async ({ total, label, modifier = 0, actorDoc = null, rollType = null }) => {
           const target = Math.max(1, Number(total || 0) + Number(modifier || 0));
@@ -579,8 +599,15 @@ new Dialog({
             const toxicRoll = await new Roll("1d10").evaluate();
             if (game.dice3d) await game.dice3d.showForRoll(toxicRoll, game.user, true);
             toxicDamage = toxicRoll.total;
+            if (specialDamageTriggersFury(toxicRoll)) {
+              traitTests.toxic = traitTests.toxic ?? {};
+              traitTests.toxic.fury = await rollSpecialDamageFury({
+                source: "Toxic",
+                location: specialDamageLocation
+              });
+            }
           }
-          traitTests.toxic = { value: toxicValue, ...test, damage: toxicDamage, resolved: true };
+          traitTests.toxic = { ...(traitTests.toxic ?? {}), value: toxicValue, ...test, damage: toxicDamage, location: specialDamageLocation, resolved: true };
           properties.push(`Toxic (${toxicValue})`);
         }
 
@@ -731,9 +758,16 @@ new Dialog({
             const forceRoll = await new Roll(`${forceDice}d10`).evaluate();
             if (game.dice3d) await game.dice3d.showForRoll(forceRoll, game.user, true);
             forceDamage = forceRoll.total;
-            traitTests.force = { resolved: true, attackerWP, targetWP, attackerRoll: attackerRollValue, targetRoll: targetRollValue, attackerDoS, targetDoS, won, dos: forceDice, result: forceDamage, ignoresSoak: true };
+            let forceFury = null;
+            if (specialDamageTriggersFury(forceRoll)) {
+              forceFury = await rollSpecialDamageFury({
+                source: "Force",
+                location: specialDamageLocation
+              });
+            }
+            traitTests.force = { resolved: true, attackerWP, targetWP, attackerRoll: attackerRollValue, targetRoll: targetRollValue, attackerDoS, targetDoS, won, dos: forceDice, result: forceDamage, ignoresSoak: true, fury: forceFury, location: specialDamageLocation };
           } else {
-            traitTests.force = { resolved: true, attackerWP, targetWP, attackerRoll: attackerRollValue, targetRoll: targetRollValue, attackerDoS, targetDoS, won, dos: 0, result: 0, ignoresSoak: true };
+            traitTests.force = { resolved: true, attackerWP, targetWP, attackerRoll: attackerRollValue, targetRoll: targetRollValue, attackerDoS, targetDoS, won, dos: 0, result: 0, ignoresSoak: true, location: specialDamageLocation };
           }
           properties.push("Force");
         }
@@ -757,7 +791,7 @@ new Dialog({
           : "";
 
         const furyHtml = furyResults.length
-          ? `<hr><div style="color:gold;font-size:1.1em;font-weight:bold;text-shadow:${COLOR_TEXT_OUTLINE};">✦ RIGHTEOUS FURY ✦</div>${furyResults.map((f, i) => `<div>${i + 1}. <b>Location:</b> <i>${f.location}</i> — Righteous Fury: <b>${f.result}</b></div>`).join("")}`
+          ? `<hr><div style="color:gold;font-size:1.1em;font-weight:bold;text-shadow:${COLOR_TEXT_OUTLINE};">✦ RIGHTEOUS FURY ✦</div>${furyResults.map((f, i) => `<div>${i + 1}. <b>Location:</b> <i>${f.location}</i>${f.source ? ` | <b>Source:</b> ${f.source}` : ""} — Righteous Fury: <b>${f.result}</b></div>`).join("")}`
           : "";
 
         const formulaInline = formula;
