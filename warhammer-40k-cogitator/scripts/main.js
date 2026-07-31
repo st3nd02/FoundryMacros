@@ -8,9 +8,13 @@ import {
   maybeApplyFateReroll,
   resolveD100Outcome
 } from "./fate_engine.js";
+import { CogitatorDialogV2 } from "./applications.js";
+import { incrementEffectCounter } from "./active-effects.js";
+
+const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "3.0.15";
+const COGITATOR_VERSION = "3.1.0";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -344,7 +348,7 @@ async function applyRegenerationTurnStartHealing(actor) {
   if (currentWounds === 0) return;
 
   const toughnessTarget = Math.max(1, Number(actor.system?.characteristics?.toughness?.total ?? 0));
-  const initialRoll = await new Roll("1d100").evaluate({ async: true });
+  const initialRoll = await new Roll("1d100").evaluate();
   let testOutcome = resolveD100Outcome({ targetNumber: toughnessTarget, rollResult: initialRoll.total });
 
   if (!testOutcome.success && canActorSpendFate(actor)) {
@@ -354,7 +358,7 @@ async function applyRegenerationTurnStartHealing(actor) {
       targetNumber: toughnessTarget,
       rollResult: initialRoll.total,
       reroll: async () => {
-        const reroll = await new Roll("1d100").evaluate({ async: true });
+        const reroll = await new Roll("1d100").evaluate();
         await show3dDiceRoll(reroll);
         return reroll.total;
       },
@@ -392,7 +396,7 @@ async function applyFireTurnStartEffects(actor) {
   summaryLines.push(`<b>Sequence:</b> Willpower Test → (Success) Ask to attempt Agility -10 extinguish test → resolve fire effects.`);
 
   const wpTotal = Math.max(1, Number(actor.system?.characteristics?.willpower?.total ?? 0));
-  const wpRoll = await new Roll("1d100").evaluate({ async: true });
+  const wpRoll = await new Roll("1d100").evaluate();
   let wpOutcome = resolveD100Outcome({ targetNumber: wpTotal, rollResult: wpRoll.total });
   if (!wpOutcome.success && canActorSpendFate(actor)) {
     wpOutcome = await maybeApplyFateReroll({
@@ -401,7 +405,7 @@ async function applyFireTurnStartEffects(actor) {
       targetNumber: wpTotal,
       rollResult: wpRoll.total,
       reroll: async () => {
-        const reroll = await new Roll("1d100").evaluate({ async: true });
+        const reroll = await new Roll("1d100").evaluate();
         await show3dDiceRoll(reroll);
         return reroll.total;
       },
@@ -415,7 +419,7 @@ async function applyFireTurnStartEffects(actor) {
 
   if (wpSuccess) {
     const attemptExtinguish = await new Promise(resolve => {
-      new Dialog({
+      new CogitatorDialogV2({
         title: `${actor.name} — Fire Check`,
         content: `<p><b>Willpower succeeded!</b><br>Do you want to attempt to extinguish the fire on you?</p>`,
         buttons: {
@@ -430,7 +434,7 @@ async function applyFireTurnStartEffects(actor) {
     if (attemptExtinguish) {
       const agTotalBase = Number(actor.system?.characteristics?.agility?.total ?? 0);
       const agTarget = Math.max(1, agTotalBase - 10);
-      const agRoll = await new Roll("1d100").evaluate({ async: true });
+      const agRoll = await new Roll("1d100").evaluate();
       let agOutcome = resolveD100Outcome({ targetNumber: agTarget, rollResult: agRoll.total });
       if (!agOutcome.success && canActorSpendFate(actor)) {
         agOutcome = await maybeApplyFateReroll({
@@ -439,7 +443,7 @@ async function applyFireTurnStartEffects(actor) {
           targetNumber: agTarget,
           rollResult: agRoll.total,
           reroll: async () => {
-            const reroll = await new Roll("1d100").evaluate({ async: true });
+            const reroll = await new Roll("1d100").evaluate();
             await show3dDiceRoll(reroll);
             return reroll.total;
           },
@@ -481,7 +485,7 @@ async function applyFireTurnStartEffects(actor) {
     summaryLines.push(`<b>2) Action Status:</b> ${actor.name} failed the Willpower roll and cannot act this turn.`);
   }
 
-  const fireRoll = await new Roll("1d10").evaluate({ async: true });
+  const fireRoll = await new Roll("1d10").evaluate();
   await show3dDiceRoll(fireRoll);
   const fireDamage = Number(fireRoll.total ?? 0);
   const toughnessBonus = Math.max(0, Number(actor.system?.characteristics?.toughness?.bonus ?? 0));
@@ -878,7 +882,7 @@ async function promptFateRerollDecisionLocal({ actorUuid, rollType = "Test Roll"
   if (fateCurrent <= 0) return { handled: true, useFate: false };
 
   const useFate = await new Promise(resolve => {
-    new Dialog({
+    new CogitatorDialogV2({
       title: "Spend Fate?",
       content: `
 <div style="font-size:1.02em;">
@@ -1025,7 +1029,6 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
       await actor.createEmbeddedDocuments("ActiveEffect", [{
         name: statusTemplate?.name || preferredNames[0] || resolvedStatusId || "Status Effect",
         img: statusTemplate?.img || statusTemplate?.icon || "icons/svg/aura.svg",
-        icon: statusTemplate?.icon || statusTemplate?.img || "icons/svg/aura.svg",
         transfer: false,
         disabled: false,
         statuses: resolvedStatusId ? [resolvedStatusId] : [],
@@ -1038,39 +1041,7 @@ async function addConvenientEffectToActorLocal({ actorUuid, effectId, effectName
   if (applied && Number.isFinite(Number(counter)) && Number(counter) > 0) {
     const activeEffect = findActorEffect(actor, resolvedStatusId, effectName) || preferredNames.map(name => findActorEffect(actor, resolvedStatusId, name)).find(Boolean);
     if (activeEffect) {
-      const numericCounter = Number(counter);
-      const existingCounter = Number(
-        activeEffect.getFlag?.("statuscounter", "value")
-        ?? activeEffect.flags?.statuscounter?.value
-        ?? activeEffect.flags?.statuscounter?.counter?.value
-        ?? activeEffect.flags?.statusIconCounters?.value
-        ?? activeEffect.flags?.statusIconCounters?.counter
-        ?? activeEffect.flags?.["status-icon-counters"]?.value
-        ?? activeEffect.flags?.["status-icon-counters"]?.counter
-        ?? 0
-      ) || 0;
-      const nextCounter = existingCounter + numericCounter;
-      const remainingRounds = Number(activeEffect.duration?.remaining);
-      const currentDuration = Number.isFinite(remainingRounds) ? Math.max(0, Math.ceil(remainingRounds)) : Math.max(0, Number(activeEffect.duration?.rounds ?? 0));
-      const nextDuration = Math.max(currentDuration, nextCounter);
-      const combatRound = Number(game.combat?.round ?? 0);
-      const combatTurn = Number(game.combat?.turn ?? 0);
-      await activeEffect.update({
-        "flags.statuscounter.value": nextCounter,
-        "flags.statuscounter.visible": nextCounter > 1,
-        "flags.statuscounter.config.type": "default",
-        "flags.statuscounter.config.dataSource": "flags.statuscounter.value",
-        "flags.statuscounter.config.modifyDuration": true,
-        "flags.statuscounter.config.durationType": 1,
-        "flags.statuscounter.counter": { value: nextCounter },
-        "flags.statusIconCounters.counter": nextCounter,
-        "flags.statusIconCounters.value": nextCounter,
-        "flags.status-icon-counters.counter": nextCounter,
-        "flags.status-icon-counters.value": nextCounter,
-        "duration.rounds": nextDuration,
-        "duration.startRound": combatRound,
-        "duration.startTurn": combatTurn
-      });
+      await incrementEffectCounter(activeEffect, Number(counter));
     }
   }
 
@@ -1697,7 +1668,7 @@ function handleMirrorAttackReady(payload) {
 
   setPendingAttackContext(payload.setup ?? null);
 
-  new Dialog({
+  new CogitatorDialogV2({
     title: "Devastating Assault",
     content: `<p><b>${payload.attackerName ?? "Attacker"}</b> can make a second mirrored All Out attack.</p><p>Run attack workflow now?</p>`,
     buttons: {
@@ -1710,7 +1681,7 @@ function handleMirrorAttackReady(payload) {
 
 async function openLauncher() {
   const choice = await new Promise(resolve => {
-    new Dialog({
+    new CogitatorDialogV2({
       title: "Warhammer 40k Cogitator",
       content: `<p>Select workflow step:</p>`,
       buttons: {
@@ -2468,27 +2439,31 @@ class WorkflowHud {
   }
 }
 
-class WorkflowHudResetMenu extends FormApplication {
-  static get defaultOptions() {
-    return foundry.utils.mergeObject(super.defaultOptions, {
-      id: "warhammer40k-cogitator-reset-workflow-hud",
+class WorkflowHudResetMenu extends HandlebarsApplicationMixin(ApplicationV2) {
+  static DEFAULT_OPTIONS = {
+    id: "warhammer40k-cogitator-reset-workflow-hud",
+    window: {
       title: "Reset Workflow HUD Position"
-    });
-  }
+    },
+    position: {
+      width: 320,
+      height: "auto"
+    }
+  };
 
-  getData() {
-    return {};
-  }
+  static PARTS = {
+    content: {
+      template: `modules/${COGITATOR_ID}/templates/workflow-hud-reset.hbs`
+    }
+  };
 
-  activateListeners(html) {
-    super.activateListeners(html);
-    this.submit();
-    this.close();
-  }
-
-  async _updateObject() {
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    if (this._cogitatorResetHandled) return;
+    this._cogitatorResetHandled = true;
     await resetWorkflowHudToCenter();
     ui.notifications.info("Workflow HUD moved to screen center.");
+    await this.close();
   }
 }
 
@@ -2610,7 +2585,7 @@ async function openSkillTest() {
   const navigateOptions = buildSpecialityOptions("navigate");
   const tradeOptions = buildSpecialityOptions("trade");
 
-  new Dialog({
+  new CogitatorDialogV2({
     title: "Skill Test",
     content: `
 <style>
@@ -3112,7 +3087,7 @@ async function openMedicalTest() {
 
   async function promptApplyHealing(amount, sourceLabel = "Medical Flow") {
     if (!game.user.isGM || !Number.isFinite(amount) || amount <= 0) return;
-    new Dialog({
+    new CogitatorDialogV2({
       title: "Apply Healing",
       content: `<p>Apply <b>${Math.floor(amount)}</b> healing to <b>${patient.name}</b> now?</p>`,
       buttons: {
@@ -3141,7 +3116,7 @@ async function openMedicalTest() {
     else if ((wounds?.value ?? 0) > tb * 2) state = "Heavily Wounded";
   }
 
-  new Dialog({
+  new CogitatorDialogV2({
     title: "Medicae Test",
     content: `
 <style>
@@ -3451,7 +3426,7 @@ async function openHealingFlow({ token: providedToken = null, prefillAmount = nu
     .join("");
   const hasHistory = healingRollHistory.length > 0;
 
-  new Dialog({
+  new CogitatorDialogV2({
     title: `Heal ${actor.name}`,
     content: `
     <form>
@@ -3568,7 +3543,7 @@ async function openFateRestore() {
   const current = actor.system.fate?.value ?? 0;
   const max = actor.system.fate?.max ?? 0;
 
-  new Dialog({
+  new CogitatorDialogV2({
     title: "Restore Fate",
     content: `
     <form>
@@ -3651,7 +3626,7 @@ async function openFatigueManager() {
   const tb = actor.system.characteristics?.toughness?.bonus ?? 0;
   const unconsciousMinutes = Math.max(0, 10 - tb);
 
-  new Dialog({
+  new CogitatorDialogV2({
     title: "Apply Fatigue",
     content: `
 <form>
@@ -3777,7 +3752,7 @@ async function openAmmoReload() {
   </option>`
   ).join("");
 
-  new Dialog({
+  new CogitatorDialogV2({
     title: "Reload Weapon",
 
     content: `
@@ -3969,7 +3944,7 @@ async function openCharacteristicTest() {
     .map(d => `<option value="${d.value}" ${d.value === 0 ? "selected" : ""}>${d.label}</option>`)
     .join("");
 
-  new Dialog({
+  new CogitatorDialogV2({
     title: "Characteristic Test",
     content: `
 <form>
@@ -4155,7 +4130,7 @@ async function openFearTest() {
   const suggestedFearLevel = Math.min(4, Math.max(1, Number(fearLevelMatch?.[1] ?? 1)));
 
   async function d100() {
-    const r = await new Roll("1d100").evaluate({ async: true });
+    const r = await new Roll("1d100").evaluate();
     if (roll3d) roll3d.showForRoll(r);
     return r.total;
   }
@@ -4166,7 +4141,7 @@ async function openFearTest() {
     const matches = [...result.matchAll(diceRegex)];
     for (const match of matches) {
       const expr = match[1];
-      const roll = await new Roll(expr).evaluate({ async: true });
+      const roll = await new Roll(expr).evaluate();
       if (roll3d) roll3d.showForRoll(roll);
       result = result.replace(expr, String(roll.total));
     }
@@ -4233,7 +4208,7 @@ async function openFearTest() {
     return counts;
   };
 
-  new Dialog({
+  new CogitatorDialogV2({
     title: "Fear Test",
     content: `<form>
 <label><input type="checkbox" id="heretic"> Heretic</label><br><br>
@@ -4332,7 +4307,7 @@ ${success
           async function rollFear(dof) {
             let insanityBlock = "";
             if (dof >= 3) {
-              const insanityRoll = await new Roll("1d5").evaluate({ async: true });
+              const insanityRoll = await new Roll("1d5").evaluate();
               if (roll3d) roll3d.showForRoll(insanityRoll);
               const currentInsanity = actor.system.insanity ?? 0;
               const newInsanity = currentInsanity + insanityRoll.total;
@@ -4591,7 +4566,7 @@ async function openForceFieldCheck() {
 
   const options = fields.map(field => `<option value="${field.id}">${field.name}</option>`).join("");
 
-  new Dialog({
+  new CogitatorDialogV2({
     title: "Force Field Check",
     content: `
 <form>

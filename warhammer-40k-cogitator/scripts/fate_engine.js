@@ -1,3 +1,5 @@
+import { CogitatorDialogV2 } from "./applications.js";
+
 const OUTLINE_TEXT_SHADOW = "0 0 1px black,0 0 2px black,1px 1px 0 black,-1px -1px 0 black";
 
 const styleValue = (value, color) => `<span style="color:${color};font-weight:bold;text-shadow:${OUTLINE_TEXT_SHADOW};">${value}</span>`;
@@ -53,7 +55,7 @@ export const askForFateReroll = async ({ actor, rollType = "Test Roll", targetNu
 
   const fateCurrent = getActorFateValue(actor);
   return new Promise(resolve => {
-    new Dialog({
+    new CogitatorDialogV2({
       title: "Spend Fate?",
       content: `
 <div style="font-size:1.02em;">

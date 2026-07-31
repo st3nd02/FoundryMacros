@@ -255,13 +255,13 @@ export const inlineRollCriticalText = async text => {
   for (const m of matches) {
     const expr = m[0];
     const r = new Roll(expr);
-    await r.evaluate({ async: true });
+    await r.evaluate();
     result = result.replace(expr, r.total);
   }
 
   if (result.includes("<direction> <direction name>")) {
     const dirRoll = new Roll("1d10");
-    await dirRoll.evaluate({ async: true });
+    await dirRoll.evaluate();
     const scatterMap = {
       1: { arrow: "↖", label: "NW" },
       2: { arrow: "↑", label: "N" },

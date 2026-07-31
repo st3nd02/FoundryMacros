@@ -1,10 +1,11 @@
 import { canActorSpendFate, maybeApplyFateReroll } from "../fate_engine.js";
+import { CogitatorDialogV2 } from "../applications.js";
 
 export async function runAttackWorkflow() {
 /**
- * DH2e External Attack Workflow (Foundry V13)
+ * DH2e External Attack Workflow (Foundry V13/V14)
  * Version: 1.1
- * V13-safe flow:
+ * V13/V14-safe flow:
  * 1) Attacker dialog (Attack) -> immediately rolls attack and creates workflow chat card.
  * 2) Defense dialogs per target with allocated hits.
  * 3) Damage dialog for attacker to roll per-target damage.
@@ -368,7 +369,7 @@ const promptSprayDefenseFollowup = async ({ targetActor, sprayDefense, inescapab
   const fateAvailable = canFate;
 
   return new Promise(resolve => {
-    new Dialog({
+    new CogitatorDialogV2({
       title: "Spray Defense Follow-up",
       content: `
 <style>
@@ -1639,7 +1640,7 @@ const showAttackDialog = async () => {
     const isMelee = (weaponDoc?.system.class ?? "").toLowerCase() === "melee";
     const normalRange = getNormalRangeForWeapon(weaponDoc);
     return targetTokens.map(t => {
-      const pathMeasurement = canvas.grid.measurePath([attackerToken.center, t.center], { gridSpaces: false });
+      const pathMeasurement = canvas.grid.measurePath([attackerToken.center, t.center]);
       const d = Number((pathMeasurement.distance ?? 0).toFixed(2));
       const size = getSizeModifier(t.actor);
       const effectiveDistance = Math.max(0, d - Math.max(0, (size.sizeValue ?? 4) - 4));
@@ -1654,7 +1655,7 @@ const showAttackDialog = async () => {
   };
 
   return new Promise(resolve => {
-    const d = new Dialog({
+    const d = new CogitatorDialogV2({
       title: "External Attack Workflow",
       content: `<form>
         <style>

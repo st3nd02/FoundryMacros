@@ -1,6 +1,7 @@
 import { getPerilsOfWarpEntry, getPsychicPhenomenaEntry, inlineRollPsychicText } from "../data/psychic_events.js";
 
 import { canActorSpendFate, maybeApplyFateReroll } from "../fate_engine.js";
+import { CogitatorDialogV2 } from "../applications.js";
 
 export async function runPsychicPowerWorkflow() {
   const WORKFLOW_NS = "warhammer-40k-cogitator";
@@ -121,7 +122,7 @@ export async function runPsychicPowerWorkflow() {
     const direct = Number(formula);
     if (Number.isFinite(direct)) return direct;
     try {
-      const roll = await new Roll(formula).evaluate({ async: true });
+      const roll = await new Roll(formula).evaluate();
       return Number.isFinite(Number(roll.total)) ? Number(roll.total) : 0;
     } catch (err) {
       console.warn("WH40k Cogitator | Failed to evaluate numeric formula:", formula, err);
@@ -204,7 +205,7 @@ export async function runPsychicPowerWorkflow() {
   };
 
   const rollWithDice = async formula => {
-    const roll = await new Roll(formula).evaluate({ async: true });
+    const roll = await new Roll(formula).evaluate();
     if (game.dice3d?.showForRoll) await game.dice3d.showForRoll(roll, game.user, true);
     return roll;
   };
@@ -213,9 +214,6 @@ export async function runPsychicPowerWorkflow() {
 
   const measureDistanceMeters = (a, b) => {
     if (!a?.center || !b?.center) return null;
-    if (typeof canvas.grid?.measureDistance === "function") {
-      return Number(canvas.grid.measureDistance(a.center, b.center) ?? 0);
-    }
     if (typeof canvas.grid?.measurePath === "function") {
       const path = canvas.grid.measurePath([a.center, b.center]);
       return Number(path?.distance ?? 0);
@@ -378,7 +376,7 @@ export async function runPsychicPowerWorkflow() {
   <div class="field-block full-width"><div class="section-title">Special Traits</div><input id="damageSpecial" type="text"></div>
 </div><hr><div class="section-title">Effect</div><textarea id="effect" class="big-box" style="font-family:monospace;"></textarea>`;
 
-    new Dialog({
+    new CogitatorDialogV2({
       title: "Psychic Power Handler",
       content,
       render: html => {
@@ -671,7 +669,7 @@ export async function runPsychicPowerWorkflow() {
   const hitsData = [];
   if (manifestSuccess && hits > 0 && hasDamage) {
     for (let i = 1; i <= hits; i++) {
-      const dmgRoll = await new Roll(finalFormula).evaluate({ async: true });
+      const dmgRoll = await new Roll(finalFormula).evaluate();
       hitsData.push({ hit: i, location: hitLocation, damage: dmgRoll.total, fury: null });
     }
   }
@@ -690,10 +688,10 @@ export async function runPsychicPowerWorkflow() {
     const rollsToMake = pick.hasFavored ? 2 : 1;
     const allResults = [];
     for (let i = 0; i < rollsToMake; i++) {
-      const phRoll = await new Roll(`1d100 + ${phenomenaModifier}`).evaluate({ async: true });
+      const phRoll = await new Roll(`1d100 + ${phenomenaModifier}`).evaluate();
       const phTotal = Math.min(phRoll.total, 100);
       if (phTotal >= 75) {
-        const perilsRoll = await new Roll("1d100").evaluate({ async: true });
+        const perilsRoll = await new Roll("1d100").evaluate();
         const perilsEntry = stylizeConditionText(await inlineRollPsychicText(getPerilsOfWarpEntry(perilsRoll.total)));
         allResults.push(`<b style="color:orange;">Perils of the Warp! (${perilsRoll.total})</b><br>${perilsEntry}`);
         const counts = extractConditionCounts(perilsEntry);
