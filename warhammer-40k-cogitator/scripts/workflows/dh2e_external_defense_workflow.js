@@ -1,11 +1,12 @@
 import { getPerilsOfWarpEntry, getPsychicPhenomenaEntry, inlineRollPsychicText } from "../data/psychic_events.js";
 
 import { canActorSpendFate, getActorFateValue, maybeApplyFateReroll } from "../fate_engine.js";
+import { CogitatorDialogV2 } from "../applications.js";
 
 export async function runDefenseWorkflow() {
 try {
 /**
- * DH2e External Defense Workflow (Foundry V13)
+ * DH2e External Defense Workflow (Foundry V13/V14)
  * Version: 1.4
  * Run this as the defender owner to resolve pending defenses on existing attack workflows.
  */
@@ -162,7 +163,7 @@ const workflowOptions = pending
   .join("");
 
 const pick = await new Promise(resolve => {
-  new Dialog({
+  new CogitatorDialogV2({
     title: "External Defense Workflow",
     content: `<style>
       .def-wrap { min-height: 260px; }

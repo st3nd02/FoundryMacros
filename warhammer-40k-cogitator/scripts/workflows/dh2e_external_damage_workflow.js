@@ -1,9 +1,10 @@
 import { canActorSpendFate, maybeApplyFateReroll } from "../fate_engine.js";
+import { CogitatorDialogV2 } from "../applications.js";
 
 export async function runDamageWorkflow() {
 try {
 /**
- * DH2e External Damage Workflow (Foundry V13)
+ * DH2e External Damage Workflow (Foundry V13/V14)
  * Version: 1.3
  * Run this as the attacker owner to resolve pending damage on existing workflows.
  */
@@ -150,7 +151,7 @@ const optionHtml = pending.map((p, i) => {
 }).join("");
 
 const pick = await new Promise(resolve => {
-  new Dialog({
+  new CogitatorDialogV2({
     title: "Damage Workflow",
     content: `<form style="line-height:normal;"><div class="form-group"><label><b>Pending Damage</b></label><select id="pick">${optionHtml}</select></div></form>`,
     buttons: {
@@ -229,7 +230,7 @@ function getHitLocation(rollValue) {
   return "Left Leg";
 }
 
-new Dialog({
+new CogitatorDialogV2({
   title: "Damage Roll Card",
   content: `
 <form style="line-height:normal;">

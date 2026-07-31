@@ -1,8 +1,10 @@
 import { getCriticalText, inlineRollCriticalText } from "../data/criticals.js";
+import { CogitatorDialogV2 } from "../applications.js";
+import { incrementEffectCounter } from "../active-effects.js";
 
 export async function runApplyDamageWorkflow() {
 /**
- * DH2e External Apply Damage Workflow (Foundry V13)
+ * DH2e External Apply Damage Workflow (Foundry V13/V14)
  * Version: 1.4
  * GM-only damage application from `game.dh2eLastDamage`.
  */
@@ -191,7 +193,7 @@ if (!candidates.length) {
 
 const optionHtml = candidates.map((c, i) => `<option value="${i}">${c.label}</option>`).join("");
 const selectedIndex = await new Promise(resolve => {
-  new Dialog({
+  new CogitatorDialogV2({
     title: "Select Workflow Damage",
     content: `<form><div class="form-group"><label><b>Damage Entry</b></label><select id="pick">${optionHtml}</select></div></form>`,
     buttons: {
@@ -258,7 +260,6 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
     const systemEffectData = {
       name: statusTemplate?.name || preferredNames[0] || effectId,
       img: statusTemplate?.img || statusTemplate?.icon || "icons/svg/aura.svg",
-      icon: statusTemplate?.icon || statusTemplate?.img || "icons/svg/aura.svg",
       transfer: false,
       disabled: false,
       statuses: [effectId],
@@ -310,7 +311,6 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
     await actorDoc.createEmbeddedDocuments("ActiveEffect", [{
       name: preferredNames[0] || effectId || "Status Effect",
       img: "icons/svg/aura.svg",
-      icon: "icons/svg/aura.svg",
       transfer: false,
       disabled: false,
       statuses: effectId ? [effectId] : [],
@@ -320,47 +320,9 @@ async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAli
   }
 
   if (Number.isFinite(Number(counter)) && Number(counter) > 0) {
-    const numericCounter = Number(counter);
     const activeEffect = findExistingEffect();
     if (activeEffect) {
-      const existingCounter = Number(
-        activeEffect.getFlag?.("statuscounter", "value")
-        ?? activeEffect.flags?.statuscounter?.value
-        ?? activeEffect.flags?.statuscounter?.counter?.value
-        ?? activeEffect.flags?.statusIconCounters?.value
-        ?? activeEffect.flags?.statusIconCounters?.counter
-        ?? activeEffect.flags?.["status-icon-counters"]?.value
-        ?? activeEffect.flags?.["status-icon-counters"]?.counter
-        ?? 0
-      ) || 0;
-      const nextCounter = existingCounter + numericCounter;
-      const remainingRounds = Number(activeEffect.duration?.remaining);
-      const currentDuration = Number.isFinite(remainingRounds) ? Math.max(0, Math.ceil(remainingRounds)) : Math.max(0, Number(activeEffect.duration?.rounds ?? 0));
-      const nextDuration = Math.max(currentDuration, nextCounter);
-      const combat = game.combat;
-      let combatRound = Number(combat?.round ?? 0);
-      let combatTurn = Number(combat?.turn ?? 0);
-      const targetTurnIndex = Number(combat?.turns?.findIndex(combatant => combatant?.actor?.id === actorDoc.id) ?? -1);
-      if (Number.isInteger(targetTurnIndex) && targetTurnIndex >= 0) {
-        if (Number.isInteger(combatTurn) && targetTurnIndex < combatTurn) combatRound += 1;
-        combatTurn = targetTurnIndex;
-      }
-      await activeEffect.update({
-        "flags.statuscounter.value": nextCounter,
-        "flags.statuscounter.visible": nextCounter > 1,
-        "flags.statuscounter.config.type": "default",
-        "flags.statuscounter.config.dataSource": "flags.statuscounter.value",
-        "flags.statuscounter.config.modifyDuration": true,
-        "flags.statuscounter.config.durationType": 1,
-        "flags.statuscounter.counter": { value: nextCounter },
-        "flags.statusIconCounters.counter": nextCounter,
-        "flags.statusIconCounters.value": nextCounter,
-        "flags.status-icon-counters.counter": nextCounter,
-        "flags.status-icon-counters.value": nextCounter,
-        "duration.rounds": nextDuration,
-        "duration.startRound": combatRound,
-        "duration.startTurn": combatTurn
-      });
+      await incrementEffectCounter(activeEffect, Number(counter), { expiryActor: actorDoc });
     }
   }
 
@@ -520,7 +482,7 @@ function critLocKey(loc){
 const actorHasTrueGrit = (actor.items ?? [])
   .some(item => item.type === "talent" && String(item.name ?? "").trim().toLowerCase() === "true grit");
 
-new Dialog({
+new CogitatorDialogV2({
 
 title:`Apply Damage → ${actor.name}`,
 

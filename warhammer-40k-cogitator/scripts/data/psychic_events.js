@@ -62,7 +62,7 @@ export const inlineRollPsychicText = async text => {
   const diceRegex = /(\d+d\d+)/gi;
   let result = String(text ?? "");
   for (const match of result.match(diceRegex) || []) {
-    const roll = await new Roll(match).evaluate({ async: true });
+    const roll = await new Roll(match).evaluate();
     result = result.replace(match, roll.total);
   }
   return result;
