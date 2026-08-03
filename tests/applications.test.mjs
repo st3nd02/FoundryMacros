@@ -4,7 +4,14 @@ import test from "node:test";
 class FakeDiv {
   constructor() {
     this.innerHTML = "";
-    this.classList = { values: [], add: value => this.classList.values.push(value) };
+    this.attributes = [];
+    this.classList = {
+      values: [],
+      add: value => {
+        this.classList.values.push(value);
+        this.attributes.push({ name: "class", value });
+      }
+    };
   }
 }
 
@@ -52,6 +59,7 @@ test("maps legacy dialog configuration to a real DialogV2", async () => {
   assert.equal(dialog.options.position.width, 420);
   assert.deepEqual(dialog.options.classes, ["warhammer-40k-cogitator-dialog-v2", "custom-class"]);
   assert.equal(dialog.options.content.innerHTML, "<form><input name=\"value\"></form>");
+  assert.equal(dialog.options.content.attributes.length, 0);
   assert.equal(dialog.options.buttons.length, 2);
   assert.equal(dialog.options.buttons[0].action, "accept");
   assert.equal(dialog.options.buttons[0].default, true);

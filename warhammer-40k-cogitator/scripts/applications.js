@@ -25,11 +25,10 @@ function normalizeClasses(classes) {
 }
 
 function createTrustedDialogContent(content) {
-  if (content instanceof HTMLDivElement) return content;
-
   const container = document.createElement("div");
-  container.classList.add("warhammer-40k-cogitator-dialog-content");
-  container.innerHTML = String(content ?? "");
+  container.innerHTML = content instanceof HTMLDivElement
+    ? content.innerHTML
+    : String(content ?? "");
   return container;
 }
 
