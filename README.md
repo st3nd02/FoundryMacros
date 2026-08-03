@@ -211,7 +211,7 @@ The module includes data tables used during play:
 ## Installation and packaging
 
 - Module ID: `warhammer-40k-cogitator`
-- Module version: `3.1.2`
+- Module version: `3.1.3`
 - Foundry compatibility: v13-v14 (verified on the v14 API contract)
 - Entry module: `warhammer-40k-cogitator/scripts/main.js`
 - Socket support enabled
@@ -221,6 +221,13 @@ The module includes data tables used during play:
   - `socketlib`
 
 The v14 migration was checked against Dark Heresy `4.4.0.1`, DFreds Convenient Effects `9.2.2`, Status Icon Counters `3.1.1`, and SocketLib `1.1.3`. On Foundry v14, use the current v14-compatible release of each dependency from the module manager.
+
+## Version 3.1.3 patch notes
+
+- Corrects DialogV2 select controls to use an ochre closed control with black text and parchment option lists with black text.
+- Compacts legacy form spacing by suppressing top-level `<br>` layout elements and reducing standard form, heading, and rule gaps.
+- Keeps the Damage workflow dice count, d10/d5 choice, and weapon damage modifier on one line, and widens the Psychic dialog by 100px.
+- Resolves damage targets through the v14 TokenDocument/placeable relationship, with Scene and active-canvas fallbacks for legacy or stale token references.
 
 ## Version 3.1.2 patch notes
 

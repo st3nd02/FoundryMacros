@@ -494,7 +494,7 @@ export async function runPsychicPowerWorkflow() {
         },
         cancel: { label: "Cancel", callback: () => resolve(null) }
       }
-    }, { width: 800 }).render(true);
+    }, { width: 900 }).render(true);
   });
 
   if (!pick || !pick.powerId) return;

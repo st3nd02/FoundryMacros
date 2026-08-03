@@ -1,5 +1,6 @@
 import { canActorSpendFate, maybeApplyFateReroll } from "../fate_engine.js";
 import { CogitatorDialogV2 } from "../applications.js";
+import { resolveTokenReference } from "../token-actors.js";
 
 export async function runDamageWorkflow() {
 try {
@@ -238,10 +239,13 @@ new CogitatorDialogV2({
 <input id="weaponName" type="text" style="width:100%" readonly value="${attackData.weapon}"><br><br>
 
 <b>Damage</b><br>
+<div class="cogitator-damage-formula">
 <input type="number" id="diceCount" value="${m ? Number(m[1]) : 1}" style="width:60px">
 <label><input type="radio" name="dieType" value="10" ${(m ? m[2] : "10") === "10" ? "checked" : ""}>d10</label>
 <label><input type="radio" name="dieType" value="5" ${(m ? m[2] : "10") === "5" ? "checked" : ""}>d5</label>
-+ <input type="text" id="flat" value="${defaultFlatExpr}" style="width:90px">
+<span aria-hidden="true">+</span>
+<input type="text" id="flat" value="${defaultFlatExpr}" style="width:90px">
+</div>
 <br><br>
 <div style="columns:2; column-gap:20px;">
 <label><b>Penetration</b><br>
@@ -557,8 +561,8 @@ new CogitatorDialogV2({
           hitsData[hitIndex - 1].fury = { result: furyRoll.total };
         }
 
-        const targetDoc = await fromUuid(attackData.targetTokenUuid);
-        const targetActor = targetDoc?.actor;
+        const targetReference = await resolveTokenReference(attackData.targetTokenUuid);
+        const targetActor = targetReference?.actor ?? null;
         const traitTests = { toxic: null, flame: null, spray: null, concussive: null, hallucinogenic: null, force: null };
         const rollSpecialDamageFury = async ({ source, location }) => {
           const furyRoll = new Roll("1d5");

@@ -1,6 +1,7 @@
 import { getCriticalText, inlineRollCriticalText } from "../data/criticals.js";
 import { CogitatorDialogV2 } from "../applications.js";
 import { incrementEffectCounter } from "../active-effects.js";
+import { resolveTokenReference } from "../token-actors.js";
 
 export async function runApplyDamageWorkflow() {
 /**
@@ -230,9 +231,9 @@ async function clearSelectedDamageFromWorkflow() {
   }
 }
 
-const token = await fromUuid(dmg.targetTokenUuid);
-if (!token) return ui.notifications.warn("Target token not found.");
-const actor = token.actor;
+const targetReference = await resolveTokenReference(dmg.targetTokenUuid);
+const actor = targetReference?.actor ?? null;
+if (!actor) return ui.notifications.warn("Target token or actor not found.");
 
 async function applyConvenientEffect(actorDoc, { effectId, effectName, effectAliases = [], counter = null }) {
   if (!actorDoc) return false;

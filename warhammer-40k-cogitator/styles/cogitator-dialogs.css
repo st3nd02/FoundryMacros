@@ -9,6 +9,8 @@
   --color-form-hint: #5e5549;
   --color-form-hint-hover: #3c362e;
   --color-select-option-bg: #f1ead8;
+  --cogitator-select-bg: #c6a15b;
+  --cogitator-parchment: #f1ead8;
 }
 
 .application.warhammer-40k-cogitator-dialog-v2 .window-content {
@@ -22,9 +24,70 @@
 }
 
 .application.warhammer-40k-cogitator-dialog-v2 .dialog-content {
+  gap: 0.35rem;
+  line-height: 1.25;
   min-height: 0;
   overflow: hidden auto;
   padding-right: 0.25rem;
+}
+
+/* Legacy Dialog markup used top-level BR elements as layout spacers. In the
+   DialogV2 standard-form flex layout each BR becomes another spaced flex item. */
+.application.warhammer-40k-cogitator-dialog-v2 .dialog-content > br {
+  display: none;
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 .dialog-content > :is(h1, h2, h3, h4, p, hr) {
+  margin-block: 0.2rem;
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 .dialog-content .form-group {
+  gap: 0.35rem;
+  margin-block: 0;
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 select {
+  color-scheme: light;
+  color: #191813;
+  background-color: var(--cogitator-select-bg);
+  border-color: #736953;
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 select option,
+.application.warhammer-40k-cogitator-dialog-v2 select optgroup {
+  color: #191813;
+  background-color: var(--cogitator-parchment);
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 .cogitator-damage-formula {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  margin-block: 0.15rem 0.35rem;
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 .cogitator-damage-formula label {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 .cogitator-damage-formula input[type="radio"] {
+  flex: none;
+  margin: 0;
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 .cogitator-damage-formula #diceCount {
+  flex: 0 0 60px;
+  width: 60px;
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 .cogitator-damage-formula #flat {
+  flex: 0 0 90px;
+  width: 90px;
 }
 
 .application.warhammer-40k-cogitator-dialog-v2 .form-footer {
