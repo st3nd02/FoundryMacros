@@ -14,7 +14,7 @@ import { incrementEffectCounter } from "./active-effects.js";
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "3.1.0";
+const COGITATOR_VERSION = "3.1.1";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",

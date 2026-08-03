@@ -211,7 +211,7 @@ The module includes data tables used during play:
 ## Installation and packaging
 
 - Module ID: `warhammer-40k-cogitator`
-- Module version: `3.1.0`
+- Module version: `3.1.1`
 - Foundry compatibility: v13-v14 (verified on the v14 API contract)
 - Entry module: `warhammer-40k-cogitator/scripts/main.js`
 - Socket support enabled
@@ -222,10 +222,15 @@ The module includes data tables used during play:
 
 The v14 migration was checked against Dark Heresy `4.4.0.1`, DFreds Convenient Effects `9.2.2`, Status Icon Counters `3.1.1`, and SocketLib `1.1.3`. On Foundry v14, use the current v14-compatible release of each dependency from the module manager.
 
+## Version 3.1.1 patch notes
+
+- Fixes Foundry v14 rejecting dialog content because the trusted `HTMLDivElement` root contained a class attribute.
+- Preserves the trusted content path while ensuring all Cogitator dialogs provide the plain outer `<div>` required by `DialogV2`.
+
 ## Version 3.1.0 migration notes
 
 - All module dialogs and the Workflow HUD reset settings menu now run on Foundry's ApplicationV2 framework.
 - Roll evaluation, canvas distance measurement, and Active Effect creation/duration handling use the Foundry v14 APIs.
 - Status counters use the public Status Icon Counters API, with a schema-aware fallback when that API is unavailable.
 - Existing world settings, actor/item data, workflow chat flags, socket message types, and public API names are unchanged. This release performs no data migration and deletes no stored module data.
-- Version `3.0.15` remains the preserved Foundry v13 baseline. If a v14 live test exposes a problem, disable `3.1.0` and publish a forward fix as `3.1.1`; do not downgrade a v14 world solely to roll back this module.
+- Version `3.0.15` remains the preserved Foundry v13 baseline. Do not downgrade a v14 world solely to roll back this module; publish forward fixes from the v14-compatible release line.
