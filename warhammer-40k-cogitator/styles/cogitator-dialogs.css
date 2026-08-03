@@ -1,0 +1,32 @@
+.application.warhammer-40k-cogitator-dialog-v2 {
+  --background: linear-gradient(145deg, #f1ead8 0%, #d8ccb0 100%);
+  --color-text-primary: #191813;
+  --color-header-background: #352e28;
+  --color-border: #736953;
+  --color-fieldset-border: #9f9277;
+  --color-form-label: #3c362e;
+  --color-form-label-hover: #191813;
+  --color-form-hint: #5e5549;
+  --color-form-hint-hover: #3c362e;
+  --color-select-option-bg: #f1ead8;
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 .window-content {
+  background: var(--background);
+  color: var(--color-text-primary);
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 .dialog-form {
+  min-height: 0;
+  max-height: 100%;
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 .dialog-content {
+  min-height: 0;
+  overflow: hidden auto;
+  padding-right: 0.25rem;
+}
+
+.application.warhammer-40k-cogitator-dialog-v2 .form-footer {
+  flex: none;
+}

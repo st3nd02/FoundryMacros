@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/applications.test.mjs tests/active-effects.test.mjs tests/main-load.test.mjs && node tests/verify-v14.mjs"
+    "test": "node --test tests/applications.test.mjs tests/active-effects.test.mjs tests/main-load.test.mjs tests/token-actors.test.mjs && node tests/verify-v14.mjs"
   }
 }

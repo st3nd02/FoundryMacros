@@ -10,11 +10,12 @@ import {
 } from "./fate_engine.js";
 import { CogitatorDialogV2 } from "./applications.js";
 import { incrementEffectCounter } from "./active-effects.js";
+import { resolveTokenActor } from "./token-actors.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "3.1.1";
+const COGITATOR_VERSION = "3.1.2";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",
@@ -3028,7 +3029,7 @@ ${!keenData ? `
       html.find("select").on("change", updateSelectedSkill);
       updateSelectedSkill();
     }
-  }).render(true);
+  }).render(true, { width: 700 });
 }
 
 async function openMedicalTest() {
@@ -3043,9 +3044,17 @@ async function openMedicalTest() {
     return;
   }
 
-  const actor = token.actor;
+  const actor = resolveTokenActor(token);
   const patientToken = [...game.user.targets][0];
-  const patient = patientToken.actor;
+  const patient = resolveTokenActor(patientToken);
+  if (!actor) {
+    ui.notifications.warn("The selected healer has no accessible actor.");
+    return;
+  }
+  if (!patient) {
+    ui.notifications.warn("The targeted patient has no accessible actor.");
+    return;
+  }
   const skills = actor.system.skills;
 
   const hasMaster = actor.items.some(i => /master chirurgeon/i.test(i.name));
@@ -3402,7 +3411,7 @@ ${healText}
         }
       }
     }
-  }).render(true);
+  }).render(true, { width: 600 });
 }
 
 async function openHealingFlow({ token: providedToken = null, prefillAmount = null, sourceLabel = "" } = {}) {

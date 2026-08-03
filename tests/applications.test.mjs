@@ -18,7 +18,12 @@ class FakeDiv {
 class FakeDialogV2 {
   constructor(options) {
     this.options = options;
-    this.element = { id: "dialog-root" };
+    this.dialogContent = { scrollTop: 100 };
+    this.element = {
+      id: "dialog-root",
+      querySelector: selector => selector === ".dialog-content" ? this.dialogContent : null
+    };
+    this.window = { content: { scrollTop: 100 } };
   }
 
   async _onRender() {}
@@ -57,8 +62,8 @@ test("maps legacy dialog configuration to a real DialogV2", async () => {
   assert.ok(dialog instanceof FakeDialogV2);
   assert.equal(dialog.options.window.title, "Test Dialog");
   assert.equal(dialog.options.position.width, 420);
-  assert.deepEqual(dialog.options.classes, ["warhammer-40k-cogitator-dialog-v2", "custom-class"]);
-  assert.equal(dialog.options.content.innerHTML, "<form><input name=\"value\"></form>");
+  assert.deepEqual(dialog.options.classes, ["warhammer-40k-cogitator-dialog-v2", "theme-light", "custom-class"]);
+  assert.equal(dialog.options.content.innerHTML, "<input name=\"value\">");
   assert.equal(dialog.options.content.attributes.length, 0);
   assert.equal(dialog.options.buttons.length, 2);
   assert.equal(dialog.options.buttons[0].action, "accept");
@@ -66,6 +71,7 @@ test("maps legacy dialog configuration to a real DialogV2", async () => {
 
   await dialog._onRender({}, {});
   assert.equal(renderHtml.element, dialog.element);
+  assert.equal(dialog.dialogContent.scrollTop, 0);
 
   await dialog.options.buttons[0].callback({}, {}, dialog);
   assert.equal(buttonHtml.element, dialog.element);
@@ -79,4 +85,16 @@ test("maps legacy dialog configuration to a real DialogV2", async () => {
   dialog._onClose({});
   dialog._onClose({});
   assert.equal(closeHtml.element, dialog.element);
+});
+
+test("uses a readable default width and preserves controls while removing legacy forms", () => {
+  const dialog = new CogitatorDialogV2({
+    content: "<form><h3>Skills</h3><select id=\"skill\"></select><h3>Operate</h3></form>",
+    buttons: { close: { label: "Close" } }
+  });
+
+  assert.equal(dialog.options.position.width, 480);
+  assert.doesNotMatch(dialog.options.content.innerHTML, /<\/?form\b/i);
+  assert.match(dialog.options.content.innerHTML, /<h3>Skills<\/h3>/);
+  assert.match(dialog.options.content.innerHTML, /<h3>Operate<\/h3>/);
 });
