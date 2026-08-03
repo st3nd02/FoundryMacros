@@ -211,7 +211,7 @@ The module includes data tables used during play:
 ## Installation and packaging
 
 - Module ID: `warhammer-40k-cogitator`
-- Module version: `3.1.1`
+- Module version: `3.1.2`
 - Foundry compatibility: v13-v14 (verified on the v14 API contract)
 - Entry module: `warhammer-40k-cogitator/scripts/main.js`
 - Socket support enabled
@@ -221,6 +221,12 @@ The module includes data tables used during play:
   - `socketlib`
 
 The v14 migration was checked against Dark Heresy `4.4.0.1`, DFreds Convenient Effects `9.2.2`, Status Icon Counters `3.1.1`, and SocketLib `1.1.3`. On Foundry v14, use the current v14-compatible release of each dependency from the module manager.
+
+## Version 3.1.2 patch notes
+
+- Restores the top sections of long Attack and Skill dialogs by removing nested legacy forms and resetting the DialogV2 scroll position after autofocus.
+- Gives Cogitator dialogs practical default and workflow-specific widths, scrollable content, and a light parchment-style theme.
+- Resolves Medical workflow actors from both Token and TokenDocument shapes and reports inaccessible actors without throwing.
 
 ## Version 3.1.1 patch notes
 

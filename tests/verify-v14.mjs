@@ -21,8 +21,9 @@ const moduleManifest = JSON.parse(await read("module.json"));
 const forgeManifest = JSON.parse(await read("forge-manifest.template.json"));
 for (const manifest of [moduleManifest, forgeManifest]) {
   assert.equal(manifest.id, "warhammer-40k-cogitator");
-  assert.equal(manifest.version, "3.1.1");
+  assert.equal(manifest.version, "3.1.2");
   assert.deepEqual(manifest.compatibility, { minimum: "13", verified: "14", maximum: "14" });
+  assert.deepEqual(manifest.styles, ["warhammer-40k-cogitator/styles/cogitator-dialogs.css"]);
 }
 assert.deepEqual(
   moduleManifest.relationships.requires.map(relationship => relationship.id),
@@ -34,7 +35,7 @@ const scriptFiles = await collectJavaScript(scriptRoot);
 const sources = await Promise.all(scriptFiles.map(async file => [file, await readFile(file, "utf8")]));
 const allSource = sources.map(([, source]) => source).join("\n");
 
-assert.match(allSource, /const COGITATOR_VERSION = "3\.1\.1";/);
+assert.match(allSource, /const COGITATOR_VERSION = "3\.1\.2";/);
 assert.equal((allSource.match(/new CogitatorDialogV2\s*\(/g) ?? []).length, 23);
 assert.doesNotMatch(allSource, /new Dialog\s*\(/);
 assert.doesNotMatch(allSource, /extends FormApplication/);

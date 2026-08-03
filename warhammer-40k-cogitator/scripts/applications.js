@@ -1,6 +1,7 @@
 const { DialogV2 } = foundry.applications.api;
 
 const POSITION_KEYS = ["top", "left", "width", "height", "scale", "zIndex"];
+const DEFAULT_DIALOG_WIDTH = 480;
 
 function normalizePosition(...sources) {
   const position = {};
@@ -26,10 +27,22 @@ function normalizeClasses(classes) {
 
 function createTrustedDialogContent(content) {
   const container = document.createElement("div");
-  container.innerHTML = content instanceof HTMLDivElement
+  const html = content instanceof HTMLDivElement
     ? content.innerHTML
     : String(content ?? "");
+  // DialogV2 already renders a top-level form. Legacy Dialog content commonly
+  // supplied another form, which produces invalid nested markup and can move or
+  // hide the first controls when the browser reparses the dialog.
+  container.innerHTML = html.replace(/<\/?form\b[^>]*>/gi, "");
   return container;
+}
+
+function resetDialogScroll(dialog) {
+  const content = dialog.element?.querySelector?.(".dialog-content")
+    ?? dialog.window?.content
+    ?? dialog.element?.querySelector?.(".window-content")
+    ?? null;
+  if (content) content.scrollTop = 0;
 }
 
 function asLegacyHtml(dialog) {
@@ -68,13 +81,17 @@ export class CogitatorDialogV2 extends DialogV2 {
     const options = {
       classes: [
         "warhammer-40k-cogitator-dialog-v2",
+        "theme-light",
         ...normalizeClasses(applicationOptions.classes)
       ],
       window: {
         title: data.title ?? "Warhammer 40k Cogitator",
         resizable: applicationOptions.resizable ?? false
       },
-      position: normalizePosition(applicationOptions),
+      position: {
+        width: DEFAULT_DIALOG_WIDTH,
+        ...normalizePosition(applicationOptions)
+      },
       content: createTrustedDialogContent(data.content),
       buttons,
       modal: data.modal ?? false
@@ -93,6 +110,8 @@ export class CogitatorDialogV2 extends DialogV2 {
     await super._onRender(context, options);
     this._cogitatorLegacyHtml = asLegacyHtml(this);
     await this._cogitatorLegacyRender?.(this._cogitatorLegacyHtml);
+    resetDialogScroll(this);
+    globalThis.requestAnimationFrame?.(() => resetDialogScroll(this));
   }
 
   _onClose(options) {
