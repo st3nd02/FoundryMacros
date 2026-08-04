@@ -1,5 +1,11 @@
 import { canActorSpendFate, maybeApplyFateReroll } from "../fate_engine.js";
 import { CogitatorDialogV2 } from "../applications.js";
+import {
+  getAvailablePrecognitiveDefenses,
+  getPrecognitiveDefenseName,
+  isPrecognitiveDefense
+} from "../precognitive-defense.js";
+import { calculateSprayHordeBaseMagnitude } from "../horde-rules.js";
 
 export async function runAttackWorkflow() {
 /**
@@ -357,15 +363,12 @@ const promptSprayDefenseFollowup = async ({ targetActor, sprayDefense, inescapab
   const reactionUsed = usedEvasionStacks >= reactionLimit || !!game.warhammer40kCogitator?.hasDefenseReaction?.(targetActor);
   const dodgeBase = Number(targetActor.system?.skills?.dodge?.total ?? 0);
   const perceptionBase = Number(targetActor.system?.characteristics?.perception?.total ?? 0);
-  const psyRating = Number(targetActor.system?.psy?.rating ?? 0);
-  const hasForeboding = psyRating > 0 && targetActor.items.some(item =>
-    item.type === "psychicPower" && String(item.name ?? "").toLowerCase().includes("foreboding")
-  );
-  const forebodingBase = Math.max(1, perceptionBase - 10);
+  const precognitiveDefenses = getAvailablePrecognitiveDefenses(targetActor);
+  const precognitiveDefenseBase = Math.max(1, perceptionBase - 10);
   const canFate = canActorSpendFate(targetActor);
 
   const dodgeAvailable = !reactionUsed;
-  const forebodingAvailable = !reactionUsed && hasForeboding;
+  const availablePrecognitiveDefenses = reactionUsed ? [] : precognitiveDefenses;
   const fateAvailable = canFate;
 
   return new Promise(resolve => {
@@ -386,16 +389,20 @@ const promptSprayDefenseFollowup = async ({ targetActor, sprayDefense, inescapab
     <input type="radio" name="sprayChoice" value="dodge" ${dodgeAvailable ? "" : "disabled"} ${dodgeAvailable ? "checked" : ""}/>
     Dodge (${dodgeBase}${inescapablePenalty > 0 ? ` - ${inescapablePenalty}` : ""})
   </label>
-  <label class="option ${forebodingAvailable ? "" : "disabled"}">
-    <input type="radio" name="sprayChoice" value="foreboding" ${forebodingAvailable ? "" : "disabled"} ${!dodgeAvailable && forebodingAvailable ? "checked" : ""}/>
-    Foreboding (${forebodingBase}${inescapablePenalty > 0 ? ` - ${inescapablePenalty}` : ""})
-  </label>
+  ${precognitiveDefenses.map((option, index) => {
+    const available = !reactionUsed;
+    const checked = !dodgeAvailable && index === 0 && available;
+    return `<label class="option ${available ? "" : "disabled"}">
+      <input type="radio" name="sprayChoice" value="${option.type}" ${available ? "" : "disabled"} ${checked ? "checked" : ""}/>
+      ${option.name} (${precognitiveDefenseBase}${inescapablePenalty > 0 ? ` - ${inescapablePenalty}` : ""})
+    </label>`;
+  }).join("")}
   <label class="option ${fateAvailable ? "" : "disabled"}">
-    <input type="radio" name="sprayChoice" value="fate" ${fateAvailable ? "" : "disabled"} ${!dodgeAvailable && !forebodingAvailable && fateAvailable ? "checked" : ""}/>
+    <input type="radio" name="sprayChoice" value="fate" ${fateAvailable ? "" : "disabled"} ${!dodgeAvailable && !availablePrecognitiveDefenses.length && fateAvailable ? "checked" : ""}/>
     Reroll Spray test with Fate
   </label>
   <label class="option">
-    <input type="radio" name="sprayChoice" value="keep" ${!dodgeAvailable && !forebodingAvailable && !fateAvailable ? "checked" : ""}/>
+    <input type="radio" name="sprayChoice" value="keep" ${!dodgeAvailable && !availablePrecognitiveDefenses.length && !fateAvailable ? "checked" : ""}/>
     Keep Result
   </label>
 </form>`,
@@ -404,16 +411,16 @@ const promptSprayDefenseFollowup = async ({ targetActor, sprayDefense, inescapab
           label: "Apply",
           callback: html => {
             const selected = html.find('input[name="sprayChoice"]:checked').val() || "keep";
-            resolve({ choice: selected, reactionUsed, dodgeBase, forebodingBase, inescapablePenalty, usedEvasionStacks, reactionLimit });
+            resolve({ choice: selected, reactionUsed, dodgeBase, precognitiveDefenseBase, inescapablePenalty, usedEvasionStacks, reactionLimit });
           }
         },
         cancel: {
           label: "Keep Result",
-          callback: () => resolve({ choice: "keep", reactionUsed, dodgeBase, forebodingBase, inescapablePenalty, usedEvasionStacks, reactionLimit })
+          callback: () => resolve({ choice: "keep", reactionUsed, dodgeBase, precognitiveDefenseBase, inescapablePenalty, usedEvasionStacks, reactionLimit })
         }
       },
       default: "submit",
-      close: () => resolve({ choice: "keep", reactionUsed, dodgeBase, forebodingBase, inescapablePenalty, usedEvasionStacks, reactionLimit })
+      close: () => resolve({ choice: "keep", reactionUsed, dodgeBase, precognitiveDefenseBase, inescapablePenalty, usedEvasionStacks, reactionLimit })
     }).render(true, { width: 500 });
   });
 };
@@ -456,8 +463,8 @@ const resolveSprayDefenseFollowup = async ({ targetActor, sprayDefense, inescapa
     };
   }
 
-  if (decision.choice === "dodge" || decision.choice === "foreboding") {
-    const baseTarget = decision.choice === "foreboding" ? decision.forebodingBase : decision.dodgeBase;
+  if (decision.choice === "dodge" || isPrecognitiveDefense(decision.choice)) {
+    const baseTarget = isPrecognitiveDefense(decision.choice) ? decision.precognitiveDefenseBase : decision.dodgeBase;
     const defenderIsProne = actorHasCondition(targetActor, "prone");
     const defenderIsBlinded = actorHasCondition(targetActor, "blinded");
     let defenseTarget = Math.max(1, baseTarget - penalty);
@@ -468,7 +475,7 @@ const resolveSprayDefenseFollowup = async ({ targetActor, sprayDefense, inescapa
     const defenseRoll = await animatedRoll("1d100");
     const success = isD100Success(defenseRoll.total, defenseTarget);
     await game.warhammer40kCogitator?.consumeDefenseReaction?.(targetActor);
-    const actionLabel = decision.choice === "foreboding" ? "Foreboding" : "Dodge";
+    const actionLabel = getPrecognitiveDefenseName(decision.choice) ?? "Dodge";
     return {
       success,
       roll: defenseRoll.total,
@@ -832,15 +839,33 @@ const getHordeMagnitudeBreakdown = ({ state, target }) => {
   const rawSpecial = String(state.weaponSpecial ?? "");
   const blast = Math.max(parseTraitNumber(traits, "blast", 0), parseTraitNumber(rawSpecial, "blast", 0));
   const devastating = Math.max(parseTraitNumber(traits, "devastating", 0), parseTraitNumber(rawSpecial, "devastating", 0));
-  const isFlame = hasTrait(traits, "flame");
+  const isSpray = hasTrait(traits, "spray");
   const explosive = hasTrait(traits, "explosive") || String(state.weaponType ?? "").toLowerCase().includes("explosive");
   const forceOrPower = hasTrait(traits, "force") || hasTrait(traits, "power");
-  let magnitude = inflictedHits;
-  if (isFlame) {
-    const range = Number(state.weaponRange ?? 0);
-    magnitude = Math.ceil(range / 4) + (Math.ceil(Math.random() * 5));
+  if (inflictedHits <= 0) {
+    return {
+      baseMagnitudeHits: 0,
+      bonusExplosiveForcePower: 0,
+      bonusWhirlwind: 0,
+      bonusDevastating: 0,
+      totalMagnitudeHits: 0,
+      sprayD5Roll: null,
+      sprayRangeBonus: 0
+    };
   }
-  if (blast > 0) {
+
+  let magnitude = inflictedHits;
+  let sprayD5Roll = null;
+  let sprayRangeBonus = 0;
+  if (isSpray) {
+    const sprayMagnitude = calculateSprayHordeBaseMagnitude({
+      weaponRange: state.weaponRange,
+      d5Roll: target?.sprayHordeD5Roll
+    });
+    sprayD5Roll = sprayMagnitude.d5Roll;
+    sprayRangeBonus = sprayMagnitude.rangeBonus;
+    magnitude = sprayMagnitude.baseMagnitudeHits;
+  } else if (blast > 0) {
     magnitude = blast;
   }
   const bonusExplosiveForcePower = (explosive || forceOrPower) ? 1 : 0;
@@ -857,7 +882,9 @@ const getHordeMagnitudeBreakdown = ({ state, target }) => {
     bonusExplosiveForcePower,
     bonusWhirlwind,
     bonusDevastating,
-    totalMagnitudeHits
+    totalMagnitudeHits,
+    sprayD5Roll,
+    sprayRangeBonus
   };
 };
 
@@ -1225,6 +1252,7 @@ const runAttackWorkflow = async setup => {
     weaponType: weapon.system.damageType || "impact",
     weaponSpecial: weapon.system.special || "",
     weaponTraits: presentWeaponTraits(weapon),
+    weaponRange: getNormalRangeForWeapon(weapon),
     meleeBestDamageBonus: (isMelee && craftData.meleeBestDamageBonus) ? 1 : 0,
     modeKey: setup.modeKey,
     modeLabel: mode.label,
@@ -1404,6 +1432,12 @@ const runAttackWorkflow = async setup => {
     inescapableAttackPenalty: (tg.allocatedHits ?? 0) > 0 ? inescapablePenalty : 0
   }));
   if (state.horde?.active) {
+    if (isSpray) {
+      for (const target of state.targets) {
+        if ((target.allocatedHits ?? 0) <= 0) continue;
+        target.sprayHordeD5Roll = Number((await animatedRoll("1d5", chatMessage.speaker)).total ?? 1);
+      }
+    }
     state.targets = state.targets.map(tg => ({
       ...tg,
       hordeHitsPreview: getHordeMagnitudeHits({ state, target: tg })
@@ -1563,8 +1597,11 @@ const runAttackWorkflow = async setup => {
       if ((tg.allocatedHits ?? 0) <= 0) return tg;
       const magnitudeHits = Math.max(0, Number(tg.hordeHitsPreview ?? tg.allocatedHits ?? 0));
       const magnitudeBreakdown = getHordeMagnitudeBreakdown({ state, target: tg });
+      const sprayMagnitudeHtml = magnitudeBreakdown.sprayD5Roll == null
+        ? ""
+        : `<div><b>Spray Base:</b> 1d5 (${magnitudeBreakdown.sprayD5Roll}) + Range/4 (${magnitudeBreakdown.sprayRangeBonus}) = ${magnitudeBreakdown.baseMagnitudeHits}</div>`;
       tg.damageRolls = [{ total: magnitudeHits, loc: "Horde" }];
-      tg.damageSummary = `<div style="text-align:center; color:#000;"><div><b>Magnitude Damage</b></div><div><span style="font-weight:700;color:#000;">Damage done:</span> <span style="font-weight:700;color:#000;">${magnitudeHits}</span></div><div style="margin-top:6px;"><b>Properties:</b> Horde Target</div><div><i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i></div></div>`;
+      tg.damageSummary = `<div style="text-align:center; color:#000;"><div><b>Magnitude Damage</b></div>${sprayMagnitudeHtml}<div><span style="font-weight:700;color:#000;">Damage done:</span> <span style="font-weight:700;color:#000;">${magnitudeHits}</span></div><div style="margin-top:6px;"><b>Properties:</b> Horde Target</div><div><i>Horde rules applied: no hit locations, no Righteous Fury, no critical effects.</i></div></div>`;
       tg.damageResolved = true;
       tg.damageApplied = false;
       tg.applySummary = null;
@@ -1588,7 +1625,9 @@ const runAttackWorkflow = async setup => {
           baseMagnitudeHits: Math.max(0, Number(magnitudeBreakdown.baseMagnitudeHits ?? 0)),
           bonusExplosiveForcePower: Math.max(0, Number(magnitudeBreakdown.bonusExplosiveForcePower ?? 0)),
           bonusWhirlwind: Math.max(0, Number(magnitudeBreakdown.bonusWhirlwind ?? 0)),
-          bonusDevastating: Math.max(0, Number(magnitudeBreakdown.bonusDevastating ?? 0))
+          bonusDevastating: Math.max(0, Number(magnitudeBreakdown.bonusDevastating ?? 0)),
+          sprayD5Roll: magnitudeBreakdown.sprayD5Roll,
+          sprayRangeBonus: Math.max(0, Number(magnitudeBreakdown.sprayRangeBonus ?? 0))
         }
       };
       return tg;
