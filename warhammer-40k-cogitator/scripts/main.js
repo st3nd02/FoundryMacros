@@ -15,7 +15,7 @@ import { resolveTokenActor } from "./token-actors.js";
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const COGITATOR_ID = "warhammer-40k-cogitator";
-const COGITATOR_VERSION = "3.1.3";
+const COGITATOR_VERSION = "3.1.4";
 
 const SETTINGS = {
   workflowHudEnabled: "workflowHudEnabled",

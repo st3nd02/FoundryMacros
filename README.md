@@ -52,7 +52,7 @@ Special combat behavior includes support for:
 ### 2) Defense workflow
 The defense workflow resolves pending incoming attacks for the defending owner:
 
-- Dodge / Parry / Foreboding defense paths
+- Dodge / Parry / Foreboding / Precognitive Dodge defense paths
 - Parry weapon validation and trait checks (Balanced/Defensive/Unbalanced/Unwieldy/Flexible)
 - Condition-aware penalties (e.g., prone, blinded, stunned, unconscious)
 - Inescapable Attack penalty integration
@@ -211,7 +211,7 @@ The module includes data tables used during play:
 ## Installation and packaging
 
 - Module ID: `warhammer-40k-cogitator`
-- Module version: `3.1.3`
+- Module version: `3.1.4`
 - Foundry compatibility: v13-v14 (verified on the v14 API contract)
 - Entry module: `warhammer-40k-cogitator/scripts/main.js`
 - Socket support enabled
@@ -221,6 +221,12 @@ The module includes data tables used during play:
   - `socketlib`
 
 The v14 migration was checked against Dark Heresy `4.4.0.1`, DFreds Convenient Effects `9.2.2`, Status Icon Counters `3.1.1`, and SocketLib `1.1.3`. On Foundry v14, use the current v14-compatible release of each dependency from the module manager.
+
+## Version 3.1.4 patch notes
+
+- Adds Precognitive Dodge as a Defense workflow and failed-Spray follow-up option when the target psyker owns that power. It uses the same Perception -10 target, Dodge behavior, reaction use, and psychic phenomena handling as Foreboding.
+- Widens the Psychic Powers dialog by another 100px, from 900px to 1000px.
+- Corrects Spray weapons against Hordes to roll base Magnitude as `1d5 + ceil(Weapon Range / 4)` on a hit, independently of allocated hits, while retaining Explosive/Power, Whirlwind, and Devastating bonuses.
 
 ## Version 3.1.3 patch notes
 

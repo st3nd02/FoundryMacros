@@ -531,6 +531,7 @@ if (dmg.horde?.active) {
 <div style="text-align:center;">
 
 <span style="font-weight:700;color:#000;">Magnitude done:</span> <span style="font-weight:700;color:#000;">${inflicted}</span><br>
+${dmg.horde.sprayD5Roll == null ? "" : `<b>Spray Base:</b> 1d5 (${dmg.horde.sprayD5Roll}) + Range/4 (${Math.max(0, Number(dmg.horde.sprayRangeBonus ?? 0))}) = ${baseMagnitudeHits}<br>`}
 <b>Base Magnitude:</b> ${baseMagnitudeHits}<br>
 ${bonusExplosiveForcePower ? `<b>Explosive/Force/Power Bonus:</b> +${bonusExplosiveForcePower}<br>` : ""}
 ${bonusWhirlwind ? `<b>Whirlwind Bonus:</b> +${bonusWhirlwind}<br>` : ""}
